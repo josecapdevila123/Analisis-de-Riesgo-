@@ -1,0 +1,26 @@
+{
+  "entities": {
+    "ExtractionResult": {
+      "title": "ExtractionResult",
+      "description": "A financial extraction case history.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "fileNames": { "type": "array", "items": { "type": "string" } },
+        "data": { "type": "string", "description": "JSON stringified FinancialData" },
+        "dashboardData": { "type": "string", "description": "JSON stringified DashboardData" },
+        "status": { "type": "string", "enum": ["pending", "processing", "completed", "error"] },
+        "error": { "type": "string" },
+        "userId": { "type": "string", "description": "The ID of the user who owns this case." }
+      },
+      "required": ["id", "timestamp", "fileNames", "status", "userId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/cases/{caseId}": {
+      "schema": { "$ref": "#/entities/ExtractionResult" },
+      "description": "Stores the extraction cases for a specific user."
+    }
+  }
+}

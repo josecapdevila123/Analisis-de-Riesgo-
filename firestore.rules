@@ -1,0 +1,70 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users/{userId}/cases
+    // Document ID: {caseId}
+    // Fields:
+    //   - id: string (required)
+    //   - timestamp: string (required)
+    //   - fileNames: list (required)
+    //   - data: string (optional, JSON stringified)
+    //   - dashboardData: string (optional, JSON stringified)
+    //   - status: string (required, enum: pending, processing, completed, error)
+    //   - error: string (optional)
+    //   - userId: string (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidCase() {
+      let data = request.resource.data;
+      return hasRequiredFields(['id', 'timestamp', 'fileNames', 'status', 'userId']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
+             data.timestamp is string && data.timestamp.size() > 0 && data.timestamp.size() < 50 &&
+             data.fileNames is list && data.fileNames.size() <= 20 &&
+             data.status in ['pending', 'processing', 'completed', 'error'] &&
+             data.userId == request.auth.uid &&
+             (!('data' in data) || (data.data is string && data.data.size() < 1000000)) &&
+             (!('dashboardData' in data) || (data.dashboardData is string && data.dashboardData.size() < 1000000)) &&
+             (!('error' in data) || (data.error is string && data.error.size() < 5000));
+    }
+
+    function uidUnchanged() {
+      return !('userId' in request.resource.data) || request.resource.data.userId == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('userId' in request.resource.data) || request.resource.data.userId == resource.data.userId;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId}/cases/{caseId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidCase() && uidUnchanged();
+      allow update: if isOwner(userId) && isValidCase() && uidNotModified();
+      allow delete: if isOwner(userId);
+    }
+  }
+}
