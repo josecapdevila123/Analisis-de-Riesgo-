@@ -38,13 +38,12 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn } from './lib/utils';
+import { GEMINI_MODEL, GEMINI_GENERATION_CONFIG } from './lib/gemini';
 import { FinancialData, ExtractionResult, DashboardData, Ratio, AssetLiabilityGroup, Shareholder } from './types';
 import { BiBankLogo } from './components/BiBankLogo';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { collection, doc, setDoc, onSnapshot, query, orderBy, deleteDoc } from 'firebase/firestore';
 import { auth, db, OperationType, handleFirestoreError } from './firebase';
-
-const GENAI_MODEL = "gemini-3-flash-preview";
 
 const ShareholderTable = ({ accionistas, level = 1, parentName = '' }: { accionistas: Shareholder[], level?: number, parentName?: string }) => {
   if (!accionistas || accionistas.length === 0) return null;
@@ -607,11 +606,9 @@ export default function App() {
       ];
 
       const response = await ai.models.generateContent({
-        model: GENAI_MODEL,
+        model: GEMINI_MODEL,
         contents: [{ parts: contentParts }],
-        config: {
-          responseMimeType: "application/json"
-        }
+        config: GEMINI_GENERATION_CONFIG
       });
 
       const text = response.text;
