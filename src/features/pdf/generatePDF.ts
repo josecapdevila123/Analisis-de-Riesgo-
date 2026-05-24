@@ -198,7 +198,11 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
           doc.setFont('helvetica', 'normal');
           currentY += 5;
         }
-        const accData = accionistas.map(a => [a.nombre, a.dni_cuit, `${a.participacion}%`]);
+        const accData = accionistas.map(a => [
+          a.nombre,
+          a.dni_cuit,
+          a.participacion === null ? 'N/D' : `${a.participacion}%`,
+        ]);
         autoTable(doc, {
           startY: currentY,
           margin: { left: 14 + (level - 1) * 5 },

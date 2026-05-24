@@ -6,7 +6,7 @@ import type { CrossCheckResult } from './features/ratios/crossCheck';
 export interface Shareholder {
   nombre: string;
   dni_cuit: string;
-  participacion: number;
+  participacion: number | null;
   subAccionistas?: Shareholder[];
 }
 

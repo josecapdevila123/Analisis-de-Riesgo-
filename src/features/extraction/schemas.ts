@@ -2,7 +2,32 @@ import { z } from 'zod';
 
 // Coerce numbers in case Gemini emits strings ("1500" → 1500).
 const num = z.coerce.number();
-const nullableNum = z.coerce.number().nullable();
+
+// Lenient nullable number: tolera el chorro de variantes que un LLM puede mandar
+// para "este dato no está": null, undefined, "", "N/A", "n/a", "—", NaN, etc.
+// Cualquiera de esos → null. Strings numéricas válidas se coercen al número.
+const lenientNum = z.preprocess((v) => {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'string') {
+    const trimmed = v.trim();
+    if (trimmed === '' || /^(n\/?a|nd|—|-|null)$/i.test(trimmed)) return null;
+    const n = Number(trimmed);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (typeof v === 'number') {
+    return Number.isFinite(v) ? v : null;
+  }
+  return null;
+}, z.number().nullable());
+
+const nullableNum = lenientNum;
+
+// Lenient string: null/undefined/"" → 'N/A' para campos donde queremos algo legible.
+const lenientStringNA = z.preprocess((v) => {
+  if (v === null || v === undefined) return 'N/A';
+  if (typeof v === 'string' && v.trim() === '') return 'N/A';
+  return v;
+}, z.string());
 
 const Detalle = z.object({
   rubro: z.string(),
@@ -100,35 +125,35 @@ const AnalisisPostCierre = z.object({
 }).nullable();
 
 const NosisEntidad = z.object({
-  entidad: z.string(),
-  situacion: num,
-  monto: num,
+  entidad: lenientStringNA,
+  situacion: lenientNum,
+  monto: lenientNum,
 });
 
 const ExtraccionNosis = z.object({
-  score_crediticio: num,
-  situacion_bcra_peor_estado: num,
-  cheques_rechazados_cantidad: num,
-  cheques_rechazados_monto: num,
-  deuda_financiera_total_nosis: num,
+  score_crediticio: lenientNum,
+  situacion_bcra_peor_estado: lenientNum,
+  cheques_rechazados_cantidad: lenientNum,
+  cheques_rechazados_monto: lenientNum,
+  deuda_financiera_total_nosis: lenientNum,
   detalle_entidades: z.array(NosisEntidad).default([]),
 }).nullable();
 
 export type Accionista = {
   nombre: string;
   dni_cuit: string;
-  participacion: number;
+  participacion: number | null;
   subAccionistas?: Accionista[];
 };
 
 const AccionistaSchema: z.ZodType<Accionista> = z.lazy(() =>
   z.object({
-    nombre: z.string(),
-    dni_cuit: z.string(),
-    participacion: num,
+    nombre: lenientStringNA,
+    dni_cuit: lenientStringNA,
+    participacion: lenientNum,
     subAccionistas: z.array(AccionistaSchema).optional(),
   })
-);
+) as z.ZodType<Accionista>;
 
 const MiembroDirectorio = z.object({
   cargo: z.string(),
