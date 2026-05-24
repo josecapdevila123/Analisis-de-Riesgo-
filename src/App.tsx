@@ -39,10 +39,9 @@ import { generatePDF } from './features/pdf/generatePDF';
 import { calculateEBITDA, evaluateRatio } from './features/ratios/calculations';
 import { extractFromFiles } from './features/extraction/geminiClient';
 import { useAuth } from './features/auth/useAuth';
+import { useCases } from './features/cases/useCases';
 import { FinancialData, ExtractionResult, DashboardData, Ratio, AssetLiabilityGroup, Shareholder } from './types';
 import { BiBankLogo } from './components/BiBankLogo';
-import { collection, doc, setDoc, onSnapshot, query, orderBy, deleteDoc } from 'firebase/firestore';
-import { db, OperationType, handleFirestoreError } from './firebase';
 
 const ShareholderTable = ({ accionistas, level = 1, parentName = '' }: { accionistas: Shareholder[], level?: number, parentName?: string }) => {
   if (!accionistas || accionistas.length === 0) return null;
@@ -107,7 +106,6 @@ const ShareholderTable = ({ accionistas, level = 1, parentName = '' }: { accioni
   );
 };
 export default function App() {
-  const [results, setResults] = useState<ExtractionResult[]>([]);
   const [activeResultId, setActiveResultId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('Resumen Ejecutivo');
   const [isHistorySidebarOpen, setIsHistorySidebarOpen] = useState(true);
@@ -129,54 +127,17 @@ export default function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentFiles, setCurrentFiles] = useState<{ file: File; preview: string }[]>([]);
   const { user, isAuthReady, handleLogin, handleLogout } = useAuth(() => {
-    setResults([]);
     setActiveResultId(null);
     setCurrentFiles([]);
   });
-
-  useEffect(() => {
-    if (!isAuthReady || !user) {
-      setResults([]);
-      return;
-    }
-
-    const q = query(collection(db, `users/${user.uid}/cases`), orderBy('timestamp', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const loadedResults: ExtractionResult[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        let parsedData = null;
-        let parsedDashboardData = null;
-        
-        try {
-          parsedData = data.data ? JSON.parse(data.data) : null;
-        } catch (e) {
-          console.error("Error parsing data JSON", e);
-        }
-        
-        try {
-          parsedDashboardData = data.dashboardData ? JSON.parse(data.dashboardData) : null;
-        } catch (e) {
-          console.error("Error parsing dashboardData JSON", e);
-        }
-
-        loadedResults.push({
-          id: data.id,
-          timestamp: data.timestamp,
-          fileNames: data.fileNames,
-          data: parsedData,
-          dashboardData: parsedDashboardData,
-          status: data.status,
-          error: data.error
-        });
-      });
-      setResults(loadedResults);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/cases`);
-    });
-
-    return () => unsubscribe();
-  }, [user, isAuthReady]);
+  const {
+    results,
+    setResults,
+    saveCaseProcessing,
+    saveCaseCompleted,
+    saveCaseError,
+    removeCase,
+  } = useCases(user, isAuthReady);
 
   const activeResult = results.find(r => r.id === activeResultId);
 
@@ -224,81 +185,34 @@ export default function App() {
     setActiveResultId(newId);
 
     try {
-      if (user) {
-        try {
-          await setDoc(doc(db, `users/${user.uid}/cases`, newId), {
-            id: newId,
-            timestamp: newResult.timestamp,
-            fileNames: newResult.fileNames,
-            status: newResult.status,
-            userId: user.uid
-          });
-        } catch (error) {
-          handleFirestoreError(error, OperationType.CREATE, `users/${user.uid}/cases/${newId}`);
-        }
-      }
+      await saveCaseProcessing(newResult);
 
       const parsedResponse = await extractFromFiles(currentFiles);
-      
-      setResults(prev => prev.map(r => 
-        r.id === newId ? { 
-          ...r, 
-          data: parsedResponse.data, 
+
+      setResults(prev => prev.map(r =>
+        r.id === newId ? {
+          ...r,
+          data: parsedResponse.data,
           dashboardData: parsedResponse.dashboardData,
-          status: 'completed' 
+          status: 'completed'
         } : r
       ));
 
-      if (user) {
-        try {
-          await setDoc(doc(db, `users/${user.uid}/cases`, newId), {
-            id: newId,
-            timestamp: newResult.timestamp,
-            fileNames: newResult.fileNames,
-            data: JSON.stringify(parsedResponse.data || null),
-            dashboardData: JSON.stringify(parsedResponse.dashboardData || null),
-            status: 'completed',
-            userId: user.uid
-          }, { merge: true });
-        } catch (error) {
-          handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}/cases/${newId}`);
-        }
-      }
+      await saveCaseCompleted(newResult, parsedResponse);
     } catch (error) {
       console.error("Extraction error:", error);
-      setResults(prev => prev.map(r => 
+      setResults(prev => prev.map(r =>
         r.id === newId ? { ...r, status: 'error', error: (error as Error).message } : r
       ));
 
-      if (user) {
-        try {
-          await setDoc(doc(db, `users/${user.uid}/cases`, newId), {
-            status: 'error',
-            error: (error as Error).message
-          }, { merge: true });
-        } catch (dbError) {
-          try {
-            handleFirestoreError(dbError, OperationType.UPDATE, `users/${user.uid}/cases/${newId}`);
-          } catch (e) {
-            console.error("Failed to save error state to Firestore:", e);
-          }
-        }
-      }
+      await saveCaseError(newId, (error as Error).message);
     } finally {
       setIsProcessing(false);
     }
   };
 
   const removeResult = async (id: string) => {
-    if (user) {
-      try {
-        await deleteDoc(doc(db, `users/${user.uid}/cases`, id));
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `users/${user.uid}/cases/${id}`);
-      }
-    } else {
-      setResults(prev => prev.filter(r => r.id !== id));
-    }
+    await removeCase(id);
     if (activeResultId === id) setActiveResultId(null);
   };
 
