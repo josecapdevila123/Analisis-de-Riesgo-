@@ -152,3 +152,30 @@ export const RawExtractionSchema = z.object({
 });
 
 export type RawExtraction = z.infer<typeof RawExtractionSchema>;
+
+const AlertaCoherencia = z.object({
+  tipo: z.string(),
+  campo: z.string(),
+  mensaje: z.string(),
+  severidad: z.enum(['warning', 'error']),
+});
+
+const InconsistenciaExplicada = z.object({
+  campo: z.string(),
+  explicacion: z.string(),
+});
+
+export const VerificationResultSchema = z.object({
+  alertas_coherencia: z.array(AlertaCoherencia).default([]),
+  inconsistencias_explicadas: z.array(InconsistenciaExplicada).default([]),
+  executive_summary: z.string(),
+  informe_markdown: z.string(),
+});
+
+export type VerificationResult = z.infer<typeof VerificationResultSchema>;
+
+export const MarketAnalysisResultSchema = z.object({
+  analisis_mercado: z.string(),
+});
+
+export type MarketAnalysisResult = z.infer<typeof MarketAnalysisResultSchema>;
