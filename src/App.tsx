@@ -171,7 +171,7 @@ export default function App() {
     if (currentFiles.length === 0) return;
 
     setIsProcessing(true);
-    const newId = Math.random().toString(36).substring(7);
+    const newId = crypto.randomUUID();
     const newResult: ExtractionResult = {
       id: newId,
       timestamp: new Date().toISOString(),
