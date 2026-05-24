@@ -121,6 +121,7 @@ export function useCases(user: User | null, isAuthReady: boolean) {
     pipelineResult: PipelineResult
   ) => {
     if (!user) return;
+    const stringifySafe = (v: unknown) => JSON.stringify(v ?? null);
     try {
       await setDoc(
         doc(db, `users/${user.uid}/cases`, newResult.id),
@@ -131,11 +132,11 @@ export function useCases(user: User | null, isAuthReady: boolean) {
           status: pipelineResult.state,
           schemaVersion: SCHEMA_VERSION,
           userId: user.uid,
-          extraction: JSON.stringify(pipelineResult.extraction),
-          ratios: JSON.stringify(pipelineResult.ratios),
-          inconsistencias: JSON.stringify(pipelineResult.inconsistencias),
-          crossCheck: JSON.stringify(pipelineResult.crossCheck),
-          verification: JSON.stringify(pipelineResult.verification),
+          extraction: stringifySafe(pipelineResult.extraction),
+          ratios: stringifySafe(pipelineResult.ratios),
+          inconsistencias: stringifySafe(pipelineResult.inconsistencias),
+          crossCheck: stringifySafe(pipelineResult.crossCheck),
+          verification: stringifySafe(pipelineResult.verification),
         },
         { merge: true }
       );
