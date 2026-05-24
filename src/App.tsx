@@ -38,11 +38,11 @@ import { cn, formatCurrencyThousands } from './lib/utils';
 import { generatePDF } from './features/pdf/generatePDF';
 import { calculateEBITDA, evaluateRatio } from './features/ratios/calculations';
 import { extractFromFiles } from './features/extraction/geminiClient';
+import { useAuth } from './features/auth/useAuth';
 import { FinancialData, ExtractionResult, DashboardData, Ratio, AssetLiabilityGroup, Shareholder } from './types';
 import { BiBankLogo } from './components/BiBankLogo';
-import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { collection, doc, setDoc, onSnapshot, query, orderBy, deleteDoc } from 'firebase/firestore';
-import { auth, db, OperationType, handleFirestoreError } from './firebase';
+import { db, OperationType, handleFirestoreError } from './firebase';
 
 const ShareholderTable = ({ accionistas, level = 1, parentName = '' }: { accionistas: Shareholder[], level?: number, parentName?: string }) => {
   if (!accionistas || accionistas.length === 0) return null;
@@ -128,16 +128,11 @@ export default function App() {
   ];
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentFiles, setCurrentFiles] = useState<{ file: File; preview: string }[]>([]);
-  const [user, setUser] = useState<User | null>(null);
-  const [isAuthReady, setIsAuthReady] = useState(false);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setIsAuthReady(true);
-    });
-    return () => unsubscribe();
-  }, []);
+  const { user, isAuthReady, handleLogin, handleLogout } = useAuth(() => {
+    setResults([]);
+    setActiveResultId(null);
+    setCurrentFiles([]);
+  });
 
   useEffect(() => {
     if (!isAuthReady || !user) {
@@ -182,26 +177,6 @@ export default function App() {
 
     return () => unsubscribe();
   }, [user, isAuthReady]);
-
-  const handleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Login error:", error);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      setResults([]);
-      setActiveResultId(null);
-      setCurrentFiles([]);
-    } catch (error) {
-      console.error("Logout error:", error);
-    }
-  };
 
   const activeResult = results.find(r => r.id === activeResultId);
 
