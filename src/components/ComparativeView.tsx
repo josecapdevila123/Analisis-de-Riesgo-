@@ -1,45 +1,43 @@
 import React from 'react';
-import { FinancialData, MotorDeRatios } from '../types';
-import { calculateEBITDA } from '../features/ratios/calculations';
+import { RawExtraction } from '../features/extraction/schemas';
+import { ComputedRatios } from '../features/ratios/calculations';
 
 interface ComparativeViewProps {
-  json_extraccion?: FinancialData | null;
-  json_ratios?: MotorDeRatios | null;
+  extraction: RawExtraction | null;
+  ratios: ComputedRatios | null;
 }
 
 export const formatValue = (value: number | null | undefined | string) => {
-  if (value === null || value === undefined || value === 'N/A') return '-';
+  if (value === null || value === undefined) return '-';
   if (typeof value === 'string') return value;
+  if (!Number.isFinite(value)) return '-';
   return new Intl.NumberFormat('es-AR', {
-    maximumFractionDigits: 2
+    maximumFractionDigits: 2,
   }).format(value);
 };
 
-export const getVariationText = (actual: number | null | undefined | string, anterior: number | null | undefined | string): string => {
-  if (
-    actual === null || actual === undefined || actual === 'N/A' || 
-    anterior === null || anterior === undefined || anterior === 'N/A' || anterior === 0
-  ) return '-';
-  
+export const getVariationText = (
+  actual: number | null | undefined | string,
+  anterior: number | null | undefined | string
+): string => {
+  if (actual === null || actual === undefined || anterior === null || anterior === undefined) return '-';
   const numActual = typeof actual === 'string' ? parseFloat(actual) : actual;
   const numAnterior = typeof anterior === 'string' ? parseFloat(anterior) : anterior;
-  
-  if (isNaN(numActual) || isNaN(numAnterior)) return '-';
-  
+  if (!Number.isFinite(numActual) || !Number.isFinite(numAnterior) || numAnterior === 0) return '-';
   const variation = ((numActual - numAnterior) / Math.abs(numAnterior)) * 100;
   if (variation === 0) return '0.0%';
   const isPositive = variation > 0;
-  const formatted = Math.abs(variation).toFixed(1) + '%';
-  return (isPositive ? '+' : '-') + formatted;
+  return (isPositive ? '+' : '-') + Math.abs(variation).toFixed(1) + '%';
 };
 
-const calculateVariation = (actual: number | null | undefined | string, anterior: number | null | undefined | string) => {
+const variationCell = (
+  actual: number | null | undefined | string,
+  anterior: number | null | undefined | string
+) => {
   const text = getVariationText(actual, anterior);
   if (text === '-') return <span className="text-gray-500">-</span>;
-  
   const isPositive = text.startsWith('+');
   const isZero = text === '0.0%';
-  
   return (
     <span className={isZero ? 'text-gray-500' : isPositive ? 'text-green-600' : 'text-red-600'}>
       {text}
@@ -47,13 +45,15 @@ const calculateVariation = (actual: number | null | undefined | string, anterior
   );
 };
 
+interface Row {
+  concepto: string;
+  anio_anterior: number | string | null;
+  anio_actual: number | string | null;
+}
+
 interface TableProps {
   title: string;
-  data: Array<{
-    concepto: string;
-    anio_anterior: number | string | null;
-    anio_actual: number | string | null;
-  }>;
+  data: Row[];
 }
 
 const Table = ({ title, data }: TableProps) => (
@@ -77,7 +77,7 @@ const Table = ({ title, data }: TableProps) => (
               <td className="px-4 py-3 font-semibold text-[#141414] text-left">{row.concepto}</td>
               <td className="px-4 py-3 text-right text-[#141414]/70">{formatValue(row.anio_anterior)}</td>
               <td className="px-4 py-3 text-right text-[#141414] font-bold">{formatValue(row.anio_actual)}</td>
-              <td className="px-4 py-3 text-right font-medium">{calculateVariation(row.anio_actual, row.anio_anterior)}</td>
+              <td className="px-4 py-3 text-right font-medium">{variationCell(row.anio_actual, row.anio_anterior)}</td>
             </tr>
           ))}
         </tbody>
@@ -86,188 +86,145 @@ const Table = ({ title, data }: TableProps) => (
   </div>
 );
 
-export function getComparativeTablesData(json_extraccion: FinancialData | null | undefined, json_ratios: MotorDeRatios | null | undefined) {
-  // Safe helper para extraer datos de json_extraccion
-  const anteriorSit = json_extraccion?.hoja_estado_situacion_patrimonial?.ejercicio_anterior;
-  const actualSit = json_extraccion?.hoja_estado_situacion_patrimonial?.ejercicio_actual;
+export function getComparativeTablesData(
+  extraction: RawExtraction | null | undefined,
+  ratios: ComputedRatios | null | undefined
+) {
+  const actualEsp = extraction?.ejercicio_actual?.estado_situacion_patrimonial;
+  const anteriorEsp = extraction?.ejercicio_anterior?.estado_situacion_patrimonial;
+  const actualEr = extraction?.ejercicio_actual?.estado_resultados;
+  const anteriorEr = extraction?.ejercicio_anterior?.estado_resultados;
 
-  // TABLA 1: SITUACION PATRIMONIAL
-  const situacionPatrimonial = [
-    { 
-      concepto: 'Activo Corriente', 
-      anio_anterior: anteriorSit?.activo?.activo_corriente?.total ?? null, 
-      anio_actual: actualSit?.activo?.activo_corriente?.total ?? null 
+  const situacionPatrimonial: Row[] = [
+    {
+      concepto: 'Activo Corriente',
+      anio_anterior: anteriorEsp?.activo_corriente.total ?? null,
+      anio_actual: actualEsp?.activo_corriente.total ?? null,
     },
-    { 
-      concepto: 'Activo No Corriente', 
-      anio_anterior: anteriorSit?.activo?.activo_no_corriente?.total ?? null, 
-      anio_actual: actualSit?.activo?.activo_no_corriente?.total ?? null 
+    {
+      concepto: 'Activo No Corriente',
+      anio_anterior: anteriorEsp?.activo_no_corriente.total ?? null,
+      anio_actual: actualEsp?.activo_no_corriente.total ?? null,
     },
-    { 
-      concepto: 'Activo Total', 
-      anio_anterior: anteriorSit?.activo?.total_del_activo ?? null, 
-      anio_actual: actualSit?.activo?.total_del_activo ?? null 
+    {
+      concepto: 'Activo Total',
+      anio_anterior: anteriorEsp?.total_activo ?? null,
+      anio_actual: actualEsp?.total_activo ?? null,
     },
-    { 
-      concepto: 'Pasivo Corriente', 
-      anio_anterior: anteriorSit?.pasivo?.pasivo_corriente?.total ?? null, 
-      anio_actual: actualSit?.pasivo?.pasivo_corriente?.total ?? null 
+    {
+      concepto: 'Pasivo Corriente',
+      anio_anterior: anteriorEsp?.pasivo_corriente.total ?? null,
+      anio_actual: actualEsp?.pasivo_corriente.total ?? null,
     },
-    { 
-      concepto: 'Pasivo No Corriente', 
-      anio_anterior: anteriorSit?.pasivo?.pasivo_no_corriente?.total ?? null, 
-      anio_actual: actualSit?.pasivo?.pasivo_no_corriente?.total ?? null 
+    {
+      concepto: 'Pasivo No Corriente',
+      anio_anterior: anteriorEsp?.pasivo_no_corriente.total ?? null,
+      anio_actual: actualEsp?.pasivo_no_corriente.total ?? null,
     },
-    { 
-      concepto: 'Pasivo Total', 
-      anio_anterior: anteriorSit?.pasivo?.total_del_pasivo ?? null, 
-      anio_actual: actualSit?.pasivo?.total_del_pasivo ?? null 
+    {
+      concepto: 'Pasivo Total',
+      anio_anterior: anteriorEsp?.total_pasivo ?? null,
+      anio_actual: actualEsp?.total_pasivo ?? null,
     },
-    { 
-      concepto: 'Patrimonio Neto', 
-      anio_anterior: anteriorSit?.patrimonio_neto_total ?? null, 
-      anio_actual: actualSit?.patrimonio_neto_total ?? null 
-    }
+    {
+      concepto: 'Patrimonio Neto',
+      anio_anterior: anteriorEsp?.patrimonio_neto ?? null,
+      anio_actual: actualEsp?.patrimonio_neto ?? null,
+    },
   ];
 
-  const anteriorRes = json_extraccion?.hoja_estado_resultados?.ejercicio_anterior;
-  const actualRes = json_extraccion?.hoja_estado_resultados?.ejercicio_actual;
-
-  // Fallback matemático si el motor LLM no obtuvo el EBITDA del año anterior
-  const fbEbitdaAnterior = calculateEBITDA(anteriorRes, json_extraccion?.hoja_flujo_efectivo?.ejercicio_anterior);
-
-  const fbLiquidezAnterior = (anteriorSit?.activo?.activo_corriente?.total && anteriorSit?.pasivo?.pasivo_corriente?.total) 
-    ? (anteriorSit.activo.activo_corriente.total / anteriorSit.pasivo.pasivo_corriente.total) 
-    : null;
-    
-  const fbEndeudamientoAnterior = (anteriorSit?.pasivo?.total_del_pasivo && anteriorSit?.patrimonio_neto_total)
-    ? (anteriorSit.pasivo.total_del_pasivo / anteriorSit.patrimonio_neto_total)
-    : null;
-    
-  const fbCapitalTrabajoAnterior = (anteriorSit?.activo?.activo_corriente?.total && anteriorSit?.pasivo?.pasivo_corriente?.total)
-    ? (anteriorSit.activo.activo_corriente.total - anteriorSit.pasivo.pasivo_corriente.total)
-    : null;
-    
-  const fbRentabilidadAnterior = (anteriorRes?.resultado_del_ejercicio_final && anteriorSit?.patrimonio_neto_total)
-    ? (anteriorRes.resultado_del_ejercicio_final / anteriorSit.patrimonio_neto_total)
-    : null;
-
-  const ventasNetas = {
-    concepto: 'Ventas Netas',
-    anio_anterior: anteriorRes?.ventas_netas ?? null,
-    anio_actual: actualRes?.ventas_netas ?? null
-  };
-
-  const fallbackEbitdaJson = json_ratios?.ebitda_anterior && json_ratios.ebitda_anterior !== 'N/A' 
-          ? json_ratios.ebitda_anterior 
-          : fbEbitdaAnterior;
-
-  const ebitda = {
-    concepto: 'EBITDA (Calculado)',
-    anio_anterior: fallbackEbitdaJson,
-    anio_actual: json_ratios?.ebitda && json_ratios.ebitda !== 'N/A' ? json_ratios.ebitda : null
-  };
-
-  const resultadosFinancieros = {
-    concepto: 'Resultados Financieros',
-    anio_anterior: anteriorRes?.resultado_financiero_y_por_tenencia ?? null,
-    anio_actual: actualRes?.resultado_financiero_y_por_tenencia ?? null
-  };
-
-  const resultadoBruto = {
-    concepto: 'Resultado Bruto',
-    anio_anterior: anteriorRes?.resultado_bruto ?? null,
-    anio_actual: actualRes?.resultado_bruto ?? null
-  };
-
-  const resultadoOrdinario = {
-    concepto: 'Resultado Ordinario',
-    anio_anterior: anteriorRes?.resultado_ordinario ?? null,
-    anio_actual: actualRes?.resultado_ordinario ?? null
-  };
-
-  const resultadoNeto = {
-    concepto: 'Resultado del Ejercicio',
-    anio_anterior: anteriorRes?.resultado_del_ejercicio_final ?? null,
-    anio_actual: actualRes?.resultado_del_ejercicio_final ?? null
-  };
-
-  const estadoResultados = [
-    ventasNetas,
-    resultadoBruto,
-    ebitda,
-    resultadoOrdinario,
-    resultadosFinancieros,
-    resultadoNeto
+  const estadoResultados: Row[] = [
+    {
+      concepto: 'Ventas Netas',
+      anio_anterior: anteriorEr?.ventas_netas ?? null,
+      anio_actual: actualEr?.ventas_netas ?? null,
+    },
+    {
+      concepto: 'Resultado Bruto',
+      anio_anterior: anteriorEr?.resultado_bruto ?? null,
+      anio_actual: actualEr?.resultado_bruto ?? null,
+    },
+    {
+      concepto: 'EBITDA (Calculado)',
+      anio_anterior: ratios?.ebitda.anterior ?? null,
+      anio_actual: ratios?.ebitda.actual ?? null,
+    },
+    {
+      concepto: 'Resultado Ordinario',
+      anio_anterior: anteriorEr?.resultado_ordinario ?? null,
+      anio_actual: actualEr?.resultado_ordinario ?? null,
+    },
+    {
+      concepto: 'Resultados Financieros',
+      anio_anterior: anteriorEr?.resultado_financiero_y_tenencia ?? null,
+      anio_actual: actualEr?.resultado_financiero_y_tenencia ?? null,
+    },
+    {
+      concepto: 'Resultado del Ejercicio',
+      anio_anterior: anteriorEr?.resultado_neto ?? null,
+      anio_actual: actualEr?.resultado_neto ?? null,
+    },
   ];
 
-  const indicadores = [
+  const formatPct = (v: number | null) => (v === null ? null : (v * 100).toFixed(2) + '%');
+
+  const indicadores: Row[] = [
     {
       concepto: 'Liquidez Corriente',
-      anio_anterior: json_ratios?.liquidez_anterior && json_ratios.liquidez_anterior !== 'N/A' ? json_ratios.liquidez_anterior : fbLiquidezAnterior,
-      anio_actual: json_ratios?.liquidez ?? null
+      anio_anterior: ratios?.liquidez_corriente.anterior ?? null,
+      anio_actual: ratios?.liquidez_corriente.actual ?? null,
     },
     {
       concepto: 'Prueba Ácida',
-      anio_anterior: json_ratios?.liquidez_acida_anterior !== 'N/A' ? json_ratios?.liquidez_acida_anterior : null,
-      anio_actual: json_ratios?.liquidez_acida ?? null
+      anio_anterior: ratios?.liquidez_acida.anterior ?? null,
+      anio_actual: ratios?.liquidez_acida.actual ?? null,
     },
     {
       concepto: 'Endeudamiento Total',
-      anio_anterior: json_ratios?.endeudamiento_anterior && json_ratios.endeudamiento_anterior !== 'N/A' ? json_ratios.endeudamiento_anterior : fbEndeudamientoAnterior,
-      anio_actual: json_ratios?.endeudamiento ?? null
+      anio_anterior: ratios?.endeudamiento.anterior ?? null,
+      anio_actual: ratios?.endeudamiento.actual ?? null,
     },
     {
       concepto: 'Capital de Trabajo',
-      anio_anterior: json_ratios?.capital_de_trabajo_anterior && json_ratios.capital_de_trabajo_anterior !== 'N/A' ? json_ratios.capital_de_trabajo_anterior : fbCapitalTrabajoAnterior,
-      anio_actual: json_ratios?.capital_de_trabajo ?? null
+      anio_anterior: ratios?.capital_de_trabajo.anterior ?? null,
+      anio_actual: ratios?.capital_de_trabajo.actual ?? null,
     },
     {
-      concepto: 'Rentabilidad',
-      anio_anterior: json_ratios?.rentabilidad_anterior && json_ratios.rentabilidad_anterior !== 'N/A' 
-        ? (json_ratios.rentabilidad_anterior * 100).toFixed(2) + '%' 
-        : (fbRentabilidadAnterior ? ((fbRentabilidadAnterior * 100).toFixed(2) + '%') : null),
-      anio_actual: json_ratios?.rentabilidad !== 'N/A' && json_ratios?.rentabilidad 
-        ? (json_ratios.rentabilidad * 100).toFixed(2) + '%' 
-        : null
-    }
+      concepto: 'Rentabilidad s/Ventas',
+      anio_anterior: formatPct(ratios?.margen_neto.anterior ?? null),
+      anio_actual: formatPct(ratios?.margen_neto.actual ?? null),
+    },
   ];
 
   return { situacionPatrimonial, estadoResultados, indicadores };
 }
 
-export function ComparativeView({
-  json_extraccion,
-  json_ratios
-}: ComparativeViewProps) {
+export function ComparativeView({ extraction, ratios }: ComparativeViewProps) {
   const [isVerticalAnalysis, setIsVerticalAnalysis] = React.useState(false);
-  
-  const { situacionPatrimonial, estadoResultados, indicadores } = getComparativeTablesData(json_extraccion, json_ratios);
+  const { situacionPatrimonial, estadoResultados, indicadores } = getComparativeTablesData(extraction, ratios);
 
-  const totalActivoAnterior = json_extraccion?.hoja_estado_situacion_patrimonial?.ejercicio_anterior?.activo?.total_del_activo || null;
-  const totalActivoActual = json_extraccion?.hoja_estado_situacion_patrimonial?.ejercicio_actual?.activo?.total_del_activo || null;
-
-  const ventasAnterior = json_extraccion?.hoja_estado_resultados?.ejercicio_anterior?.ventas_netas || null;
-  const ventasActual = json_extraccion?.hoja_estado_resultados?.ejercicio_actual?.ventas_netas || null;
+  const totalActivoAnterior =
+    extraction?.ejercicio_anterior?.estado_situacion_patrimonial.total_activo ?? null;
+  const totalActivoActual =
+    extraction?.ejercicio_actual?.estado_situacion_patrimonial.total_activo ?? null;
+  const ventasAnterior = extraction?.ejercicio_anterior?.estado_resultados.ventas_netas ?? null;
+  const ventasActual = extraction?.ejercicio_actual?.estado_resultados.ventas_netas ?? null;
 
   const getVerticalValue = (value: number | string | null, base: number | null) => {
-    if (value === null || value === undefined || value === 'N/A' || base === null || base === 0) return null;
-    const numValue = typeof value === 'string' ? parseFloat(value) : value;
-    if (isNaN(numValue)) return null;
-    return (numValue / base) * 100;
+    if (value === null || value === undefined || base === null || base === 0) return null;
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    if (!Number.isFinite(num)) return null;
+    return (num / base) * 100;
   };
 
-  const formatVertical = (val: number | null) => {
-    if (val === null) return null;
-    return val.toFixed(1) + '%';
-  };
+  const formatVertical = (v: number | null) => (v === null ? null : v.toFixed(1) + '%');
 
-  const processData = (data: any[], baseAnterior: number | null, baseActual: number | null) => {
+  const processData = (data: Row[], baseAnterior: number | null, baseActual: number | null): Row[] => {
     if (!isVerticalAnalysis) return data;
-    return data.map(item => ({
+    return data.map((item) => ({
       ...item,
       anio_anterior: formatVertical(getVerticalValue(item.anio_anterior, baseAnterior)) ?? item.anio_anterior,
-      anio_actual: formatVertical(getVerticalValue(item.anio_actual, baseActual)) ?? item.anio_actual
+      anio_actual: formatVertical(getVerticalValue(item.anio_actual, baseActual)) ?? item.anio_actual,
     }));
   };
 

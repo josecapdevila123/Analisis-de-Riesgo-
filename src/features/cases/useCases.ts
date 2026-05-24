@@ -1,10 +1,31 @@
 import { useEffect, useState } from 'react';
 import { User } from 'firebase/auth';
-import { collection, doc, setDoc, onSnapshot, query, orderBy, deleteDoc } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  query,
+  orderBy,
+  deleteDoc,
+} from 'firebase/firestore';
 import { db, OperationType, handleFirestoreError } from '../../firebase';
-import { ExtractionResult } from '../../types';
+import { ExtractionResult, CaseStatus } from '../../types';
+import { PipelineResult } from '../extraction/pipeline';
 
-type ParsedResponse = { data: any; dashboardData: any };
+const SCHEMA_VERSION = 2;
+const CUTOVER_DOC = 'cutover_v2';
+
+const parseJSON = <T,>(raw: unknown, fallback: T): T => {
+  if (typeof raw !== 'string') return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+};
 
 export function useCases(user: User | null, isAuthReady: boolean) {
   const [results, setResults] = useState<ExtractionResult[]>([]);
@@ -15,42 +36,68 @@ export function useCases(user: User | null, isAuthReady: boolean) {
       return;
     }
 
-    const q = query(collection(db, `users/${user.uid}/cases`), orderBy('timestamp', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const loadedResults: ExtractionResult[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        let parsedData = null;
-        let parsedDashboardData = null;
+    let unsubscribe: () => void = () => {};
+    let cancelled = false;
 
-        try {
-          parsedData = data.data ? JSON.parse(data.data) : null;
-        } catch (e) {
-          console.error("Error parsing data JSON", e);
+    const init = async () => {
+      // Hard cutover: en la primera entrada de cada usuario con el nuevo schema,
+      // borrar todos los casos viejos del shape v1.
+      const cutoverRef = doc(db, `users/${user.uid}/_meta`, CUTOVER_DOC);
+      try {
+        const cutoverSnap = await getDoc(cutoverRef);
+        if (!cutoverSnap.exists() || !cutoverSnap.data()?.done) {
+          const casesSnap = await getDocs(collection(db, `users/${user.uid}/cases`));
+          await Promise.all(casesSnap.docs.map(d => deleteDoc(d.ref)));
+          await setDoc(cutoverRef, {
+            done: true,
+            timestamp: new Date().toISOString(),
+            schemaVersion: SCHEMA_VERSION,
+          });
         }
+      } catch (e) {
+        console.error('Cutover v2 falló:', e);
+      }
 
-        try {
-          parsedDashboardData = data.dashboardData ? JSON.parse(data.dashboardData) : null;
-        } catch (e) {
-          console.error("Error parsing dashboardData JSON", e);
+      if (cancelled) return;
+
+      const q = query(
+        collection(db, `users/${user.uid}/cases`),
+        orderBy('timestamp', 'desc')
+      );
+      unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          const loaded: ExtractionResult[] = [];
+          snapshot.forEach((d) => {
+            const data = d.data();
+            loaded.push({
+              id: data.id,
+              timestamp: data.timestamp,
+              fileNames: data.fileNames ?? [],
+              schemaVersion: SCHEMA_VERSION,
+              status: (data.status ?? 'processing') as CaseStatus,
+              extraction: parseJSON(data.extraction, null),
+              ratios: parseJSON(data.ratios, null),
+              inconsistencias: parseJSON(data.inconsistencias, []),
+              crossCheck: parseJSON(data.crossCheck, null),
+              verification: parseJSON(data.verification, null),
+              marketAnalysis: typeof data.marketAnalysis === 'string' ? data.marketAnalysis : null,
+              error: data.error,
+            });
+          });
+          setResults(loaded);
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/cases`);
         }
+      );
+    };
+    init();
 
-        loadedResults.push({
-          id: data.id,
-          timestamp: data.timestamp,
-          fileNames: data.fileNames,
-          data: parsedData,
-          dashboardData: parsedDashboardData,
-          status: data.status,
-          error: data.error
-        });
-      });
-      setResults(loadedResults);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/cases`);
-    });
-
-    return () => unsubscribe();
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [user, isAuthReady]);
 
   const saveCaseProcessing = async (newResult: ExtractionResult) => {
@@ -61,42 +108,72 @@ export function useCases(user: User | null, isAuthReady: boolean) {
         timestamp: newResult.timestamp,
         fileNames: newResult.fileNames,
         status: newResult.status,
-        userId: user.uid
+        schemaVersion: SCHEMA_VERSION,
+        userId: user.uid,
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `users/${user.uid}/cases/${newResult.id}`);
     }
   };
 
-  const saveCaseCompleted = async (newResult: ExtractionResult, parsedResponse: ParsedResponse) => {
+  const saveCaseCompleted = async (
+    newResult: ExtractionResult,
+    pipelineResult: PipelineResult
+  ) => {
     if (!user) return;
     try {
-      await setDoc(doc(db, `users/${user.uid}/cases`, newResult.id), {
-        id: newResult.id,
-        timestamp: newResult.timestamp,
-        fileNames: newResult.fileNames,
-        data: JSON.stringify(parsedResponse.data || null),
-        dashboardData: JSON.stringify(parsedResponse.dashboardData || null),
-        status: 'completed',
-        userId: user.uid
-      }, { merge: true });
+      await setDoc(
+        doc(db, `users/${user.uid}/cases`, newResult.id),
+        {
+          id: newResult.id,
+          timestamp: newResult.timestamp,
+          fileNames: newResult.fileNames,
+          status: pipelineResult.state,
+          schemaVersion: SCHEMA_VERSION,
+          userId: user.uid,
+          extraction: JSON.stringify(pipelineResult.extraction),
+          ratios: JSON.stringify(pipelineResult.ratios),
+          inconsistencias: JSON.stringify(pipelineResult.inconsistencias),
+          crossCheck: JSON.stringify(pipelineResult.crossCheck),
+          verification: JSON.stringify(pipelineResult.verification),
+        },
+        { merge: true }
+      );
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}/cases/${newResult.id}`);
+      handleFirestoreError(
+        error,
+        OperationType.UPDATE,
+        `users/${user.uid}/cases/${newResult.id}`
+      );
+    }
+  };
+
+  const saveCaseMarketAnalysis = async (id: string, text: string | null) => {
+    if (!user) return;
+    try {
+      await setDoc(
+        doc(db, `users/${user.uid}/cases`, id),
+        { marketAnalysis: text ?? null },
+        { merge: true }
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}/cases/${id}`);
     }
   };
 
   const saveCaseError = async (id: string, errorMessage: string) => {
     if (!user) return;
     try {
-      await setDoc(doc(db, `users/${user.uid}/cases`, id), {
-        status: 'error',
-        error: errorMessage
-      }, { merge: true });
+      await setDoc(
+        doc(db, `users/${user.uid}/cases`, id),
+        { status: 'error', error: errorMessage },
+        { merge: true }
+      );
     } catch (dbError) {
       try {
         handleFirestoreError(dbError, OperationType.UPDATE, `users/${user.uid}/cases/${id}`);
       } catch (e) {
-        console.error("Failed to save error state to Firestore:", e);
+        console.error('Failed to save error state to Firestore:', e);
       }
     }
   };
@@ -109,7 +186,7 @@ export function useCases(user: User | null, isAuthReady: boolean) {
         handleFirestoreError(error, OperationType.DELETE, `users/${user.uid}/cases/${id}`);
       }
     } else {
-      setResults(prev => prev.filter(r => r.id !== id));
+      setResults((prev) => prev.filter((r) => r.id !== id));
     }
   };
 
@@ -118,6 +195,7 @@ export function useCases(user: User | null, isAuthReady: boolean) {
     setResults,
     saveCaseProcessing,
     saveCaseCompleted,
+    saveCaseMarketAnalysis,
     saveCaseError,
     removeCase,
   };

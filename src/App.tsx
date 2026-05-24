@@ -36,11 +36,11 @@ import ReactMarkdown from 'react-markdown';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn, formatCurrencyThousands } from './lib/utils';
 import { generatePDF } from './features/pdf/generatePDF';
-import { calculateEBITDA, evaluateRatio } from './features/ratios/calculations';
-import { extractFromFiles } from './features/extraction/geminiClient';
+import { runPipeline, CaseState } from './features/extraction/pipeline';
 import { useAuth } from './features/auth/useAuth';
 import { useCases } from './features/cases/useCases';
-import { FinancialData, ExtractionResult, DashboardData, Ratio, AssetLiabilityGroup, Shareholder } from './types';
+import { ExtractionResult, Shareholder } from './types';
+import { ComputedRatios, RatioKey, RatioStatus } from './features/ratios/calculations';
 import { BiBankLogo } from './components/BiBankLogo';
 
 const ShareholderTable = ({ accionistas, level = 1, parentName = '' }: { accionistas: Shareholder[], level?: number, parentName?: string }) => {
@@ -125,6 +125,8 @@ export default function App() {
     "Sistema Financiero (Nosis)"
   ];
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStage, setProcessingStage] = useState<CaseState | null>(null);
+  const [marketAnalysisBusyId, setMarketAnalysisBusyId] = useState<string | null>(null);
   const [currentFiles, setCurrentFiles] = useState<{ file: File; preview: string }[]>([]);
   const { user, isAuthReady, handleLogin, handleLogout } = useAuth(() => {
     setActiveResultId(null);
@@ -135,6 +137,7 @@ export default function App() {
     setResults,
     saveCaseProcessing,
     saveCaseCompleted,
+    saveCaseMarketAnalysis,
     saveCaseError,
     removeCase,
   } = useCases(user, isAuthReady);
@@ -171,43 +174,75 @@ export default function App() {
     if (currentFiles.length === 0) return;
 
     setIsProcessing(true);
+    setProcessingStage('processing');
     const newId = crypto.randomUUID();
     const newResult: ExtractionResult = {
       id: newId,
       timestamp: new Date().toISOString(),
       fileNames: currentFiles.map(f => f.file.name),
-      data: null,
-      dashboardData: null,
-      status: 'processing'
+      schemaVersion: 2,
+      status: 'processing',
+      extraction: null,
+      ratios: null,
+      inconsistencias: [],
+      crossCheck: null,
+      verification: null,
+      marketAnalysis: null,
     };
 
     setResults(prev => [newResult, ...prev]);
     setActiveResultId(newId);
+    setMarketAnalysisBusyId(newId);
 
     try {
       await saveCaseProcessing(newResult);
 
-      const parsedResponse = await extractFromFiles(currentFiles);
+      const pipelineResult = await runPipeline(currentFiles, {
+        onStateChange: (state) => setProcessingStage(state),
+        onMarketAnalysis: (text, err) => {
+          setMarketAnalysisBusyId(curr => (curr === newId ? null : curr));
+          if (err) {
+            console.error('Market analysis failed:', err);
+            return;
+          }
+          setResults(prev => prev.map(r => r.id === newId ? { ...r, marketAnalysis: text } : r));
+          saveCaseMarketAnalysis(newId, text);
+        },
+      });
+
+      if (pipelineResult.state === 'error') {
+        setResults(prev => prev.map(r =>
+          r.id === newId ? { ...r, status: 'error', error: pipelineResult.failure?.message } : r
+        ));
+        await saveCaseError(newId, pipelineResult.failure?.message ?? 'Error desconocido');
+        return;
+      }
 
       setResults(prev => prev.map(r =>
         r.id === newId ? {
           ...r,
-          data: parsedResponse.data,
-          dashboardData: parsedResponse.dashboardData,
-          status: 'completed'
+          status: pipelineResult.state === 'completed' || pipelineResult.state === 'completed_partial'
+            ? pipelineResult.state
+            : 'completed',
+          extraction: pipelineResult.extraction,
+          ratios: pipelineResult.ratios,
+          inconsistencias: pipelineResult.inconsistencias,
+          crossCheck: pipelineResult.crossCheck,
+          verification: pipelineResult.verification,
         } : r
       ));
 
-      await saveCaseCompleted(newResult, parsedResponse);
+      await saveCaseCompleted(newResult, pipelineResult);
     } catch (error) {
-      console.error("Extraction error:", error);
+      console.error("Pipeline error:", error);
       setResults(prev => prev.map(r =>
         r.id === newId ? { ...r, status: 'error', error: (error as Error).message } : r
       ));
-
       await saveCaseError(newId, (error as Error).message);
+      setMarketAnalysisBusyId(curr => (curr === newId ? null : curr));
     } finally {
       setIsProcessing(false);
+      setProcessingStage(null);
     }
   };
 
@@ -218,8 +253,12 @@ export default function App() {
 
   const downloadJson = (result: ExtractionResult) => {
     const exportData = {
-      data: result.data,
-      dashboardData: result.dashboardData
+      extraction: result.extraction,
+      ratios: result.ratios,
+      inconsistencias: result.inconsistencias,
+      crossCheck: result.crossCheck,
+      verification: result.verification,
+      marketAnalysis: result.marketAnalysis,
     };
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
     const downloadAnchorNode = document.createElement('a');
@@ -231,8 +270,9 @@ export default function App() {
   };
 
 
-  const StatusBadge = ({ status }: { status: 'critical' | 'alert' | 'healthy' }) => {
-    const colors = {
+  const StatusBadge = ({ status }: { status: RatioStatus | null }) => {
+    if (status === null) return <div className="w-3 h-3 rounded-full shadow-sm bg-gray-300" />;
+    const colors: Record<RatioStatus, string> = {
       critical: 'bg-red-500',
       alert: 'bg-yellow-500',
       healthy: 'bg-emerald-500'
@@ -240,19 +280,22 @@ export default function App() {
     return <div className={cn("w-3 h-3 rounded-full shadow-sm", colors[status])} />;
   };
 
-  const getDeudaCortoPlazo = (pasivo_corriente: any) => {
-    if (!pasivo_corriente || !Array.isArray(pasivo_corriente.detalles)) return null;
-    const keywords = ['préstamo', 'prestamo', 'bancari', 'financier'];
-    let total = 0;
-    let found = false;
-    pasivo_corriente.detalles.forEach((item: any) => {
-      const rubro = (item.rubro || '').toLowerCase();
-      if (keywords.some(kw => rubro.includes(kw))) {
-        total += Number(item.monto) || 0;
-        found = true;
-      }
-    });
-    return found ? total : null;
+  const RATIO_CARDS: Array<{ key: RatioKey; name: string; description: string }> = [
+    { key: 'liquidez_corriente', name: 'Liquidez Corriente', description: 'Activo Corriente / Pasivo Corriente' },
+    { key: 'solvencia', name: 'Solvencia', description: 'Patrimonio Neto / Pasivo Total' },
+    { key: 'deuda_ebitda', name: 'Deuda / EBITDA', description: 'Deuda Bancaria / EBITDA' },
+    { key: 'cobertura_intereses', name: 'EBITDA / Intereses', description: 'Cobertura de Intereses' },
+  ];
+
+  const buildRatioCards = (ratios: ComputedRatios | null) => {
+    if (!ratios) return [];
+    return RATIO_CARDS.map(spec => ({
+      key: spec.key,
+      name: spec.name,
+      value: ratios[spec.key].actual,
+      status: ratios[spec.key].status,
+      description: spec.description,
+    }));
   };
 
   
@@ -282,7 +325,8 @@ export default function App() {
     );
   };
 
-  const renderAssetLiabilityGroup = (title: string, currentGroup: AssetLiabilityGroup | undefined, prevGroup: AssetLiabilityGroup | undefined, anioActual: string | number = 'Actual', anioAnterior: string | number = 'Anterior') => {
+  type GroupConDetalles = { total: number; detalles: Array<{ rubro: string; monto: number }> };
+  const renderAssetLiabilityGroup = (title: string, currentGroup: GroupConDetalles | undefined, prevGroup: GroupConDetalles | undefined, anioActual: string | number = 'Actual', anioAnterior: string | number = 'Anterior') => {
     if (!currentGroup) return null;
     
     return (
@@ -412,7 +456,7 @@ export default function App() {
                       {result.status === 'error' && <AlertCircle className="w-3 h-3 text-red-500" />}
                     </div>
                     <p className="text-xs font-medium truncate pr-6">
-                      {result.dashboardData?.company_profile?.name || `${result.fileNames.length} archivo(s)`}
+                      {result.extraction?.company_profile?.name || `${result.fileNames.length} archivo(s)`}
                     </p>
                     <button 
                       onClick={(e) => { e.stopPropagation(); removeResult(result.id); }}
@@ -572,30 +616,42 @@ export default function App() {
               {/* Dashboard Header Status */}
               {activeResult?.status === 'processing' && (
                 <div className="relative w-full min-h-[500px] flex items-center justify-center border border-[#141414] overflow-hidden bg-[#F0EFED]">
-                  {/* Background Image with Transparency */}
-                  <div 
-                    className="absolute inset-0 z-0 opacity-15 mix-blend-multiply transition-opacity duration-1000"
-                    style={{
-                      backgroundImage: 'url("https://images.unsplash.com/photo-1485827404727-83b0f5627379?auto=format&fit=crop&q=80&w=2000")', // Placeholder: Reemplazar con la URL de la imagen del robot de Bi Bank
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center',
-                    }}
-                  />
-                  
-                  {/* Animated Overlay */}
                   <div className="absolute inset-0 z-0 bg-gradient-to-b from-transparent via-white/30 to-transparent animate-pulse"></div>
-
-                  {/* Content Card */}
-                  <div className="relative z-10 bg-white/90 backdrop-blur-md p-10 border border-[#141414]/20 shadow-2xl max-w-lg w-full text-center animate-in fade-in zoom-in-95 duration-500">
-                    <div className="relative w-16 h-16 mx-auto mb-6">
-                      <div className="absolute inset-0 border-4 border-[#141414]/10 rounded-full"></div>
-                      <div className="absolute inset-0 border-4 border-[#141414] rounded-full border-t-transparent animate-spin"></div>
-                      <Loader2 className="w-6 h-6 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[#141414]" />
-                    </div>
-                    <h3 className="text-2xl font-sans font-bold text-[#141414] mb-3 tracking-tight">Procesando con IA</h3>
-                    <p className="text-sm font-sans text-[#141414]/70 leading-relaxed">
-                      Analizando estados contables, extrayendo ratios financieros y cruzando información crediticia. Por favor, espere unos instantes.
-                    </p>
+                  <div className="relative z-10 bg-white/90 backdrop-blur-md p-10 border border-[#141414]/20 shadow-2xl max-w-lg w-full animate-in fade-in zoom-in-95 duration-500">
+                    <h3 className="text-2xl font-sans font-bold text-[#141414] mb-6 tracking-tight text-center">Procesando con IA</h3>
+                    <ol className="space-y-3">
+                      {(() => {
+                        const stages: Array<{ key: CaseState | 'verifying-2'; label: string }> = [
+                          { key: 'extracting', label: 'Extrayendo números del balance' },
+                          { key: 'computing', label: 'Calculando ratios' },
+                          { key: 'verifying', label: 'Verificando coherencia' },
+                          { key: 'verifying-2', label: 'Generando informe' },
+                        ];
+                        const order: CaseState[] = ['processing', 'extracting', 'computing', 'verifying'];
+                        const currentIdx = processingStage ? order.indexOf(processingStage) : 0;
+                        return stages.map((stage, idx) => {
+                          const stageIdx = stage.key === 'verifying-2' ? 3 : order.indexOf(stage.key as CaseState);
+                          const isActive = processingStage === 'verifying'
+                            ? idx >= 2 && idx <= 3
+                            : stageIdx === currentIdx;
+                          const isDone = stageIdx < currentIdx;
+                          return (
+                            <li key={stage.label} className="flex items-center gap-3 text-sm">
+                              {isDone ? (
+                                <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                              ) : isActive ? (
+                                <Loader2 className="w-5 h-5 text-[#141414] animate-spin shrink-0" />
+                              ) : (
+                                <div className="w-5 h-5 rounded-full border-2 border-[#141414]/20 shrink-0" />
+                              )}
+                              <span className={cn('font-medium', isDone ? 'text-[#141414]/50' : isActive ? 'text-[#141414]' : 'text-[#141414]/40')}>
+                                {stage.label}
+                              </span>
+                            </li>
+                          );
+                        });
+                      })()}
+                    </ol>
                   </div>
                 </div>
               )}
@@ -608,7 +664,39 @@ export default function App() {
                 </div>
               )}
 
-              {activeResult?.status === 'completed' && activeResult.dashboardData && (
+              {(activeResult?.status === 'completed' || activeResult?.status === 'completed_partial') && activeResult.extraction && (
+                <>
+                  {activeResult.inconsistencias.length > 0 && (
+                    <div className="border-l-4 border-yellow-500 bg-yellow-50 p-4 print:hidden">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="w-5 h-5 text-yellow-700 mt-0.5 shrink-0" />
+                        <div className="flex-1">
+                          <h4 className="text-sm font-bold text-yellow-900 mb-2">
+                            Sanity check detectó {activeResult.inconsistencias.length} inconsistencia(s)
+                          </h4>
+                          <ul className="text-xs text-yellow-900/80 space-y-1 list-disc list-inside">
+                            {activeResult.inconsistencias.map((inc, i) => (
+                              <li key={i}>
+                                <span className="font-mono text-[10px] bg-yellow-100 px-1.5 py-0.5 rounded">{inc.campo}</span>{' '}
+                                {inc.mensaje}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {activeResult.status === 'completed_partial' && (
+                    <div className="border-l-4 border-orange-500 bg-orange-50 p-3 text-sm text-orange-900 print:hidden">
+                      Verificación incompleta: el informe ejecutivo no pudo generarse. Los ratios y la extracción están disponibles.
+                    </div>
+                  )}
+                  {marketAnalysisBusyId === activeResult.id && !activeResult.marketAnalysis && (
+                    <div className="border-l-4 border-blue-500 bg-blue-50 p-3 text-xs text-blue-900 flex items-center gap-2 print:hidden">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Generando análisis de mercado en segundo plano...
+                    </div>
+                  )}
                 <div className="flex flex-col md:flex-row gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                   {/* Sidebar */}
                   <div className="w-full md:w-64 shrink-0">
@@ -639,15 +727,15 @@ export default function App() {
                       <BiBankLogo className="h-24 w-auto grayscale" />
                     </div>
                     <h1 className="text-2xl font-sans font-bold uppercase mb-2 relative z-10">
-                      {activeResult.dashboardData.company_profile?.name || "EMPRESA NO IDENTIFICADA"}
+                      {activeResult.extraction?.company_profile?.name || "EMPRESA NO IDENTIFICADA"}
                     </h1>
                     <div className="flex items-center gap-4 text-xs font-mono opacity-60 border-t border-[#141414]/10 pt-2 relative z-10">
                       <span>
-                        <strong className="font-bold">CUIT:</strong> {activeResult.dashboardData.company_profile?.cuit || "N/A"}
+                        <strong className="font-bold">CUIT:</strong> {activeResult.extraction?.company_profile?.cuit || "N/A"}
                       </span>
                       <span className="h-3 w-[1px] bg-[#141414]/20" />
                       <span>
-                        <strong className="font-bold">ACTIVIDAD:</strong> {activeResult.dashboardData.company_profile?.activity || "No especificada"}
+                        <strong className="font-bold">ACTIVIDAD:</strong> {activeResult.extraction?.company_profile?.activity || "No especificada"}
                       </span>
                       <span className="h-3 w-[1px] bg-[#141414]/20" />
                       <span className="italic text-[#000000] opacity-100">Valores expresados en miles de pesos</span>
@@ -662,9 +750,9 @@ export default function App() {
                         {/* Análisis High Thinking AI */}
                         <div className="w-full bg-white border border-[#141414] p-6 mb-8 font-sans">
                           <h3 className="text-lg font-bold mb-4 uppercase text-[#141414]">Resumen</h3>
-                          {activeResult.dashboardData?.executive_summary ? (
+                          {activeResult.verification?.executive_summary ? (
                             <div className="text-justify text-[#141414] prose prose-sm max-w-none prose-p:mb-4 last:prose-p:mb-0">
-                              <ReactMarkdown>{activeResult.dashboardData.executive_summary}</ReactMarkdown>
+                              <ReactMarkdown>{activeResult.verification?.executive_summary}</ReactMarkdown>
                             </div>
                           ) : (
                             <>
@@ -680,17 +768,17 @@ export default function App() {
 
                         {/* Patrimonial Summary Table (Quick View) */}
                         <div className="bg-[#F0EFED] p-6 border border-[#141414] mb-8">
-                          <h3 className="text-base font-bold uppercase tracking-widest mb-4 opacity-70 text-[#141414]">Resumen Patrimonial {activeResult.dashboardData?.company_profile?.anio_actual || ''} (Vista Rápida)</h3>
+                          <h3 className="text-base font-bold uppercase tracking-widest mb-4 opacity-70 text-[#141414]">Resumen Patrimonial {activeResult.extraction?.company_profile?.anio_actual || ''} (Vista Rápida)</h3>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
                             <div>
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Total Activo</p>
                               <div className="flex items-baseline">
                                 <p className="text-xl font-bold font-mono text-[#141414]">
-                                  {formatCurrencyThousands(activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_actual?.activo?.total_del_activo)}
+                                  {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_activo)}
                                 </p>
                                 <VariationBadge variation={calculateVariation(
-                                  activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_actual?.activo?.total_del_activo || 0,
-                                  activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_anterior?.activo?.total_del_activo || 0
+                                  activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_activo || 0,
+                                  activeResult.extraction?.ejercicio_anterior?.estado_situacion_patrimonial?.total_activo || 0
                                 )} />
                               </div>
                             </div>
@@ -698,11 +786,11 @@ export default function App() {
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Total Pasivo</p>
                               <div className="flex items-baseline">
                                 <p className="text-xl font-bold font-mono text-[#141414]">
-                                  {formatCurrencyThousands(activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_actual?.pasivo?.total_del_pasivo)}
+                                  {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_pasivo)}
                                 </p>
                                 <VariationBadge variation={calculateVariation(
-                                  activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_actual?.pasivo?.total_del_pasivo || 0,
-                                  activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_anterior?.pasivo?.total_del_pasivo || 0
+                                  activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_pasivo || 0,
+                                  activeResult.extraction?.ejercicio_anterior?.estado_situacion_patrimonial?.total_pasivo || 0
                                 )} />
                               </div>
                             </div>
@@ -710,11 +798,11 @@ export default function App() {
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Patrimonio Neto</p>
                               <div className="flex items-baseline">
                                 <p className="text-xl font-bold font-mono text-[#141414]">
-                                  {formatCurrencyThousands(activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_actual?.patrimonio_neto_total)}
+                                  {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.patrimonio_neto)}
                                 </p>
                                 <VariationBadge variation={calculateVariation(
-                                  activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_actual?.patrimonio_neto_total || 0,
-                                  activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_anterior?.patrimonio_neto_total || 0
+                                  activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.patrimonio_neto || 0,
+                                  activeResult.extraction?.ejercicio_anterior?.estado_situacion_patrimonial?.patrimonio_neto || 0
                                 )} />
                               </div>
                             </div>
@@ -723,13 +811,13 @@ export default function App() {
                               <div className="flex items-baseline">
                                 <p className={cn(
                                   "text-xl font-bold font-mono",
-                                  (activeResult.data?.hoja_estado_resultados?.ejercicio_actual?.resultado_del_ejercicio_final || 0) >= 0 ? "text-[#141414]" : "text-red-600"
+                                  (activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto || 0) >= 0 ? "text-[#141414]" : "text-red-600"
                                 )}>
-                                  {formatCurrencyThousands(activeResult.data?.hoja_estado_resultados?.ejercicio_actual?.resultado_del_ejercicio_final)}
+                                  {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto)}
                                 </p>
                                 <VariationBadge variation={calculateVariation(
-                                  activeResult.data?.hoja_estado_resultados?.ejercicio_actual?.resultado_del_ejercicio_final || 0,
-                                  activeResult.data?.hoja_estado_resultados?.ejercicio_anterior?.resultado_del_ejercicio_final || 0
+                                  activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto || 0,
+                                  activeResult.extraction?.ejercicio_anterior?.estado_resultados?.resultado_neto || 0
                                 )} />
                               </div>
                             </div>
@@ -743,18 +831,18 @@ export default function App() {
                     <div className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
                       <div className="absolute top-4 right-4">
                           <StatusBadge status={evaluateVariation(calculateVariation(
-                            activeResult.data?.hoja_estado_resultados?.ejercicio_actual?.ventas_netas || 0,
-                            activeResult.data?.hoja_estado_resultados?.ejercicio_anterior?.ventas_netas || 0
+                            activeResult.extraction?.ejercicio_actual?.estado_resultados?.ventas_netas || 0,
+                            activeResult.extraction?.ejercicio_anterior?.estado_resultados?.ventas_netas || 0
                           ))} />
                         </div>
                         <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">VENTAS (EN MILES)</p>
                       <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
-                        {formatCurrencyThousands(activeResult.data?.hoja_estado_resultados?.ejercicio_actual?.ventas_netas)}
+                        {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_resultados?.ventas_netas)}
                       </p>
                       <div className="flex items-center text-xs font-sans font-bold text-gray-600 leading-tight">
                         <VariationBadge variation={calculateVariation(
-                          activeResult.data?.hoja_estado_resultados?.ejercicio_actual?.ventas_netas || 0,
-                          activeResult.data?.hoja_estado_resultados?.ejercicio_anterior?.ventas_netas || 0
+                          activeResult.extraction?.ejercicio_actual?.estado_resultados?.ventas_netas || 0,
+                          activeResult.extraction?.ejercicio_anterior?.estado_resultados?.ventas_netas || 0
                         )} />
                         <span className="ml-1">Var. interanual</span>
                       </div>
@@ -764,18 +852,18 @@ export default function App() {
                     <div className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
                       <div className="absolute top-4 right-4">
                           <StatusBadge status={evaluateVariation(calculateVariation(
-                            (activeResult.dashboardData?.motor_de_ratios?.ebitda !== 'N/A' && activeResult.dashboardData?.motor_de_ratios?.ebitda !== undefined) ? activeResult.dashboardData.motor_de_ratios.ebitda : (calculateEBITDA(activeResult.data?.hoja_estado_resultados?.ejercicio_actual, activeResult.data?.hoja_flujo_efectivo?.ejercicio_actual) || 0),
-                            calculateEBITDA(activeResult.data?.hoja_estado_resultados?.ejercicio_anterior, activeResult.data?.hoja_flujo_efectivo?.ejercicio_anterior) || 0
+                            (activeResult.ratios?.ebitda.actual ?? 0),
+                            (activeResult.ratios?.ebitda.anterior ?? 0)
                           ))} />
                         </div>
                         <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">EBITDA (EN MILES)</p>
                       <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
-                        {formatCurrencyThousands(activeResult.dashboardData?.motor_de_ratios?.ebitda !== 'N/A' && activeResult.dashboardData?.motor_de_ratios?.ebitda !== undefined ? activeResult.dashboardData.motor_de_ratios.ebitda : calculateEBITDA(activeResult.data?.hoja_estado_resultados?.ejercicio_actual, activeResult.data?.hoja_flujo_efectivo?.ejercicio_actual))}
+                        {formatCurrencyThousands((activeResult.ratios?.ebitda.actual ?? null))}
                       </p>
                       <div className="flex items-center text-xs font-sans font-bold text-gray-600 leading-tight">
                         <VariationBadge variation={calculateVariation(
-                          (activeResult.dashboardData?.motor_de_ratios?.ebitda !== 'N/A' && activeResult.dashboardData?.motor_de_ratios?.ebitda !== undefined) ? activeResult.dashboardData.motor_de_ratios.ebitda : (calculateEBITDA(activeResult.data?.hoja_estado_resultados?.ejercicio_actual, activeResult.data?.hoja_flujo_efectivo?.ejercicio_actual) || 0),
-                          calculateEBITDA(activeResult.data?.hoja_estado_resultados?.ejercicio_anterior, activeResult.data?.hoja_flujo_efectivo?.ejercicio_anterior) || 0
+                          (activeResult.ratios?.ebitda.actual ?? 0),
+                          (activeResult.ratios?.ebitda.anterior ?? 0)
                         )} />
                         <span className="ml-1">Var. interanual</span>
                       </div>
@@ -784,11 +872,11 @@ export default function App() {
                     {/* Tarjeta 3: DEUDA BANCARIA TOTAL */}
                     <div className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
                       <div className="absolute top-4 right-4">
-                          <StatusBadge status={evaluateRatio('deuda / ebitda', activeResult.dashboardData?.motor_de_ratios?.deuda_bancaria_ebitda !== 'N/A' ? (activeResult.dashboardData?.motor_de_ratios?.deuda_bancaria_ebitda || 0) : 0)} />
+                          <StatusBadge status={activeResult.ratios?.deuda_ebitda.status ?? null} />
                         </div>
                         <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">DEUDA BANCARIA TOTAL (EN MILES)</p>
                       <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
-                        {formatCurrencyThousands(activeResult.dashboardData?.motor_de_ratios?.deuda_bancaria_total !== 'N/A' ? activeResult.dashboardData?.motor_de_ratios?.deuda_bancaria_total : null)}
+                        {formatCurrencyThousands(activeResult.ratios?.deuda_bancaria_total.actual ?? null)}
                       </p>
                       <p className="text-xs font-sans font-bold text-gray-600 leading-tight">Total sistema financiero</p>
                     </div>
@@ -797,15 +885,15 @@ export default function App() {
                     <div className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
                       <div className="absolute top-4 right-4">
                           {(() => {
-                            const deudaCPActual = getDeudaCortoPlazo(activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_actual?.pasivo?.pasivo_corriente);
-                            const deudaCPAnterior = getDeudaCortoPlazo(activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_anterior?.pasivo?.pasivo_corriente);
+                            const deudaCPActual = activeResult.extraction?.deuda_bancaria_actual?.corriente?.total ?? null;
+                            const deudaCPAnterior = activeResult.extraction?.deuda_bancaria_anterior?.corriente?.total ?? null;
                             return <StatusBadge status={evaluateVariation(calculateVariation(deudaCPActual || 0, deudaCPAnterior || 0))} />;
                           })()}
                         </div>
                         <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">DEUDA CORTO PLAZO (EN MILES)</p>
                       {(() => {
-                        const deudaCPActual = getDeudaCortoPlazo(activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_actual?.pasivo?.pasivo_corriente);
-                        const deudaCPAnterior = getDeudaCortoPlazo(activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_anterior?.pasivo?.pasivo_corriente);
+                        const deudaCPActual = activeResult.extraction?.deuda_bancaria_actual?.corriente?.total ?? null;
+                        const deudaCPAnterior = activeResult.extraction?.deuda_bancaria_anterior?.corriente?.total ?? null;
                         
                         if (deudaCPActual === null) {
                           return <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">-</p>;
@@ -831,10 +919,10 @@ export default function App() {
                   {/* KPI Cards (Fila Original) */}
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {Array.isArray(activeResult.dashboardData?.ratios) && activeResult.dashboardData.ratios.map((ratio, idx) => (
+                    {Array.isArray(buildRatioCards(activeResult.ratios ?? null)) && buildRatioCards(activeResult.ratios ?? null).map((ratio, idx) => (
                       <div key={idx} className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
                         <div className="absolute top-4 right-4">
-                          <StatusBadge status={evaluateRatio(ratio.name, ratio.value)} />
+                          <StatusBadge status={ratio.status} />
                         </div>
                         <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">{ratio.name}</p>
                         <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
@@ -864,14 +952,14 @@ export default function App() {
 
                     {activeTab === 'Balance y Ratios' && (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <ComparativeView json_extraccion={activeResult.data} json_ratios={activeResult.dashboardData?.motor_de_ratios} />
+                        <ComparativeView extraction={activeResult.extraction} ratios={activeResult.ratios} />
                       </div>
                     )}
 
                     {activeTab === 'Información post balance' && (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {/* Post-Closing Analysis Section (Moved Inside) */}
-                      {activeResult.data?.analisis_post_cierre && activeResult.data.analisis_post_cierre.total_ventas_post_cierre > 0 ? (
+                      {activeResult.extraction?.analisis_post_cierre && activeResult.extraction.analisis_post_cierre.total_ventas_post_cierre > 0 ? (
                         <div className="bg-white border border-[#141414] p-6 font-sans">
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                             <h3 className="text-lg font-semibold text-[#141414]">EVOLUCIÓN DE VENTAS POST BALANCE (COMPARATIVO INTERANUAL)</h3>
@@ -928,7 +1016,7 @@ export default function App() {
                               </thead>
                               <tbody className="divide-y divide-[#141414]/10">
                                 {(() => {
-                                  const rawVentas = activeResult.data.analisis_post_cierre.detalle_ventas_mensuales;
+                                  const rawVentas = activeResult.extraction.analisis_post_cierre.detalle_ventas_mensuales;
                                   const ventasMensuales = Array.isArray(rawVentas) ? rawVentas : [];
                                   const baseIndex = ventasMensuales.length - 1;
                                   
@@ -973,7 +1061,7 @@ export default function App() {
                               </tbody>
                               <tfoot>
                                 {(() => {
-                                  const rawVentas = activeResult.data.analisis_post_cierre.detalle_ventas_mensuales;
+                                  const rawVentas = activeResult.extraction.analisis_post_cierre.detalle_ventas_mensuales;
                                   const ventasMensuales = Array.isArray(rawVentas) ? rawVentas : [];
                                   const baseIndex = ventasMensuales.length - 1;
                                   
@@ -1031,9 +1119,9 @@ export default function App() {
                             </div>
                           )}
                           
-                          {activeResult.data.analisis_post_cierre.notas_relevantes && (
+                          {activeResult.extraction.analisis_post_cierre.notas_relevantes && (
                             <div className="mt-2 text-xs opacity-70 italic border-t border-[#141414]/10 pt-2">
-                              Nota: {activeResult.data.analisis_post_cierre.notas_relevantes}
+                              Nota: {activeResult.extraction.analisis_post_cierre.notas_relevantes}
                             </div>
                           )}
                         </div>
@@ -1044,7 +1132,7 @@ export default function App() {
                       )}
 
                       {/* Deuda Bancaria Asumida Post Balance */}
-                      {Array.isArray(activeResult.data?.analisis_post_cierre?.deuda_bancaria_post_balance_detalle) && activeResult.data.analisis_post_cierre.deuda_bancaria_post_balance_detalle.length > 0 && (
+                      {Array.isArray(activeResult.extraction?.analisis_post_cierre?.deuda_bancaria_post_balance_detalle) && activeResult.extraction.analisis_post_cierre.deuda_bancaria_post_balance_detalle.length > 0 && (
                         <div className="bg-white border border-[#141414] p-6 mt-8">
                           <h3 className="text-lg font-semibold text-[#141414] mb-6">DEUDA BANCARIA ASUMIDA POST BALANCE</h3>
                           
@@ -1057,7 +1145,7 @@ export default function App() {
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-[#141414]/10">
-                                {activeResult.data.analisis_post_cierre.deuda_bancaria_post_balance_detalle.map((item: any, idx: number) => (
+                                {activeResult.extraction.analisis_post_cierre.deuda_bancaria_post_balance_detalle.map((item: any, idx: number) => (
                                   <tr key={idx} className="hover:bg-[#141414]/5 transition-colors">
                                     <td className="px-4 py-3 font-medium text-[#141414]">{item.entidad}</td>
                                     <td className="px-4 py-3 text-right font-mono font-bold">{formatCurrencyThousands(item.monto, item.moneda)}</td>
@@ -1069,8 +1157,8 @@ export default function App() {
                                   <td className="px-4 py-3 text-right">TOTAL DEUDA POST BALANCE:</td>
                                   <td className="px-4 py-3 text-right font-mono">
                                     {formatCurrencyThousands(
-                                      activeResult.data.analisis_post_cierre.deuda_bancaria_post_balance_detalle.reduce((acc: number, curr: any) => acc + (Number(curr.monto) || 0), 0),
-                                      activeResult.data.analisis_post_cierre.deuda_bancaria_post_balance_detalle[0]?.moneda || 'ARS'
+                                      activeResult.extraction.analisis_post_cierre.deuda_bancaria_post_balance_detalle.reduce((acc: number, curr: any) => acc + (Number(curr.monto) || 0), 0),
+                                      activeResult.extraction.analisis_post_cierre.deuda_bancaria_post_balance_detalle[0]?.moneda || 'ARS'
                                     )}
                                   </td>
                                 </tr>
@@ -1099,7 +1187,7 @@ export default function App() {
                             Evolución Histórica
                           </h4>
                           <p className="text-sm leading-relaxed opacity-80">
-                            {activeResult.dashboardData?.sales_analysis?.evolution_text}
+                            {'No disponible en esta versión.'}
                           </p>
                         </div>
                         <div className="bg-[#F0EFED] p-4 border border-[#141414]/10">
@@ -1108,7 +1196,7 @@ export default function App() {
                             Proyección IA
                           </h4>
                           <p className="text-sm leading-relaxed opacity-80 italic">
-                            "{activeResult.dashboardData?.sales_analysis?.projection_text}"
+                            {'No disponible en esta versión.'}
                           </p>
                         </div>
                       </div>
@@ -1119,7 +1207,7 @@ export default function App() {
                   {activeTab === 'Sistema Financiero (Nosis)' && (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {/* Nosis Section */}
-                  {activeResult.dashboardData.extraccion_nosis && (
+                  {activeResult.extraction?.extraccion_nosis && (
                     <div className="border border-[#141414] bg-white mt-8">
                       <div className="flex items-center justify-between p-4 border-b border-[#141414]/10 bg-[#F0EFED] select-none">
                         <div className="flex items-center gap-2">
@@ -1133,44 +1221,34 @@ export default function App() {
                             <div>
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Score Crediticio</p>
                               <p className="text-xl font-bold font-mono text-[#141414]">
-                                {activeResult.dashboardData?.extraccion_nosis?.score_crediticio}
+                                {activeResult.extraction?.extraccion_nosis?.score_crediticio}
                               </p>
                             </div>
                             <div>
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Peor Situación BCRA</p>
                               <p className="text-xl font-bold font-mono text-[#141414]">
-                                Categoría {activeResult.dashboardData?.extraccion_nosis?.situacion_bcra_peor_estado}
+                                Categoría {activeResult.extraction?.extraccion_nosis?.situacion_bcra_peor_estado}
                               </p>
                             </div>
                             <div>
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Cheques Rechazados</p>
                               <p className="text-xl font-bold font-mono text-[#141414]">
-                                {activeResult.dashboardData?.extraccion_nosis?.cheques_rechazados_cantidad} cheques
+                                {activeResult.extraction?.extraccion_nosis?.cheques_rechazados_cantidad} cheques
                               </p>
                               <p className="text-xs opacity-70 mt-1">
-                                por un total de {formatCurrencyThousands(activeResult.dashboardData?.extraccion_nosis?.cheques_rechazados_monto)}
+                                por un total de {formatCurrencyThousands(activeResult.extraction?.extraccion_nosis?.cheques_rechazados_monto)}
                               </p>
                             </div>
                             <div>
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Deuda Total Nosis</p>
                               <p className="text-xl font-bold font-mono text-[#141414]">
-                                {formatCurrencyThousands(activeResult.dashboardData?.extraccion_nosis?.deuda_financiera_total_nosis)}
+                                {formatCurrencyThousands(activeResult.extraction?.extraccion_nosis?.deuda_financiera_total_nosis)}
                               </p>
                               <p className="text-[10px] opacity-50 mt-1">(Expresado en miles)</p>
                             </div>
                           </div>
 
-                          {activeResult.dashboardData.datos_adicionales_balance && (
-                            <div className="bg-[#E4E3E0] p-4 border-l-4 border-[#141414] mb-8">
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Deuda Post Balance</p>
-                              <p className="text-lg font-bold font-mono text-[#141414]">
-                                {formatCurrencyThousands(activeResult.dashboardData.datos_adicionales_balance.deuda_bancaria_post_balance)}
-                              </p>
-                              <p className="text-[10px] opacity-70 mt-1">
-                                (Extraído de los hechos posteriores al cierre en las notas del balance, si existiera)
-                              </p>
-                            </div>
-                          )}
+                          {false && null}
 
                           <h4 className="text-xs font-bold uppercase mb-4 opacity-70 border-b border-[#141414]/10 pb-2">Detalle de Entidades</h4>
                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
@@ -1185,9 +1263,9 @@ export default function App() {
                                 </thead>
                                 <tbody className="divide-y divide-[#141414]/10">
                                   {(() => {
-                                    const rawEntidades = activeResult.dashboardData?.extraccion_nosis?.detalle_entidades;
+                                    const rawEntidades = activeResult.extraction?.extraccion_nosis?.detalle_entidades;
                                     const entidades = Array.isArray(rawEntidades) ? rawEntidades : [];
-                                    const totalDeudaNosis = activeResult.dashboardData?.extraccion_nosis?.deuda_financiera_total_nosis || 0;
+                                    const totalDeudaNosis = activeResult.extraction?.extraccion_nosis?.deuda_financiera_total_nosis || 0;
                                     const totalSuma = entidades.reduce((acc, curr) => acc + (Number(curr?.monto) || 0), 0);
                                     const totalReferencia = totalDeudaNosis > 0 ? totalDeudaNosis : totalSuma;
 
@@ -1214,12 +1292,12 @@ export default function App() {
                             </div>
                             
                             {/* Pie Chart */}
-                            {Array.isArray(activeResult.dashboardData?.extraccion_nosis?.detalle_entidades) && activeResult.dashboardData.extraccion_nosis.detalle_entidades.length > 0 && (
+                            {Array.isArray(activeResult.extraction?.extraccion_nosis?.detalle_entidades) && activeResult.extraction?.extraccion_nosis.detalle_entidades.length > 0 && (
                               <div className="h-64 flex flex-col items-center justify-center bg-white border border-[#141414]/10 p-4 rounded">
                                 <h5 className="text-xs font-bold uppercase opacity-70 mb-2">Composición de Deuda</h5>
                                 <PieChart width={400} height={200}>
                                     <Pie
-                                      data={activeResult.dashboardData.extraccion_nosis.detalle_entidades.map(e => ({ name: e?.entidad || 'Desconocido', value: Number(e?.monto) || 0 }))}
+                                      data={activeResult.extraction?.extraccion_nosis.detalle_entidades.map(e => ({ name: e?.entidad || 'Desconocido', value: Number(e?.monto) || 0 }))}
                                       cx="50%"
                                       cy="50%"
                                       innerRadius={50}
@@ -1238,7 +1316,7 @@ export default function App() {
                                         );
                                       }}
                                     >
-                                      {activeResult.dashboardData.extraccion_nosis.detalle_entidades.map((entry, index) => {
+                                      {activeResult.extraction?.extraccion_nosis.detalle_entidades.map((entry, index) => {
                                         const COLORS = ['#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#1e40af', '#1d4ed8', '#1e3a8a'];
                                         return <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />;
                                       })}
@@ -1264,40 +1342,40 @@ export default function App() {
                         <h3 className="font-sans font-bold text-lg">Cruce de Deuda</h3>
                       </div>
                       
-                      {activeResult.dashboardData.cross_check ? (
+                      {activeResult.crossCheck ? (
                         <div className="space-y-6">
                           <div className="grid grid-cols-2 gap-4">
                             <div>
                               <p className="text-[10px] opacity-50 uppercase mb-1">Deuda Balance</p>
                               <p className="font-mono text-lg font-bold text-white">
-                                {formatCurrencyThousands(activeResult.dashboardData?.cross_check?.balance_debt)}
+                                {formatCurrencyThousands(activeResult.crossCheck?.balance_debt)}
                               </p>
                             </div>
                             <div>
                               <p className="text-[10px] opacity-50 uppercase mb-1">Deuda Nosis</p>
                               <p className="font-mono text-lg font-bold text-white">
-                                {formatCurrencyThousands(activeResult.dashboardData?.cross_check?.nosis_debt)}
+                                {formatCurrencyThousands(activeResult.crossCheck?.nosis_debt)}
                               </p>
                             </div>
                           </div>
                           
                           <div className={cn(
                             "p-4 border",
-                            activeResult.dashboardData?.cross_check?.match 
+                            activeResult.crossCheck?.match 
                               ? "border-emerald-500/50 bg-emerald-500/10" 
                               : "border-red-500/50 bg-red-500/10"
                           )}>
                             <div className="flex items-center gap-2 mb-1">
-                              {activeResult.dashboardData?.cross_check?.match 
+                              {activeResult.crossCheck?.match 
                                 ? <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                                 : <AlertTriangle className="w-4 h-4 text-red-500" />
                               }
                               <span className="text-xs font-bold uppercase">
-                                {activeResult.dashboardData?.cross_check?.match ? "Consistente" : "Discrepancia Detectada"}
+                                {activeResult.crossCheck?.match ? "Consistente" : "Discrepancia Detectada"}
                               </span>
                             </div>
                             <p className="text-[10px] opacity-70">
-                              Diferencia: {formatCurrencyThousands(activeResult.dashboardData?.cross_check?.difference)}
+                              Diferencia: {formatCurrencyThousands(activeResult.crossCheck?.difference_abs)}
                             </p>
                           </div>
                         </div>
@@ -1320,8 +1398,8 @@ export default function App() {
                         
                         <ShareholderTable 
                           accionistas={
-                            Array.isArray(activeResult.dashboardData?.accionistas_y_directorio?.accionistas) && activeResult.dashboardData.accionistas_y_directorio.accionistas.length > 0
-                              ? activeResult.dashboardData.accionistas_y_directorio.accionistas
+                            Array.isArray(activeResult.extraction?.accionistas_y_directorio?.accionistas) && activeResult.extraction?.accionistas_y_directorio.accionistas.length > 0
+                              ? activeResult.extraction?.accionistas_y_directorio.accionistas
                               : [
                                   { nombre: 'Inversiones Globales S.A.', dni_cuit: '30-71234567-8', participacion: 52.99, subAccionistas: [
                                     { nombre: 'Persona Física 1', dni_cuit: '20.111.222', participacion: 60 },
@@ -1344,8 +1422,8 @@ export default function App() {
                         <h3 className="text-base font-semibold text-black mb-6">ÓRGANO DE ADMINISTRACIÓN / DIRECTORIO</h3>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {Array.isArray(activeResult.dashboardData?.accionistas_y_directorio?.directorio) && activeResult.dashboardData.accionistas_y_directorio.directorio.length > 0 ? (
-                            activeResult.dashboardData.accionistas_y_directorio.directorio.map((miembro, idx) => (
+                          {Array.isArray(activeResult.extraction?.accionistas_y_directorio?.directorio) && activeResult.extraction?.accionistas_y_directorio.directorio.length > 0 ? (
+                            activeResult.extraction?.accionistas_y_directorio.directorio.map((miembro, idx) => (
                               <div key={idx} className="p-4 border border-[#141414]/10 bg-[#FAFAFA] rounded-sm hover:border-[#141414]/30 transition-colors">
                                 <p className="text-[13px] uppercase tracking-wider text-[#141414]/50 mb-1">{miembro.cargo}</p>
                                 <p className="font-medium text-[#141414]">{miembro.nombre}</p>
@@ -1383,9 +1461,9 @@ export default function App() {
                   {activeTab === 'Mercado' && (
                     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 font-sans">
                       <div className="w-full bg-white border border-[#141414] p-10 font-sans text-justify leading-relaxed">
-                        {activeResult.dashboardData?.analisis_mercado ? (
+                        {activeResult.marketAnalysis ? (
                           <div className="prose prose-sm md:prose-base max-w-none print:max-w-none print:w-full prose-headings:font-sans prose-headings:font-semibold prose-headings:text-gray-800 prose-p:text-justify prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline">
-                            <ReactMarkdown>{activeResult.dashboardData.analisis_mercado}</ReactMarkdown>
+                            <ReactMarkdown>{activeResult.marketAnalysis}</ReactMarkdown>
                           </div>
                         ) : (
                           <div className="text-center text-[#141414]/60 font-mono text-sm py-8">
@@ -1404,14 +1482,15 @@ export default function App() {
 
                   </div>
                 </div>
+                </>
               )}
             </div>
           )}
         </div>
-      
+
       </main>
       {/* Print Layout */}
-      {activeResult && activeResult.dashboardData && (
+      {activeResult && activeResult.extraction && (
         <div className="hidden print:block bg-white text-black w-full font-sans">
           <table className="w-full">
             <thead>
@@ -1437,9 +1516,9 @@ export default function App() {
                         {/* Análisis High Thinking AI */}
                         <div className="w-full bg-white border border-[#141414] p-6 mb-8 font-sans">
                           <h3 className="text-lg font-bold mb-4 uppercase text-[#141414]">Resumen</h3>
-                          {activeResult.dashboardData?.executive_summary ? (
+                          {activeResult.verification?.executive_summary ? (
                             <div className="text-justify text-[#141414] prose prose-sm max-w-none prose-p:mb-4 last:prose-p:mb-0">
-                              <ReactMarkdown>{activeResult.dashboardData.executive_summary}</ReactMarkdown>
+                              <ReactMarkdown>{activeResult.verification?.executive_summary}</ReactMarkdown>
                             </div>
                           ) : (
                             <>
@@ -1455,17 +1534,17 @@ export default function App() {
 
                         {/* Patrimonial Summary Table (Quick View) */}
                         <div className="bg-[#F0EFED] p-6 border border-[#141414] mb-8">
-                          <h3 className="text-base font-bold uppercase tracking-widest mb-4 opacity-70 text-[#141414]">Resumen Patrimonial {activeResult.dashboardData?.company_profile?.anio_actual || ''} (Vista Rápida)</h3>
+                          <h3 className="text-base font-bold uppercase tracking-widest mb-4 opacity-70 text-[#141414]">Resumen Patrimonial {activeResult.extraction?.company_profile?.anio_actual || ''} (Vista Rápida)</h3>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
                             <div>
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Total Activo</p>
                               <div className="flex items-baseline">
                                 <p className="text-xl font-bold font-mono text-[#141414]">
-                                  {formatCurrencyThousands(activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_actual?.activo?.total_del_activo)}
+                                  {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_activo)}
                                 </p>
                                 <VariationBadge variation={calculateVariation(
-                                  activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_actual?.activo?.total_del_activo || 0,
-                                  activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_anterior?.activo?.total_del_activo || 0
+                                  activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_activo || 0,
+                                  activeResult.extraction?.ejercicio_anterior?.estado_situacion_patrimonial?.total_activo || 0
                                 )} />
                               </div>
                             </div>
@@ -1473,11 +1552,11 @@ export default function App() {
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Total Pasivo</p>
                               <div className="flex items-baseline">
                                 <p className="text-xl font-bold font-mono text-[#141414]">
-                                  {formatCurrencyThousands(activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_actual?.pasivo?.total_del_pasivo)}
+                                  {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_pasivo)}
                                 </p>
                                 <VariationBadge variation={calculateVariation(
-                                  activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_actual?.pasivo?.total_del_pasivo || 0,
-                                  activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_anterior?.pasivo?.total_del_pasivo || 0
+                                  activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_pasivo || 0,
+                                  activeResult.extraction?.ejercicio_anterior?.estado_situacion_patrimonial?.total_pasivo || 0
                                 )} />
                               </div>
                             </div>
@@ -1485,11 +1564,11 @@ export default function App() {
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Patrimonio Neto</p>
                               <div className="flex items-baseline">
                                 <p className="text-xl font-bold font-mono text-[#141414]">
-                                  {formatCurrencyThousands(activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_actual?.patrimonio_neto_total)}
+                                  {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.patrimonio_neto)}
                                 </p>
                                 <VariationBadge variation={calculateVariation(
-                                  activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_actual?.patrimonio_neto_total || 0,
-                                  activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_anterior?.patrimonio_neto_total || 0
+                                  activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.patrimonio_neto || 0,
+                                  activeResult.extraction?.ejercicio_anterior?.estado_situacion_patrimonial?.patrimonio_neto || 0
                                 )} />
                               </div>
                             </div>
@@ -1498,13 +1577,13 @@ export default function App() {
                               <div className="flex items-baseline">
                                 <p className={cn(
                                   "text-xl font-bold font-mono",
-                                  (activeResult.data?.hoja_estado_resultados?.ejercicio_actual?.resultado_del_ejercicio_final || 0) >= 0 ? "text-[#141414]" : "text-red-600"
+                                  (activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto || 0) >= 0 ? "text-[#141414]" : "text-red-600"
                                 )}>
-                                  {formatCurrencyThousands(activeResult.data?.hoja_estado_resultados?.ejercicio_actual?.resultado_del_ejercicio_final)}
+                                  {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto)}
                                 </p>
                                 <VariationBadge variation={calculateVariation(
-                                  activeResult.data?.hoja_estado_resultados?.ejercicio_actual?.resultado_del_ejercicio_final || 0,
-                                  activeResult.data?.hoja_estado_resultados?.ejercicio_anterior?.resultado_del_ejercicio_final || 0
+                                  activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto || 0,
+                                  activeResult.extraction?.ejercicio_anterior?.estado_resultados?.resultado_neto || 0
                                 )} />
                               </div>
                             </div>
@@ -1518,18 +1597,18 @@ export default function App() {
                     <div className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
                       <div className="absolute top-4 right-4">
                           <StatusBadge status={evaluateVariation(calculateVariation(
-                            activeResult.data?.hoja_estado_resultados?.ejercicio_actual?.ventas_netas || 0,
-                            activeResult.data?.hoja_estado_resultados?.ejercicio_anterior?.ventas_netas || 0
+                            activeResult.extraction?.ejercicio_actual?.estado_resultados?.ventas_netas || 0,
+                            activeResult.extraction?.ejercicio_anterior?.estado_resultados?.ventas_netas || 0
                           ))} />
                         </div>
                         <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">VENTAS (EN MILES)</p>
                       <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
-                        {formatCurrencyThousands(activeResult.data?.hoja_estado_resultados?.ejercicio_actual?.ventas_netas)}
+                        {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_resultados?.ventas_netas)}
                       </p>
                       <div className="flex items-center text-xs font-sans font-bold text-gray-600 leading-tight">
                         <VariationBadge variation={calculateVariation(
-                          activeResult.data?.hoja_estado_resultados?.ejercicio_actual?.ventas_netas || 0,
-                          activeResult.data?.hoja_estado_resultados?.ejercicio_anterior?.ventas_netas || 0
+                          activeResult.extraction?.ejercicio_actual?.estado_resultados?.ventas_netas || 0,
+                          activeResult.extraction?.ejercicio_anterior?.estado_resultados?.ventas_netas || 0
                         )} />
                         <span className="ml-1">Var. interanual</span>
                       </div>
@@ -1539,18 +1618,18 @@ export default function App() {
                     <div className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
                       <div className="absolute top-4 right-4">
                           <StatusBadge status={evaluateVariation(calculateVariation(
-                            (activeResult.dashboardData?.motor_de_ratios?.ebitda !== 'N/A' && activeResult.dashboardData?.motor_de_ratios?.ebitda !== undefined) ? activeResult.dashboardData.motor_de_ratios.ebitda : (calculateEBITDA(activeResult.data?.hoja_estado_resultados?.ejercicio_actual, activeResult.data?.hoja_flujo_efectivo?.ejercicio_actual) || 0),
-                            calculateEBITDA(activeResult.data?.hoja_estado_resultados?.ejercicio_anterior, activeResult.data?.hoja_flujo_efectivo?.ejercicio_anterior) || 0
+                            (activeResult.ratios?.ebitda.actual ?? 0),
+                            (activeResult.ratios?.ebitda.anterior ?? 0)
                           ))} />
                         </div>
                         <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">EBITDA (EN MILES)</p>
                       <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
-                        {formatCurrencyThousands(activeResult.dashboardData?.motor_de_ratios?.ebitda !== 'N/A' && activeResult.dashboardData?.motor_de_ratios?.ebitda !== undefined ? activeResult.dashboardData.motor_de_ratios.ebitda : calculateEBITDA(activeResult.data?.hoja_estado_resultados?.ejercicio_actual, activeResult.data?.hoja_flujo_efectivo?.ejercicio_actual))}
+                        {formatCurrencyThousands((activeResult.ratios?.ebitda.actual ?? null))}
                       </p>
                       <div className="flex items-center text-xs font-sans font-bold text-gray-600 leading-tight">
                         <VariationBadge variation={calculateVariation(
-                          (activeResult.dashboardData?.motor_de_ratios?.ebitda !== 'N/A' && activeResult.dashboardData?.motor_de_ratios?.ebitda !== undefined) ? activeResult.dashboardData.motor_de_ratios.ebitda : (calculateEBITDA(activeResult.data?.hoja_estado_resultados?.ejercicio_actual, activeResult.data?.hoja_flujo_efectivo?.ejercicio_actual) || 0),
-                          calculateEBITDA(activeResult.data?.hoja_estado_resultados?.ejercicio_anterior, activeResult.data?.hoja_flujo_efectivo?.ejercicio_anterior) || 0
+                          (activeResult.ratios?.ebitda.actual ?? 0),
+                          (activeResult.ratios?.ebitda.anterior ?? 0)
                         )} />
                         <span className="ml-1">Var. interanual</span>
                       </div>
@@ -1559,11 +1638,11 @@ export default function App() {
                     {/* Tarjeta 3: DEUDA BANCARIA TOTAL */}
                     <div className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
                       <div className="absolute top-4 right-4">
-                          <StatusBadge status={evaluateRatio('deuda / ebitda', activeResult.dashboardData?.motor_de_ratios?.deuda_bancaria_ebitda !== 'N/A' ? (activeResult.dashboardData?.motor_de_ratios?.deuda_bancaria_ebitda || 0) : 0)} />
+                          <StatusBadge status={activeResult.ratios?.deuda_ebitda.status ?? null} />
                         </div>
                         <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">DEUDA BANCARIA TOTAL (EN MILES)</p>
                       <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
-                        {formatCurrencyThousands(activeResult.dashboardData?.motor_de_ratios?.deuda_bancaria_total !== 'N/A' ? activeResult.dashboardData?.motor_de_ratios?.deuda_bancaria_total : null)}
+                        {formatCurrencyThousands(activeResult.ratios?.deuda_bancaria_total.actual ?? null)}
                       </p>
                       <p className="text-xs font-sans font-bold text-gray-600 leading-tight">Total sistema financiero</p>
                     </div>
@@ -1572,15 +1651,15 @@ export default function App() {
                     <div className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
                       <div className="absolute top-4 right-4">
                           {(() => {
-                            const deudaCPActual = getDeudaCortoPlazo(activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_actual?.pasivo?.pasivo_corriente);
-                            const deudaCPAnterior = getDeudaCortoPlazo(activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_anterior?.pasivo?.pasivo_corriente);
+                            const deudaCPActual = activeResult.extraction?.deuda_bancaria_actual?.corriente?.total ?? null;
+                            const deudaCPAnterior = activeResult.extraction?.deuda_bancaria_anterior?.corriente?.total ?? null;
                             return <StatusBadge status={evaluateVariation(calculateVariation(deudaCPActual || 0, deudaCPAnterior || 0))} />;
                           })()}
                         </div>
                         <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">DEUDA CORTO PLAZO (EN MILES)</p>
                       {(() => {
-                        const deudaCPActual = getDeudaCortoPlazo(activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_actual?.pasivo?.pasivo_corriente);
-                        const deudaCPAnterior = getDeudaCortoPlazo(activeResult.data?.hoja_estado_situacion_patrimonial?.ejercicio_anterior?.pasivo?.pasivo_corriente);
+                        const deudaCPActual = activeResult.extraction?.deuda_bancaria_actual?.corriente?.total ?? null;
+                        const deudaCPAnterior = activeResult.extraction?.deuda_bancaria_anterior?.corriente?.total ?? null;
                         
                         if (deudaCPActual === null) {
                           return <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">-</p>;
@@ -1606,10 +1685,10 @@ export default function App() {
                   {/* KPI Cards (Fila Original) */}
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {Array.isArray(activeResult.dashboardData?.ratios) && activeResult.dashboardData.ratios.map((ratio, idx) => (
+                    {Array.isArray(buildRatioCards(activeResult.ratios ?? null)) && buildRatioCards(activeResult.ratios ?? null).map((ratio, idx) => (
                       <div key={idx} className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
                         <div className="absolute top-4 right-4">
-                          <StatusBadge status={evaluateRatio(ratio.name, ratio.value)} />
+                          <StatusBadge status={ratio.status} />
                         </div>
                         <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">{ratio.name}</p>
                         <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
@@ -1629,7 +1708,7 @@ export default function App() {
                     
                     <h2 className="text-2xl font-bold mb-6 border-b border-gray-300 pb-2 print:break-after-avoid uppercase tracking-tight">Balance y Ratios</h2>
                     <div className="space-y-8">
-                       <ComparativeView json_extraccion={activeResult.data} json_ratios={activeResult.dashboardData?.motor_de_ratios} />
+                       <ComparativeView extraction={activeResult.extraction} ratios={activeResult.ratios} />
                     </div>
                   </div>
 
@@ -1644,8 +1723,8 @@ export default function App() {
                         
                         <ShareholderTable 
                           accionistas={
-                            Array.isArray(activeResult.dashboardData?.accionistas_y_directorio?.accionistas) && activeResult.dashboardData.accionistas_y_directorio.accionistas.length > 0
-                              ? activeResult.dashboardData.accionistas_y_directorio.accionistas
+                            Array.isArray(activeResult.extraction?.accionistas_y_directorio?.accionistas) && activeResult.extraction?.accionistas_y_directorio.accionistas.length > 0
+                              ? activeResult.extraction?.accionistas_y_directorio.accionistas
                               : [
                                   { nombre: 'Inversiones Globales S.A.', dni_cuit: '30-71234567-8', participacion: 52.99, subAccionistas: [
                                     { nombre: 'Persona Física 1', dni_cuit: '20.111.222', participacion: 60 },
@@ -1668,8 +1747,8 @@ export default function App() {
                         <h3 className="text-base font-semibold text-black mb-6">ÓRGANO DE ADMINISTRACIÓN / DIRECTORIO</h3>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {Array.isArray(activeResult.dashboardData?.accionistas_y_directorio?.directorio) && activeResult.dashboardData.accionistas_y_directorio.directorio.length > 0 ? (
-                            activeResult.dashboardData.accionistas_y_directorio.directorio.map((miembro, idx) => (
+                          {Array.isArray(activeResult.extraction?.accionistas_y_directorio?.directorio) && activeResult.extraction?.accionistas_y_directorio.directorio.length > 0 ? (
+                            activeResult.extraction?.accionistas_y_directorio.directorio.map((miembro, idx) => (
                               <div key={idx} className="p-4 border border-[#141414]/10 bg-[#FAFAFA] rounded-sm hover:border-[#141414]/30 transition-colors">
                                 <p className="text-[13px] uppercase tracking-wider text-[#141414]/50 mb-1">{miembro.cargo}</p>
                                 <p className="font-medium text-[#141414]">{miembro.nombre}</p>
@@ -1718,10 +1797,10 @@ export default function App() {
                   <div className="mb-12 print:break-before-page">
                     <h2 className="text-2xl font-bold mb-6 border-b border-gray-300 pb-2 print:break-after-avoid uppercase tracking-tight">Mercado</h2>
 
-                    {activeResult.dashboardData?.analisis_mercado ? (
+                    {activeResult.marketAnalysis ? (
                       <div className="w-full bg-white border border-[#141414] p-10 font-sans text-justify leading-relaxed">
                         <div className="prose prose-sm md:prose-base max-w-none print:max-w-none print:w-full prose-headings:font-sans prose-headings:font-semibold prose-headings:text-gray-800 prose-p:text-justify prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline">
-                          <ReactMarkdown>{activeResult.dashboardData.analisis_mercado}</ReactMarkdown>
+                          <ReactMarkdown>{activeResult.marketAnalysis}</ReactMarkdown>
                         </div>
                       </div>
                     ) : (
@@ -1737,7 +1816,7 @@ export default function App() {
 
                       <div className="space-y-8 ">
                         {/* Post-Closing Analysis Section (Moved Inside) */}
-                      {activeResult.data?.analisis_post_cierre && activeResult.data.analisis_post_cierre.total_ventas_post_cierre > 0 ? (
+                      {activeResult.extraction?.analisis_post_cierre && activeResult.extraction.analisis_post_cierre.total_ventas_post_cierre > 0 ? (
                         <div className="bg-white border border-[#141414] p-6 font-sans">
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                             <h3 className="text-lg font-semibold text-[#141414]">EVOLUCIÓN DE VENTAS POST BALANCE (COMPARATIVO INTERANUAL)</h3>
@@ -1794,7 +1873,7 @@ export default function App() {
                               </thead>
                               <tbody className="divide-y divide-[#141414]/10">
                                 {(() => {
-                                  const rawVentas = activeResult.data.analisis_post_cierre.detalle_ventas_mensuales;
+                                  const rawVentas = activeResult.extraction.analisis_post_cierre.detalle_ventas_mensuales;
                                   const ventasMensuales = Array.isArray(rawVentas) ? rawVentas : [];
                                   const baseIndex = ventasMensuales.length - 1;
                                   
@@ -1839,7 +1918,7 @@ export default function App() {
                               </tbody>
                               <tfoot>
                                 {(() => {
-                                  const rawVentas = activeResult.data.analisis_post_cierre.detalle_ventas_mensuales;
+                                  const rawVentas = activeResult.extraction.analisis_post_cierre.detalle_ventas_mensuales;
                                   const ventasMensuales = Array.isArray(rawVentas) ? rawVentas : [];
                                   const baseIndex = ventasMensuales.length - 1;
                                   
@@ -1897,9 +1976,9 @@ export default function App() {
                             </div>
                           )}
                           
-                          {activeResult.data.analisis_post_cierre.notas_relevantes && (
+                          {activeResult.extraction.analisis_post_cierre.notas_relevantes && (
                             <div className="mt-2 text-xs opacity-70 italic border-t border-[#141414]/10 pt-2">
-                              Nota: {activeResult.data.analisis_post_cierre.notas_relevantes}
+                              Nota: {activeResult.extraction.analisis_post_cierre.notas_relevantes}
                             </div>
                           )}
                         </div>
@@ -1910,7 +1989,7 @@ export default function App() {
                       )}
 
                       {/* Deuda Bancaria Asumida Post Balance */}
-                      {Array.isArray(activeResult.data?.analisis_post_cierre?.deuda_bancaria_post_balance_detalle) && activeResult.data.analisis_post_cierre.deuda_bancaria_post_balance_detalle.length > 0 && (
+                      {Array.isArray(activeResult.extraction?.analisis_post_cierre?.deuda_bancaria_post_balance_detalle) && activeResult.extraction.analisis_post_cierre.deuda_bancaria_post_balance_detalle.length > 0 && (
                         <div className="bg-white border border-[#141414] p-6 mt-8">
                           <h3 className="text-lg font-semibold text-[#141414] mb-6">DEUDA BANCARIA ASUMIDA POST BALANCE</h3>
                           
@@ -1923,7 +2002,7 @@ export default function App() {
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-[#141414]/10">
-                                {activeResult.data.analisis_post_cierre.deuda_bancaria_post_balance_detalle.map((item: any, idx: number) => (
+                                {activeResult.extraction.analisis_post_cierre.deuda_bancaria_post_balance_detalle.map((item: any, idx: number) => (
                                   <tr key={idx} className="hover:bg-[#141414]/5 transition-colors">
                                     <td className="px-4 py-3 font-medium text-[#141414]">{item.entidad}</td>
                                     <td className="px-4 py-3 text-right font-mono font-bold">{formatCurrencyThousands(item.monto, item.moneda)}</td>
@@ -1935,8 +2014,8 @@ export default function App() {
                                   <td className="px-4 py-3 text-right">TOTAL DEUDA POST BALANCE:</td>
                                   <td className="px-4 py-3 text-right font-mono">
                                     {formatCurrencyThousands(
-                                      activeResult.data.analisis_post_cierre.deuda_bancaria_post_balance_detalle.reduce((acc: number, curr: any) => acc + (Number(curr.monto) || 0), 0),
-                                      activeResult.data.analisis_post_cierre.deuda_bancaria_post_balance_detalle[0]?.moneda || 'ARS'
+                                      activeResult.extraction.analisis_post_cierre.deuda_bancaria_post_balance_detalle.reduce((acc: number, curr: any) => acc + (Number(curr.monto) || 0), 0),
+                                      activeResult.extraction.analisis_post_cierre.deuda_bancaria_post_balance_detalle[0]?.moneda || 'ARS'
                                     )}
                                   </td>
                                 </tr>
@@ -1969,7 +2048,7 @@ export default function App() {
                             Evolución Histórica
                           </h4>
                           <p className="text-sm leading-relaxed opacity-80">
-                            {activeResult.dashboardData?.sales_analysis?.evolution_text}
+                            {'No disponible en esta versión.'}
                           </p>
                         </div>
                         <div className="bg-[#F0EFED] p-4 border border-[#141414]/10">
@@ -1978,7 +2057,7 @@ export default function App() {
                             Proyección IA
                           </h4>
                           <p className="text-sm leading-relaxed opacity-80 italic">
-                            "{activeResult.dashboardData?.sales_analysis?.projection_text}"
+                            {'No disponible en esta versión.'}
                           </p>
                         </div>
                       </div>
@@ -2002,7 +2081,7 @@ export default function App() {
 
                       <div className="space-y-8 ">
                         {/* Nosis Section */}
-                  {activeResult.dashboardData.extraccion_nosis && (
+                  {activeResult.extraction?.extraccion_nosis && (
                     <div className="border border-[#141414] bg-white mt-8">
                       <div className="flex items-center justify-between p-4 border-b border-[#141414]/10 bg-[#F0EFED] select-none">
                         <div className="flex items-center gap-2">
@@ -2016,44 +2095,34 @@ export default function App() {
                             <div>
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Score Crediticio</p>
                               <p className="text-xl font-bold font-mono text-[#141414]">
-                                {activeResult.dashboardData?.extraccion_nosis?.score_crediticio}
+                                {activeResult.extraction?.extraccion_nosis?.score_crediticio}
                               </p>
                             </div>
                             <div>
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Peor Situación BCRA</p>
                               <p className="text-xl font-bold font-mono text-[#141414]">
-                                Categoría {activeResult.dashboardData?.extraccion_nosis?.situacion_bcra_peor_estado}
+                                Categoría {activeResult.extraction?.extraccion_nosis?.situacion_bcra_peor_estado}
                               </p>
                             </div>
                             <div>
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Cheques Rechazados</p>
                               <p className="text-xl font-bold font-mono text-[#141414]">
-                                {activeResult.dashboardData?.extraccion_nosis?.cheques_rechazados_cantidad} cheques
+                                {activeResult.extraction?.extraccion_nosis?.cheques_rechazados_cantidad} cheques
                               </p>
                               <p className="text-xs opacity-70 mt-1">
-                                por un total de {formatCurrencyThousands(activeResult.dashboardData?.extraccion_nosis?.cheques_rechazados_monto)}
+                                por un total de {formatCurrencyThousands(activeResult.extraction?.extraccion_nosis?.cheques_rechazados_monto)}
                               </p>
                             </div>
                             <div>
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Deuda Total Nosis</p>
                               <p className="text-xl font-bold font-mono text-[#141414]">
-                                {formatCurrencyThousands(activeResult.dashboardData?.extraccion_nosis?.deuda_financiera_total_nosis)}
+                                {formatCurrencyThousands(activeResult.extraction?.extraccion_nosis?.deuda_financiera_total_nosis)}
                               </p>
                               <p className="text-[10px] opacity-50 mt-1">(Expresado en miles)</p>
                             </div>
                           </div>
 
-                          {activeResult.dashboardData.datos_adicionales_balance && (
-                            <div className="bg-[#E4E3E0] p-4 border-l-4 border-[#141414] mb-8">
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Deuda Post Balance</p>
-                              <p className="text-lg font-bold font-mono text-[#141414]">
-                                {formatCurrencyThousands(activeResult.dashboardData.datos_adicionales_balance.deuda_bancaria_post_balance)}
-                              </p>
-                              <p className="text-[10px] opacity-70 mt-1">
-                                (Extraído de los hechos posteriores al cierre en las notas del balance, si existiera)
-                              </p>
-                            </div>
-                          )}
+                          {false && null}
 
                           <h4 className="text-xs font-bold uppercase mb-4 opacity-70 border-b border-[#141414]/10 pb-2">Detalle de Entidades</h4>
                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
@@ -2068,9 +2137,9 @@ export default function App() {
                                 </thead>
                                 <tbody className="divide-y divide-[#141414]/10">
                                   {(() => {
-                                    const rawEntidades = activeResult.dashboardData?.extraccion_nosis?.detalle_entidades;
+                                    const rawEntidades = activeResult.extraction?.extraccion_nosis?.detalle_entidades;
                                     const entidades = Array.isArray(rawEntidades) ? rawEntidades : [];
-                                    const totalDeudaNosis = activeResult.dashboardData?.extraccion_nosis?.deuda_financiera_total_nosis || 0;
+                                    const totalDeudaNosis = activeResult.extraction?.extraccion_nosis?.deuda_financiera_total_nosis || 0;
                                     const totalSuma = entidades.reduce((acc, curr) => acc + (Number(curr?.monto) || 0), 0);
                                     const totalReferencia = totalDeudaNosis > 0 ? totalDeudaNosis : totalSuma;
 
@@ -2097,12 +2166,12 @@ export default function App() {
                             </div>
                             
                             {/* Pie Chart */}
-                            {Array.isArray(activeResult.dashboardData?.extraccion_nosis?.detalle_entidades) && activeResult.dashboardData.extraccion_nosis.detalle_entidades.length > 0 && (
+                            {Array.isArray(activeResult.extraction?.extraccion_nosis?.detalle_entidades) && activeResult.extraction?.extraccion_nosis.detalle_entidades.length > 0 && (
                               <div className="h-64 flex flex-col items-center justify-center bg-white border border-[#141414]/10 p-4 rounded">
                                 <h5 className="text-xs font-bold uppercase opacity-70 mb-2">Composición de Deuda</h5>
                                 <PieChart width={400} height={200}>
                                     <Pie
-                                      data={activeResult.dashboardData.extraccion_nosis.detalle_entidades.map(e => ({ name: e?.entidad || 'Desconocido', value: Number(e?.monto) || 0 }))}
+                                      data={activeResult.extraction?.extraccion_nosis.detalle_entidades.map(e => ({ name: e?.entidad || 'Desconocido', value: Number(e?.monto) || 0 }))}
                                       cx="50%"
                                       cy="50%"
                                       innerRadius={50}
@@ -2121,7 +2190,7 @@ export default function App() {
                                         );
                                       }}
                                     >
-                                      {activeResult.dashboardData.extraccion_nosis.detalle_entidades.map((entry, index) => {
+                                      {activeResult.extraction?.extraccion_nosis.detalle_entidades.map((entry, index) => {
                                         const COLORS = ['#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#1e40af', '#1d4ed8', '#1e3a8a'];
                                         return <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />;
                                       })}
@@ -2147,40 +2216,40 @@ export default function App() {
                         <h3 className="font-sans font-bold text-lg">Cruce de Deuda</h3>
                       </div>
                       
-                      {activeResult.dashboardData.cross_check ? (
+                      {activeResult.crossCheck ? (
                         <div className="space-y-6">
                           <div className="grid grid-cols-2 gap-4">
                             <div>
                               <p className="text-[10px] opacity-50 uppercase mb-1">Deuda Balance</p>
                               <p className="font-mono text-lg font-bold text-white">
-                                {formatCurrencyThousands(activeResult.dashboardData?.cross_check?.balance_debt)}
+                                {formatCurrencyThousands(activeResult.crossCheck?.balance_debt)}
                               </p>
                             </div>
                             <div>
                               <p className="text-[10px] opacity-50 uppercase mb-1">Deuda Nosis</p>
                               <p className="font-mono text-lg font-bold text-white">
-                                {formatCurrencyThousands(activeResult.dashboardData?.cross_check?.nosis_debt)}
+                                {formatCurrencyThousands(activeResult.crossCheck?.nosis_debt)}
                               </p>
                             </div>
                           </div>
                           
                           <div className={cn(
                             "p-4 border",
-                            activeResult.dashboardData?.cross_check?.match 
+                            activeResult.crossCheck?.match 
                               ? "border-emerald-500/50 bg-emerald-500/10" 
                               : "border-red-500/50 bg-red-500/10"
                           )}>
                             <div className="flex items-center gap-2 mb-1">
-                              {activeResult.dashboardData?.cross_check?.match 
+                              {activeResult.crossCheck?.match 
                                 ? <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                                 : <AlertTriangle className="w-4 h-4 text-red-500" />
                               }
                               <span className="text-xs font-bold uppercase">
-                                {activeResult.dashboardData?.cross_check?.match ? "Consistente" : "Discrepancia Detectada"}
+                                {activeResult.crossCheck?.match ? "Consistente" : "Discrepancia Detectada"}
                               </span>
                             </div>
                             <p className="text-[10px] opacity-70">
-                              Diferencia: {formatCurrencyThousands(activeResult.dashboardData?.cross_check?.difference)}
+                              Diferencia: {formatCurrencyThousands(activeResult.crossCheck?.difference_abs)}
                             </p>
                           </div>
                         </div>

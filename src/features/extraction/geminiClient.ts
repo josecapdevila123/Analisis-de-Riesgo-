@@ -80,14 +80,3 @@ export async function runMarketAnalysis(
   return validated.analisis_mercado;
 }
 
-// ---------------------------------------------------------------------------
-// Legacy: App.tsx aún importa extractFromFiles. Se removerá cuando se rewire
-// el consumidor al nuevo runPipeline.
-// ---------------------------------------------------------------------------
-
-export type ExtractionPayload = { data: any; dashboardData: any };
-
-export async function extractFromFiles(files: UploadedFile[]): Promise<ExtractionPayload> {
-  const extraction = await runExtraction(files);
-  return { data: extraction as any, dashboardData: null };
-}
