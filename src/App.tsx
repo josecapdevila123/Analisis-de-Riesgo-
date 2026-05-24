@@ -30,16 +30,14 @@ import {
   PanelLeftOpen,
   CornerDownRight
 } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import ReactMarkdown from 'react-markdown';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn, formatCurrencyThousands } from './lib/utils';
-import { GEMINI_MODEL, GEMINI_GENERATION_CONFIG } from './lib/gemini';
-import { EXTRACTION_PROMPT } from './lib/prompts/extraction';
 import { generatePDF } from './features/pdf/generatePDF';
 import { calculateEBITDA, evaluateRatio } from './features/ratios/calculations';
+import { extractFromFiles } from './features/extraction/geminiClient';
 import { FinancialData, ExtractionResult, DashboardData, Ratio, AssetLiabilityGroup, Shareholder } from './types';
 import { BiBankLogo } from './components/BiBankLogo';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, User } from 'firebase/auth';
@@ -265,30 +263,7 @@ export default function App() {
         }
       }
 
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      
-      const prompt = EXTRACTION_PROMPT;
-
-      const contentParts = [
-        { text: prompt },
-        ...currentFiles.map(f => ({
-          inlineData: {
-            data: f.preview.split(',')[1],
-            mimeType: f.file.type
-          }
-        }))
-      ];
-
-      const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: [{ parts: contentParts }],
-        config: GEMINI_GENERATION_CONFIG
-      });
-
-      const text = response.text;
-      if (!text) throw new Error("No se pudo extraer texto del modelo.");
-      
-      const parsedResponse = JSON.parse(text);
+      const parsedResponse = await extractFromFiles(currentFiles);
       
       setResults(prev => prev.map(r => 
         r.id === newId ? { 
