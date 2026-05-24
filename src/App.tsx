@@ -39,6 +39,7 @@ import { cn, formatCurrencyThousands } from './lib/utils';
 import { GEMINI_MODEL, GEMINI_GENERATION_CONFIG } from './lib/gemini';
 import { EXTRACTION_PROMPT } from './lib/prompts/extraction';
 import { generatePDF } from './features/pdf/generatePDF';
+import { calculateEBITDA, evaluateRatio } from './features/ratios/calculations';
 import { FinancialData, ExtractionResult, DashboardData, Ratio, AssetLiabilityGroup, Shareholder } from './types';
 import { BiBankLogo } from './components/BiBankLogo';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, User } from 'firebase/auth';
@@ -375,18 +376,6 @@ export default function App() {
     return <div className={cn("w-3 h-3 rounded-full shadow-sm", colors[status])} />;
   };
 
-  
-  const calculateEBITDA = (ejercicio: any, flujo: any) => {
-    if (!ejercicio) return null;
-    const resultado_bruto = Number(ejercicio.resultado_bruto) || 0;
-    const resultado_valuacion = Number(ejercicio.resultado_valuacion_bienes_de_cambio) || 0;
-    const depreciacion = Number(flujo?.depreciacion_bienes_de_uso) || 0;
-    const resultado_inversiones = Number(ejercicio.resultado_inversiones_permanentes) || 0;
-    const gastos_com = Number(ejercicio.gastos_comercializacion) || 0;
-    const gastos_adm = Number(ejercicio.gastos_administracion) || 0;
-    return (resultado_bruto + resultado_valuacion + depreciacion + resultado_inversiones) - (gastos_com + gastos_adm);
-  };
-
   const getDeudaCortoPlazo = (pasivo_corriente: any) => {
     if (!pasivo_corriente || !Array.isArray(pasivo_corriente.detalles)) return null;
     const keywords = ['préstamo', 'prestamo', 'bancari', 'financier'];
@@ -408,32 +397,6 @@ export default function App() {
     if (variation > 0) return 'healthy';
     if (variation > -5) return 'alert';
     return 'critical';
-  };
-
-  const evaluateRatio = (name: string, value: number | string): 'healthy' | 'alert' | 'critical' => {
-    if (typeof value !== 'number') return 'alert';
-    const lowerName = name.toLowerCase();
-    if (lowerName.includes('liquidez')) {
-      if (value > 1.2) return 'healthy';
-      if (value >= 1) return 'alert';
-      return 'critical';
-    }
-    if (lowerName.includes('deuda / ebitda') || lowerName.includes('deuda/ebitda')) {
-      if (value < 2) return 'healthy';
-      if (value <= 3.5) return 'alert';
-      return 'critical';
-    }
-    if (lowerName.includes('solvencia')) {
-      if (value > 1.5) return 'healthy';
-      if (value >= 1) return 'alert';
-      return 'critical';
-    }
-    if (lowerName.includes('ebitda / intereses')) {
-      if (value > 3) return 'healthy';
-      if (value >= 1.5) return 'alert';
-      return 'critical';
-    }
-    return 'healthy';
   };
 
   const calculateVariation = (current: number, previous: number) => {

@@ -1,5 +1,6 @@
 import React from 'react';
 import { FinancialData, MotorDeRatios } from '../types';
+import { calculateEBITDA } from '../features/ratios/calculations';
 
 interface ComparativeViewProps {
   json_extraccion?: FinancialData | null;
@@ -132,19 +133,8 @@ export function getComparativeTablesData(json_extraccion: FinancialData | null |
   const anteriorRes = json_extraccion?.hoja_estado_resultados?.ejercicio_anterior;
   const actualRes = json_extraccion?.hoja_estado_resultados?.ejercicio_actual;
 
-  // Helpers matemáticos como FALLBACK si el motor LLM no obtuvo los del anio anterior
-  const calculateEBITDAFallback = (ejercicio: any, flujo: any) => {
-    if (!ejercicio) return null;
-    const resultado_bruto = Number(ejercicio.resultado_bruto) || 0;
-    const resultado_valuacion = Number(ejercicio.resultado_valuacion_bienes_de_cambio) || 0;
-    const depreciacion = Number(flujo?.depreciacion_bienes_de_uso) || 0;
-    const resultado_inversiones = Number(ejercicio.resultado_inversiones_permanentes) || 0;
-    const gastos_com = Number(ejercicio.gastos_comercializacion) || 0;
-    const gastos_adm = Number(ejercicio.gastos_administracion) || 0;
-    return (resultado_bruto + resultado_valuacion + depreciacion + resultado_inversiones) - (gastos_com + gastos_adm);
-  };
-  
-  const fbEbitdaAnterior = calculateEBITDAFallback(anteriorRes, json_extraccion?.hoja_flujo_efectivo?.ejercicio_anterior);
+  // Fallback matemático si el motor LLM no obtuvo el EBITDA del año anterior
+  const fbEbitdaAnterior = calculateEBITDA(anteriorRes, json_extraccion?.hoja_flujo_efectivo?.ejercicio_anterior);
 
   const fbLiquidezAnterior = (anteriorSit?.activo?.activo_corriente?.total && anteriorSit?.pasivo?.pasivo_corriente?.total) 
     ? (anteriorSit.activo.activo_corriente.total / anteriorSit.pasivo.pasivo_corriente.total) 
