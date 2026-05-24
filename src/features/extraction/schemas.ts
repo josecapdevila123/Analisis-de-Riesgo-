@@ -117,10 +117,10 @@ const PeriodoAnalizado = z.object({
 });
 
 const AnalisisPostCierre = z.object({
-  periodo_analizado: PeriodoAnalizado.nullable(),
+periodo_analizado: PeriodoAnalizado.optional().nullable(),
   detalle_ventas_mensuales: z.array(VentaMensual).default([]),
-  total_ventas_post_cierre: num,
-  notas_relevantes: z.string().nullable(),
+  total_ventas_post_cierre: lenientNum,
+  notas_relevantes: z.string().optional().nullable(),
   deuda_bancaria_post_balance_detalle: z.array(DeudaPostBalance).default([]),
 }).nullable();
 
@@ -151,13 +151,13 @@ const AccionistaSchema: z.ZodType<Accionista> = z.lazy(() =>
     nombre: lenientStringNA,
     dni_cuit: lenientStringNA,
     participacion: lenientNum,
-    subAccionistas: z.array(AccionistaSchema).optional(),
+    subAccionistas: z.array(AccionistaSchema).optional().nullable(),
   })
 ) as z.ZodType<Accionista>;
 
 const MiembroDirectorio = z.object({
-  cargo: z.string(),
-  nombre: z.string(),
+  cargo: z.string().optional().nullable().default(''),
+  nombre: z.string().optional().nullable().default(''),
 });
 
 const AccionistasYDirectorio = z.object({
@@ -173,7 +173,8 @@ export const RawExtractionSchema = z.object({
   deuda_bancaria_anterior: DeudaBancariaEjercicio.nullable(),
   analisis_post_cierre: AnalisisPostCierre,
   extraccion_nosis: ExtraccionNosis,
-  accionistas_y_directorio: AccionistasYDirectorio,
+  accionistas_y_directorio: z.union([AccionistasYDirectorio, 
+  z.array(z.any()).transform(() => null)]).nullable(),
 });
 
 export type RawExtraction = z.infer<typeof RawExtractionSchema>;
