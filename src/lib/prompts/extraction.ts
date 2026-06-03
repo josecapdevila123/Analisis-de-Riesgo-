@@ -40,7 +40,8 @@ Si no hay informe Nosis: devolvé \`extraccion_nosis: null\`.
 ===========================================================
 POST CIERRE (si hay información posterior al balance)
 ===========================================================
-Si los documentos incluyen ventas posteriores o deuda bancaria asumida post-balance, completá \`analisis_post_cierre\`. Extraé fechas, ventas mensuales (con comparativa al año anterior si está) y detalle de deuda post-balance.
+Si los documentos incluyen ventas posteriores o deuda bancaria asumida post-balance, completá \`analisis_post_cierre\`. Extraé fechas, ventas mensuales (con comparativa al año anterior si está) y detalle de deuda post-balance. Para cada monto identificá la moneda: "ARS" para pesos argentinos, "USD" para dólares. Si hay montos en ambas monedas, devolvé una entrada separada por moneda.
+
 Si no hay info: devolvé \`analisis_post_cierre: null\`.
 
 ===========================================================
@@ -86,6 +87,7 @@ ESTRUCTURA JSON DE SALIDA (estricta)
     },
     "flujo_efectivo": {
       "depreciacion_bienes_de_uso": null,
+      "amortizacion_intangibles": null,
       "flujo_neto_operativo": null
     }
   },
@@ -95,7 +97,19 @@ ESTRUCTURA JSON DE SALIDA (estricta)
     "no_corriente": { "total": 0, "items": [ { "rubro": "string", "monto": 0 } ] }
   },
   "deuda_bancaria_anterior": null,
-  "analisis_post_cierre": null,
+  "analisis_post_cierre": {
+    "periodo_analizado": { "fecha_inicio": "2025-01-01", "fecha_fin": "2025-03-31" },
+    "detalle_ventas_mensuales": [
+      { "mes": "Enero 2025", "monto": 1500, "monto_anio_anterior": 1200, "moneda": "ARS" },
+      { "mes": "Enero 2025", "monto": 50, "monto_anio_anterior": null, "moneda": "USD" }
+    ],
+    "total_ventas_post_cierre": 4500,
+    "notas_relevantes": null,
+    "deuda_bancaria_post_balance_detalle": [
+      { "entidad": "Banco XYZ", "monto": 500, "moneda": "ARS" },
+      { "entidad": "Banco ABC", "monto": 100, "moneda": "USD" }
+    ]
+  },
   "extraccion_nosis": null,
   "accionistas_y_directorio": null
 }

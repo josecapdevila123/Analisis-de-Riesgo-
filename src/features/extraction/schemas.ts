@@ -102,13 +102,13 @@ const VentaMensual = z.object({
   mes: z.string(),
   monto: num,
   monto_anio_anterior: nullableNum,
-  moneda: z.string(),
+  moneda: z.enum(['ARS', 'USD']).optional().default('ARS'),
 });
 
 const DeudaPostBalance = z.object({
   entidad: z.string(),
   monto: num,
-  moneda: z.string(),
+ moneda: z.enum(['ARS', 'USD']).optional().default('ARS'),
 });
 
 const PeriodoAnalizado = z.object({
