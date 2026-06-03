@@ -47,7 +47,8 @@ Si no hay info: devolvé \`analisis_post_cierre: null\`.
 ===========================================================
 ACCIONISTAS Y DIRECTORIO (si figura en Memoria, Actas o Notas)
 ===========================================================
-Extraé TODOS los accionistas con más del 5% de participación (sin límite de cantidad). Si un accionista es persona jurídica con composición detallada, expandí recursivamente sus \`subAccionistas\` hasta beneficiarios finales o 4 niveles de profundidad. Incluí también el directorio (cargo + nombre) si está documentado.
+Extraé TODOS los accionistas con más del 5% de participación (sin límite de cantidad). Para cada accionista, buscá y extraé el número exacto del porcentaje directamente del documento — puede aparecer como porcentaje (60%), como acciones sobre total (600/1000), o como capital suscripto sobre capital total. Convertilo siempre a número decimal (ej: 60.0, 33.33). No estimes ni inferás — si no encontrás el número exacto devolvé null en participacion.
+Si un accionista es persona jurídica con composición detallada, expandí recursivamente sus \`subAccionistas\` hasta beneficiarios finales o 4 niveles de profundidad. Incluí también el directorio (cargo + nombre) si está documentado.
 Si no figura: devolvé \`accionistas_y_directorio: null\`.
 
 ===========================================================
@@ -110,7 +111,17 @@ ESTRUCTURA JSON DE SALIDA (estricta)
       { "entidad": "Banco ABC", "monto": 100, "moneda": "USD" }
     ]
   },
-  "extraccion_nosis": null,
+  "extraccion_nosis": {
+    "score_crediticio": 750,
+    "situacion_bcra_peor_estado": 1,
+    "cheques_rechazados_cantidad": 0,
+    "cheques_rechazados_monto": 0,
+    "deuda_financiera_total_nosis": 1500,
+    "detalle_entidades": [
+      { "entidad": "Banco XYZ", "situacion": 1, "monto": 500 },
+      { "entidad": "Banco ABC", "situacion": 1, "monto": 1000 }
+    ]
+  },
   "accionistas_y_directorio": null
 }
 
