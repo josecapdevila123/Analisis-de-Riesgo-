@@ -40,7 +40,7 @@ import { runPipeline, CaseState } from './features/extraction/pipeline';
 import { useAuth } from './features/auth/useAuth';
 import { useCases } from './features/cases/useCases';
 import { ExtractionResult, Shareholder } from './types';
-import { ComputedRatios, RatioKey, RatioStatus } from './features/ratios/calculations';
+import { RatioKey, RatioStatus } from './features/ratios/calculations';
 import { BiBankLogo } from './components/BiBankLogo';
 
 const ShareholderTable = ({ accionistas, level = 1, parentName = '' }: { accionistas: Shareholder[], level?: number, parentName?: string }) => {
@@ -280,23 +280,38 @@ export default function App() {
     return <div className={cn("w-3 h-3 rounded-full shadow-sm", colors[status])} />;
   };
 
-  const RATIO_CARDS: Array<{ key: RatioKey; name: string; description: string }> = [
-    { key: 'liquidez_corriente', name: 'Liquidez Corriente', description: 'Activo Corriente / Pasivo Corriente' },
-    { key: 'solvencia', name: 'Solvencia', description: 'Patrimonio Neto / Pasivo Total' },
-    { key: 'deuda_ebitda', name: 'Deuda / EBITDA', description: 'Deuda Bancaria / EBITDA' },
-    { key: 'cobertura_intereses', name: 'EBITDA / Intereses', description: 'Cobertura de Intereses' },
+  const RATIO_BLOCKS = [
+    { bloque: 'Liquidez', ratios: [
+      { key: 'liquidez_corriente' as RatioKey, name: 'Liquidez Corriente', description: 'Activo Corriente / Pasivo Corriente' },
+      { key: 'liquidez_acida' as RatioKey, name: 'Liquidez Ácida', description: '(AC - Bienes de Cambio) / PC' },
+      { key: 'liquidez_inmediata' as RatioKey, name: 'Liquidez Inmediata', description: 'Disponibilidades / PC' },
+      { key: 'capital_de_trabajo' as RatioKey, name: 'Capital de Trabajo', description: 'AC - PC' },
+      { key: 'ktno' as RatioKey, name: 'KTNO', description: 'Cobrar + Inventarios - Pagar' },
+    ]},
+    { bloque: 'Rentabilidad', ratios: [
+      { key: 'margen_bruto' as RatioKey, name: 'Margen Bruto', description: 'Resultado Bruto / Ventas' },
+      { key: 'margen_ebitda' as RatioKey, name: 'Margen EBITDA', description: 'EBITDA / Ventas' },
+      { key: 'margen_neto' as RatioKey, name: 'Margen Neto', description: 'Resultado Neto / Ventas' },
+      { key: 'roe' as RatioKey, name: 'ROE', description: 'Resultado Neto / PN' },
+      { key: 'roa' as RatioKey, name: 'ROA', description: 'Resultado Neto / Activo Total' },
+    ]},
+    { bloque: 'Endeudamiento', ratios: [
+      { key: 'endeudamiento' as RatioKey, name: 'Endeudamiento', description: 'Pasivo Total / PN' },
+      { key: 'solvencia' as RatioKey, name: 'Solvencia', description: 'PN / Pasivo Total' },
+      { key: 'deuda_ebitda' as RatioKey, name: 'Deuda / EBITDA', description: 'Deuda Bancaria / EBITDA' },
+      { key: 'deuda_bancaria_total' as RatioKey, name: 'Deuda Bancaria Total', description: 'Corriente + No Corriente' },
+      { key: 'deuda_dias_ventas' as RatioKey, name: 'Deuda en Días de Venta', description: '(Deuda / Ventas) x 365' },
+      { key: 'cobertura_intereses' as RatioKey, name: 'Cobertura Intereses', description: 'EBITDA / Gastos Financieros' },
+      { key: 'autofinanciamiento' as RatioKey, name: 'Autofinanciamiento', description: 'Flujo Operativo / Deuda' },
+    ]},
+    { bloque: 'Eficiencia Operativa', ratios: [
+      { key: 'dias_de_cobro' as RatioKey, name: 'Días de Cobro', description: '(Créditos / Ventas) x 365' },
+      { key: 'dias_de_pago' as RatioKey, name: 'Días de Pago', description: '(Deudas Comerciales / Costo) x 365' },
+      { key: 'dias_de_stock' as RatioKey, name: 'Días de Stock', description: '(Bienes de Cambio / Costo) x 365' },
+      { key: 'ciclo_conversion_caja' as RatioKey, name: 'Ciclo Conv. Caja', description: 'Cobro + Stock - Pago' },
+      { key: 'indice_inmovilizacion' as RatioKey, name: 'Índice Inmovilización', description: 'ANC / Activo Total' },
+    ]},
   ];
-
-  const buildRatioCards = (ratios: ComputedRatios | null) => {
-    if (!ratios) return [];
-    return RATIO_CARDS.map(spec => ({
-      key: spec.key,
-      name: spec.name,
-      value: ratios[spec.key].actual,
-      status: ratios[spec.key].status,
-      description: spec.description,
-    }));
-  };
 
   
   const evaluateVariation = (variation: number | null): 'healthy' | 'alert' | 'critical' => {
@@ -918,19 +933,36 @@ export default function App() {
 
                   {/* KPI Cards (Fila Original) */}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {Array.isArray(buildRatioCards(activeResult.ratios ?? null)) && buildRatioCards(activeResult.ratios ?? null).map((ratio, idx) => (
-                      <div key={idx} className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
-                        <div className="absolute top-4 right-4">
-                          <StatusBadge status={ratio.status} />
+                  <div className="space-y-6">
+                    {RATIO_BLOCKS.map(block => {
+                      const cards = block.ratios
+                        .map(spec => ({
+                          ...spec,
+                          value: activeResult.ratios?.[spec.key]?.actual ?? null,
+                          status: activeResult.ratios?.[spec.key]?.status ?? null,
+                        }))
+                        .filter(card => card.value !== null);
+                      if (cards.length === 0) return null;
+                      return (
+                        <div key={block.bloque}>
+                          <h4 className="text-sm font-bold uppercase mb-3 text-[#141414]/70 tracking-wider">{block.bloque}</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {cards.map((card, idx) => (
+                              <div key={idx} className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
+                                <div className="absolute top-4 right-4">
+                                  <StatusBadge status={card.status} />
+                                </div>
+                                <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">{card.name}</p>
+                                <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
+                                  {typeof card.value === 'number' ? card.value.toFixed(2) : '-'}
+                                </p>
+                                <p className="text-xs font-sans font-bold text-gray-600 leading-tight">{card.description}</p>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">{ratio.name}</p>
-                        <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
-                          {typeof ratio.value === 'number' ? ratio.value.toFixed(2) : ratio.value}
-                        </p>
-                        <p className="text-xs font-sans font-bold text-gray-600 leading-tight">{ratio.description}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Report Generation Button */}
@@ -1270,7 +1302,7 @@ export default function App() {
                                     const totalReferencia = totalDeudaNosis > 0 ? totalDeudaNosis : totalSuma;
 
                                     return entidades.map((entidad, i) => {
-                                      const participacion = totalReferencia > 0 ? ((entidad.monto / totalReferencia) * 100).toFixed(1) : "0.0";
+                                      const participacion = totalReferencia > 0 ? (((entidad.monto ?? 0) / totalReferencia) * 100).toFixed(1) : "0.0";
                                       return (
                                         <tr key={i} className="hover:bg-[#141414]/5 transition-colors">
                                           <td className="py-3 font-bold">{entidad.entidad}</td>
@@ -1307,11 +1339,11 @@ export default function App() {
                                       label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, name }) => {
                                         const RADIAN = Math.PI / 180;
                                         const radius = outerRadius * 1.2;
-                                        const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                                        const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                                        const x = cx + radius * Math.cos(-(midAngle ?? 0) * RADIAN);
+                                        const y = cy + radius * Math.sin(-(midAngle ?? 0) * RADIAN);
                                         return (
                                           <text x={x} y={y} fill="#141414" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize="10" fontWeight="bold">
-                                            {name} ({(percent * 100).toFixed(0)}%)
+                                            {name} ({((percent ?? 0) * 100).toFixed(0)}%)
                                           </text>
                                         );
                                       }}
@@ -1322,7 +1354,7 @@ export default function App() {
                                       })}
                                     </Pie>
                                     <Tooltip 
-                                      formatter={(value: number) => formatCurrencyThousands(value)}
+                                      formatter={(value) => formatCurrencyThousands(Number(value))}
                                       contentStyle={{ backgroundColor: '#141414', color: '#E4E3E0', border: 'none', borderRadius: '4px', fontSize: '12px' }}
                                     />
                                   </PieChart>
@@ -1684,23 +1716,40 @@ export default function App() {
 
                   {/* KPI Cards (Fila Original) */}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {Array.isArray(buildRatioCards(activeResult.ratios ?? null)) && buildRatioCards(activeResult.ratios ?? null).map((ratio, idx) => (
-                      <div key={idx} className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
-                        <div className="absolute top-4 right-4">
-                          <StatusBadge status={ratio.status} />
+                  <div className="space-y-6">
+                    {RATIO_BLOCKS.map(block => {
+                      const cards = block.ratios
+                        .map(spec => ({
+                          ...spec,
+                          value: activeResult.ratios?.[spec.key]?.actual ?? null,
+                          status: activeResult.ratios?.[spec.key]?.status ?? null,
+                        }))
+                        .filter(card => card.value !== null);
+                      if (cards.length === 0) return null;
+                      return (
+                        <div key={block.bloque}>
+                          <h4 className="text-sm font-bold uppercase mb-3 text-[#141414]/70 tracking-wider">{block.bloque}</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {cards.map((card, idx) => (
+                              <div key={idx} className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
+                                <div className="absolute top-4 right-4">
+                                  <StatusBadge status={card.status} />
+                                </div>
+                                <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">{card.name}</p>
+                                <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
+                                  {typeof card.value === 'number' ? card.value.toFixed(2) : '-'}
+                                </p>
+                                <p className="text-xs font-sans font-bold text-gray-600 leading-tight">{card.description}</p>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">{ratio.name}</p>
-                        <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
-                          {typeof ratio.value === 'number' ? ratio.value.toFixed(2) : ratio.value}
-                        </p>
-                        <p className="text-xs font-sans font-bold text-gray-600 leading-tight">{ratio.description}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
-                  
+
                       </div>
-                    
+
                   </div>
 
                   {/* Balance y Ratios */}
@@ -2144,7 +2193,7 @@ export default function App() {
                                     const totalReferencia = totalDeudaNosis > 0 ? totalDeudaNosis : totalSuma;
 
                                     return entidades.map((entidad, i) => {
-                                      const participacion = totalReferencia > 0 ? ((entidad.monto / totalReferencia) * 100).toFixed(1) : "0.0";
+                                      const participacion = totalReferencia > 0 ? (((entidad.monto ?? 0) / totalReferencia) * 100).toFixed(1) : "0.0";
                                       return (
                                         <tr key={i} className="hover:bg-[#141414]/5 transition-colors">
                                           <td className="py-3 font-bold">{entidad.entidad}</td>
@@ -2181,11 +2230,11 @@ export default function App() {
                                       label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, name }) => {
                                         const RADIAN = Math.PI / 180;
                                         const radius = outerRadius * 1.2;
-                                        const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                                        const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                                        const x = cx + radius * Math.cos(-(midAngle ?? 0) * RADIAN);
+                                        const y = cy + radius * Math.sin(-(midAngle ?? 0) * RADIAN);
                                         return (
                                           <text x={x} y={y} fill="#141414" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize="10" fontWeight="bold">
-                                            {name} ({(percent * 100).toFixed(0)}%)
+                                            {name} ({((percent ?? 0) * 100).toFixed(0)}%)
                                           </text>
                                         );
                                       }}
@@ -2196,7 +2245,7 @@ export default function App() {
                                       })}
                                     </Pie>
                                     <Tooltip 
-                                      formatter={(value: number) => formatCurrencyThousands(value)}
+                                      formatter={(value) => formatCurrencyThousands(Number(value))}
                                       contentStyle={{ backgroundColor: '#141414', color: '#E4E3E0', border: 'none', borderRadius: '4px', fontSize: '12px' }}
                                     />
                                   </PieChart>
