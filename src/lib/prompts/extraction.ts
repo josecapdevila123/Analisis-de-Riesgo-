@@ -16,7 +16,7 @@ Si tenés dudas: devolvé \`null\` y dejá que el código del sistema haga su tr
 REGLAS DE EXTRACCIÓN
 ===========================================================
 - Escala: TODOS los montos en MILES de pesos (dividir por 1.000, sin centavos). Ej.: $1.250.300,50 → 1250. Los porcentajes (participación accionaria, situación BCRA) se devuelven como número natural sin escalar.
-- Años Dinámicos: identificá el año exacto de cierre del balance (ej. 2025) y el año anterior (2024). Usalos en \`company_profile.anio_actual\` y \`anio_anterior\` como string.
+- Años Dinámicos: identificá el año exacto de cierre del balance (ej. 2025) y el año anterior (ej. 2024). Usalos en \`company_profile.anio_actual\` y \`anio_anterior\` como string.
 - Sinónimos contables: tratá como equivalentes los siguientes nombres de rubros:
   - Deuda bancaria/financiera: "Préstamos", "Préstamos Bancarios", "Deudas Bancarias", "Deudas Financieras", "Obligaciones Financieras", "Pasivo Financiero".
   - Bienes de Cambio: "Inventarios", "Mercaderías", "Existencias".
