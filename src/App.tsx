@@ -931,40 +931,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* KPI Cards (Fila Original) */}
-
-                  <div className="space-y-6">
-                    {RATIO_BLOCKS.map(block => {
-                      const cards = block.ratios
-                        .map(spec => ({
-                          ...spec,
-                          value: activeResult.ratios?.[spec.key]?.actual ?? null,
-                          status: activeResult.ratios?.[spec.key]?.status ?? null,
-                        }))
-                        .filter(card => card.value !== null);
-                      if (cards.length === 0) return null;
-                      return (
-                        <div key={block.bloque}>
-                          <h4 className="text-sm font-bold uppercase mb-3 text-[#141414]/70 tracking-wider">{block.bloque}</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                            {cards.map((card, idx) => (
-                              <div key={idx} className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
-                                <div className="absolute top-4 right-4">
-                                  <StatusBadge status={card.status} />
-                                </div>
-                                <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">{card.name}</p>
-                                <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
-                                  {typeof card.value === 'number' ? card.value.toFixed(2) : '-'}
-                                </p>
-                                <p className="text-xs font-sans font-bold text-gray-600 leading-tight">{card.description}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
                   {/* Report Generation Button */}
                   <div className="flex flex-col items-center justify-center py-8 border-t border-[#141414]/10">
                     <button 
@@ -985,6 +951,37 @@ export default function App() {
                     {activeTab === 'Balance y Ratios' && (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <ComparativeView extraction={activeResult.extraction} ratios={activeResult.ratios} />
+                        <div className="space-y-6">
+                          {RATIO_BLOCKS.map(block => {
+                            const cards = block.ratios
+                              .map(spec => ({
+                                ...spec,
+                                value: activeResult.ratios?.[spec.key]?.actual ?? null,
+                                status: activeResult.ratios?.[spec.key]?.status ?? null,
+                              }))
+                              .filter(card => card.value !== null);
+                            if (cards.length === 0) return null;
+                            return (
+                              <div key={block.bloque}>
+                                <h4 className="text-sm font-bold uppercase mb-3 text-[#141414]/70 tracking-wider">{block.bloque}</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                  {cards.map((card, idx) => (
+                                    <div key={idx} className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
+                                      <div className="absolute top-4 right-4">
+                                        <StatusBadge status={card.status} />
+                                      </div>
+                                      <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">{card.name}</p>
+                                      <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
+                                        {typeof card.value === 'number' ? card.value.toFixed(2) : '-'}
+                                      </p>
+                                      <p className="text-xs font-sans font-bold text-gray-600 leading-tight">{card.description}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
 
@@ -1714,50 +1711,47 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* KPI Cards (Fila Original) */}
-
-                  <div className="space-y-6">
-                    {RATIO_BLOCKS.map(block => {
-                      const cards = block.ratios
-                        .map(spec => ({
-                          ...spec,
-                          value: activeResult.ratios?.[spec.key]?.actual ?? null,
-                          status: activeResult.ratios?.[spec.key]?.status ?? null,
-                        }))
-                        .filter(card => card.value !== null);
-                      if (cards.length === 0) return null;
-                      return (
-                        <div key={block.bloque}>
-                          <h4 className="text-sm font-bold uppercase mb-3 text-[#141414]/70 tracking-wider">{block.bloque}</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                            {cards.map((card, idx) => (
-                              <div key={idx} className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
-                                <div className="absolute top-4 right-4">
-                                  <StatusBadge status={card.status} />
-                                </div>
-                                <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">{card.name}</p>
-                                <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
-                                  {typeof card.value === 'number' ? card.value.toFixed(2) : '-'}
-                                </p>
-                                <p className="text-xs font-sans font-bold text-gray-600 leading-tight">{card.description}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
                       </div>
 
                   </div>
 
                   {/* Balance y Ratios */}
                   <div className="mb-12 print:break-inside-avoid">
-                    
+
                     <h2 className="text-2xl font-bold mb-6 border-b border-gray-300 pb-2 print:break-after-avoid uppercase tracking-tight">Balance y Ratios</h2>
                     <div className="space-y-8">
                        <ComparativeView extraction={activeResult.extraction} ratios={activeResult.ratios} />
+                       <div className="space-y-6">
+                         {RATIO_BLOCKS.map(block => {
+                           const cards = block.ratios
+                             .map(spec => ({
+                               ...spec,
+                               value: activeResult.ratios?.[spec.key]?.actual ?? null,
+                               status: activeResult.ratios?.[spec.key]?.status ?? null,
+                             }))
+                             .filter(card => card.value !== null);
+                           if (cards.length === 0) return null;
+                           return (
+                             <div key={block.bloque}>
+                               <h4 className="text-sm font-bold uppercase mb-3 text-[#141414]/70 tracking-wider">{block.bloque}</h4>
+                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                 {cards.map((card, idx) => (
+                                   <div key={idx} className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
+                                     <div className="absolute top-4 right-4">
+                                       <StatusBadge status={card.status} />
+                                     </div>
+                                     <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">{card.name}</p>
+                                     <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
+                                       {typeof card.value === 'number' ? card.value.toFixed(2) : '-'}
+                                     </p>
+                                     <p className="text-xs font-sans font-bold text-gray-600 leading-tight">{card.description}</p>
+                                   </div>
+                                 ))}
+                               </div>
+                             </div>
+                           );
+                         })}
+                       </div>
                     </div>
                   </div>
 
