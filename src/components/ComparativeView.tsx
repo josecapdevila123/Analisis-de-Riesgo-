@@ -56,7 +56,7 @@ interface TableProps {
   data: Row[];
 }
 
-const Table = ({ title, data }: TableProps) => (
+export const Table = ({ title, data }: TableProps) => (
   <div className="bg-white border border-[#141414] rounded-sm mb-8 overflow-hidden max-w-full print:break-inside-avoid shadow-sm">
     <div className="bg-[#FAFAFA] border-b border-[#141414]/10 px-4 py-3">
       <h3 className="text-lg font-bold text-[#141414] uppercase tracking-widest">{title}</h3>

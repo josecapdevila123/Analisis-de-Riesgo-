@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { ComparativeView, getComparativeTablesData, formatValue, getVariationText } from './components/ComparativeView';
+import { ComparativeView, Table, getComparativeTablesData, formatValue, getVariationText } from './components/ComparativeView';
 import { useDropzone } from 'react-dropzone';
 import { 
   FileText, 
@@ -280,38 +280,55 @@ export default function App() {
     return <div className={cn("w-3 h-3 rounded-full shadow-sm", colors[status])} />;
   };
 
-  const RATIO_BLOCKS = [
+  type RatioFormat = 'pct' | 'num';
+  type RatioSpec = { key: RatioKey; name: string; format: RatioFormat };
+  const RATIO_BLOCKS: Array<{ bloque: string; ratios: RatioSpec[] }> = [
     { bloque: 'Liquidez', ratios: [
-      { key: 'liquidez_corriente' as RatioKey, name: 'Liquidez Corriente', description: 'Activo Corriente / Pasivo Corriente' },
-      { key: 'liquidez_acida' as RatioKey, name: 'Liquidez Ácida', description: '(AC - Bienes de Cambio) / PC' },
-      { key: 'liquidez_inmediata' as RatioKey, name: 'Liquidez Inmediata', description: 'Disponibilidades / PC' },
-      { key: 'capital_de_trabajo' as RatioKey, name: 'Capital de Trabajo', description: 'AC - PC' },
-      { key: 'ktno' as RatioKey, name: 'KTNO', description: 'Cobrar + Inventarios - Pagar' },
+      { key: 'liquidez_corriente', name: 'Liquidez Corriente', format: 'num' },
+      { key: 'liquidez_acida', name: 'Prueba Ácida', format: 'num' },
+      { key: 'liquidez_inmediata', name: 'Liquidez Inmediata', format: 'num' },
+      { key: 'capital_de_trabajo', name: 'Capital de Trabajo', format: 'num' },
+      { key: 'ktno', name: 'KTNO', format: 'num' },
     ]},
     { bloque: 'Rentabilidad', ratios: [
-      { key: 'margen_bruto' as RatioKey, name: 'Margen Bruto', description: 'Resultado Bruto / Ventas' },
-      { key: 'margen_ebitda' as RatioKey, name: 'Margen EBITDA', description: 'EBITDA / Ventas' },
-      { key: 'margen_neto' as RatioKey, name: 'Margen Neto', description: 'Resultado Neto / Ventas' },
-      { key: 'roe' as RatioKey, name: 'ROE', description: 'Resultado Neto / PN' },
-      { key: 'roa' as RatioKey, name: 'ROA', description: 'Resultado Neto / Activo Total' },
+      { key: 'margen_bruto', name: 'Margen Bruto', format: 'pct' },
+      { key: 'margen_ebitda', name: 'Margen EBITDA', format: 'pct' },
+      { key: 'margen_neto', name: 'Margen Neto', format: 'pct' },
+      { key: 'roe', name: 'ROE', format: 'pct' },
+      { key: 'roa', name: 'ROA', format: 'pct' },
     ]},
     { bloque: 'Endeudamiento', ratios: [
-      { key: 'endeudamiento' as RatioKey, name: 'Endeudamiento', description: 'Pasivo Total / PN' },
-      { key: 'solvencia' as RatioKey, name: 'Solvencia', description: 'PN / Pasivo Total' },
-      { key: 'deuda_ebitda' as RatioKey, name: 'Deuda / EBITDA', description: 'Deuda Bancaria / EBITDA' },
-      { key: 'deuda_bancaria_total' as RatioKey, name: 'Deuda Bancaria Total', description: 'Corriente + No Corriente' },
-      { key: 'deuda_dias_ventas' as RatioKey, name: 'Deuda en Días de Venta', description: '(Deuda / Ventas) x 365' },
-      { key: 'cobertura_intereses' as RatioKey, name: 'Cobertura Intereses', description: 'EBITDA / Gastos Financieros' },
-      { key: 'autofinanciamiento' as RatioKey, name: 'Autofinanciamiento', description: 'Flujo Operativo / Deuda' },
+      { key: 'endeudamiento', name: 'Endeudamiento Total', format: 'num' },
+      { key: 'solvencia', name: 'Solvencia', format: 'num' },
+      { key: 'deuda_ebitda', name: 'Deuda / EBITDA', format: 'num' },
+      { key: 'deuda_bancaria_total', name: 'Deuda Bancaria Total', format: 'num' },
+      { key: 'deuda_dias_ventas', name: 'Deuda en Días de Venta', format: 'num' },
+      { key: 'cobertura_intereses', name: 'Cobertura Intereses', format: 'num' },
+      { key: 'autofinanciamiento', name: 'Autofinanciamiento', format: 'pct' },
     ]},
     { bloque: 'Eficiencia Operativa', ratios: [
-      { key: 'dias_de_cobro' as RatioKey, name: 'Días de Cobro', description: '(Créditos / Ventas) x 365' },
-      { key: 'dias_de_pago' as RatioKey, name: 'Días de Pago', description: '(Deudas Comerciales / Costo) x 365' },
-      { key: 'dias_de_stock' as RatioKey, name: 'Días de Stock', description: '(Bienes de Cambio / Costo) x 365' },
-      { key: 'ciclo_conversion_caja' as RatioKey, name: 'Ciclo Conv. Caja', description: 'Cobro + Stock - Pago' },
-      { key: 'indice_inmovilizacion' as RatioKey, name: 'Índice Inmovilización', description: 'ANC / Activo Total' },
+      { key: 'dias_de_cobro', name: 'Días de Cobro', format: 'num' },
+      { key: 'dias_de_pago', name: 'Días de Pago', format: 'num' },
+      { key: 'dias_de_stock', name: 'Días de Stock', format: 'num' },
+      { key: 'ciclo_conversion_caja', name: 'Ciclo Conv. Caja', format: 'num' },
+      { key: 'indice_inmovilizacion', name: 'Índice Inmovilización', format: 'pct' },
     ]},
   ];
+
+  const formatRatioCell = (value: number | null, format: RatioFormat): number | string | null => {
+    if (value === null || !Number.isFinite(value)) return null;
+    if (format === 'pct') return (value * 100).toFixed(2) + '%';
+    return value;
+  };
+
+  const buildBlockRows = (block: { ratios: RatioSpec[] }) =>
+    block.ratios
+      .map(spec => ({
+        concepto: spec.name,
+        anio_anterior: formatRatioCell(activeResult?.ratios?.[spec.key]?.anterior ?? null, spec.format),
+        anio_actual: formatRatioCell(activeResult?.ratios?.[spec.key]?.actual ?? null, spec.format),
+      }))
+      .filter(row => row.anio_anterior !== null || row.anio_actual !== null);
 
   
   const evaluateVariation = (variation: number | null): 'healthy' | 'alert' | 'critical' => {
@@ -951,37 +968,11 @@ export default function App() {
                     {activeTab === 'Balance y Ratios' && (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <ComparativeView extraction={activeResult.extraction} ratios={activeResult.ratios} />
-                        <div className="space-y-6">
-                          {RATIO_BLOCKS.map(block => {
-                            const cards = block.ratios
-                              .map(spec => ({
-                                ...spec,
-                                value: activeResult.ratios?.[spec.key]?.actual ?? null,
-                                status: activeResult.ratios?.[spec.key]?.status ?? null,
-                              }))
-                              .filter(card => card.value !== null);
-                            if (cards.length === 0) return null;
-                            return (
-                              <div key={block.bloque}>
-                                <h4 className="text-sm font-bold uppercase mb-3 text-[#141414]/70 tracking-wider">{block.bloque}</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                  {cards.map((card, idx) => (
-                                    <div key={idx} className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
-                                      <div className="absolute top-4 right-4">
-                                        <StatusBadge status={card.status} />
-                                      </div>
-                                      <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">{card.name}</p>
-                                      <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
-                                        {typeof card.value === 'number' ? card.value.toFixed(2) : '-'}
-                                      </p>
-                                      <p className="text-xs font-sans font-bold text-gray-600 leading-tight">{card.description}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                        {RATIO_BLOCKS.map(block => {
+                          const rows = buildBlockRows(block);
+                          if (rows.length === 0) return null;
+                          return <Table key={block.bloque} title={block.bloque} data={rows} />;
+                        })}
                       </div>
                     )}
 
@@ -1721,37 +1712,11 @@ export default function App() {
                     <h2 className="text-2xl font-bold mb-6 border-b border-gray-300 pb-2 print:break-after-avoid uppercase tracking-tight">Balance y Ratios</h2>
                     <div className="space-y-8">
                        <ComparativeView extraction={activeResult.extraction} ratios={activeResult.ratios} />
-                       <div className="space-y-6">
-                         {RATIO_BLOCKS.map(block => {
-                           const cards = block.ratios
-                             .map(spec => ({
-                               ...spec,
-                               value: activeResult.ratios?.[spec.key]?.actual ?? null,
-                               status: activeResult.ratios?.[spec.key]?.status ?? null,
-                             }))
-                             .filter(card => card.value !== null);
-                           if (cards.length === 0) return null;
-                           return (
-                             <div key={block.bloque}>
-                               <h4 className="text-sm font-bold uppercase mb-3 text-[#141414]/70 tracking-wider">{block.bloque}</h4>
-                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                 {cards.map((card, idx) => (
-                                   <div key={idx} className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
-                                     <div className="absolute top-4 right-4">
-                                       <StatusBadge status={card.status} />
-                                     </div>
-                                     <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">{card.name}</p>
-                                     <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
-                                       {typeof card.value === 'number' ? card.value.toFixed(2) : '-'}
-                                     </p>
-                                     <p className="text-xs font-sans font-bold text-gray-600 leading-tight">{card.description}</p>
-                                   </div>
-                                 ))}
-                               </div>
-                             </div>
-                           );
-                         })}
-                       </div>
+                       {RATIO_BLOCKS.map(block => {
+                         const rows = buildBlockRows(block);
+                         if (rows.length === 0) return null;
+                         return <Table key={block.bloque} title={block.bloque} data={rows} />;
+                       })}
                     </div>
                   </div>
 
