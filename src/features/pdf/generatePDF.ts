@@ -3,7 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { getComparativeTablesData, formatValue, getVariationText } from '../../components/ComparativeView';
 import { ExtractionResult, Shareholder } from '../../types';
 import { formatCurrencyThousands } from '../../lib/utils';
-import { ComputedRatios, RatioStatus } from '../ratios/calculations';
+import { ComputedRatios, RatioKey, RatioStatus } from '../ratios/calculations';
 
 type Status = RatioStatus | null;
 
@@ -28,6 +28,48 @@ const formatRatioValue = (value: number | null, format?: 'pct' | 'x'): string =>
   if (format === 'pct') return (value * 100).toFixed(1) + '%';
   if (format === 'x') return value.toFixed(2) + 'x';
   return value.toFixed(2);
+};
+
+type RatioBlockFormat = 'pct' | 'num';
+type RatioBlockSpec = { key: RatioKey; name: string; format: RatioBlockFormat };
+
+const RATIO_BLOCKS: Array<{ bloque: string; ratios: RatioBlockSpec[] }> = [
+  { bloque: 'Liquidez', ratios: [
+    { key: 'liquidez_corriente', name: 'Liquidez Corriente', format: 'num' },
+    { key: 'liquidez_acida', name: 'Prueba Ácida', format: 'num' },
+    { key: 'liquidez_inmediata', name: 'Liquidez Inmediata', format: 'num' },
+    { key: 'capital_de_trabajo', name: 'Capital de Trabajo', format: 'num' },
+    { key: 'ktno', name: 'KTNO', format: 'num' },
+  ]},
+  { bloque: 'Rentabilidad', ratios: [
+    { key: 'margen_bruto', name: 'Margen Bruto', format: 'pct' },
+    { key: 'margen_ebitda', name: 'Margen EBITDA', format: 'pct' },
+    { key: 'margen_neto', name: 'Margen Neto', format: 'pct' },
+    { key: 'roe', name: 'ROE', format: 'pct' },
+    { key: 'roa', name: 'ROA', format: 'pct' },
+  ]},
+  { bloque: 'Endeudamiento', ratios: [
+    { key: 'endeudamiento', name: 'Endeudamiento Total', format: 'num' },
+    { key: 'solvencia', name: 'Solvencia', format: 'num' },
+    { key: 'deuda_ebitda', name: 'Deuda / EBITDA', format: 'num' },
+    { key: 'deuda_bancaria_total', name: 'Deuda Bancaria Total', format: 'num' },
+    { key: 'deuda_dias_ventas', name: 'Deuda en Días de Venta', format: 'num' },
+    { key: 'cobertura_intereses', name: 'Cobertura Intereses', format: 'num' },
+    { key: 'autofinanciamiento', name: 'Autofinanciamiento', format: 'pct' },
+  ]},
+  { bloque: 'Eficiencia Operativa', ratios: [
+    { key: 'dias_de_cobro', name: 'Días de Cobro', format: 'num' },
+    { key: 'dias_de_pago', name: 'Días de Pago', format: 'num' },
+    { key: 'dias_de_stock', name: 'Días de Stock', format: 'num' },
+    { key: 'ciclo_conversion_caja', name: 'Ciclo Conv. Caja', format: 'num' },
+    { key: 'indice_inmovilizacion', name: 'Índice Inmovilización', format: 'pct' },
+  ]},
+];
+
+const formatBlockCell = (value: number | null, format: RatioBlockFormat): number | string | null => {
+  if (value === null || !Number.isFinite(value)) return null;
+  if (format === 'pct') return (value * 100).toFixed(2) + '%';
+  return value;
 };
 
 export const generatePDF = (activeResult: ExtractionResult | null | undefined) => {
@@ -180,6 +222,18 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
   addComparativeTable('ESTADO DE RESULTADOS', estadoResultados);
   addComparativeTable('INDICADORES Y RATIOS', indicadores);
 
+  RATIO_BLOCKS.forEach(block => {
+    const rows = block.ratios
+      .map(spec => ({
+        concepto: spec.name,
+        anio_anterior: formatBlockCell(ratios[spec.key]?.anterior ?? null, spec.format),
+        anio_actual: formatBlockCell(ratios[spec.key]?.actual ?? null, spec.format),
+      }))
+      .filter(row => row.anio_anterior !== null || row.anio_actual !== null);
+    if (rows.length === 0) return;
+    addComparativeTable(block.bloque.toUpperCase(), rows);
+  });
+
   currentY = addSectionTitle('Accionistas y Directorio');
   const accDir = extraction.accionistas_y_directorio;
   if (accDir) {
@@ -250,7 +304,7 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
 
   currentY = addSectionTitle('Información post balance');
   const post = extraction.analisis_post_cierre;
-  if (post && post.total_ventas_post_cierre > 0) {
+  if (post && (post.total_ventas_post_cierre ?? 0) > 0) {
     doc.setFontSize(10);
     doc.text(
       `Total Ventas Post Cierre: ${formatCurrencyThousands(post.total_ventas_post_cierre)}`,
@@ -335,9 +389,10 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
     currentY += 34;
 
     if (nosis.detalle_entidades.length > 0) {
+      const deudaTotalNosis = nosis.deuda_financiera_total_nosis ?? 0;
       const totalRef =
-        nosis.deuda_financiera_total_nosis > 0
-          ? nosis.deuda_financiera_total_nosis
+        deudaTotalNosis > 0
+          ? deudaTotalNosis
           : nosis.detalle_entidades.reduce((acc, e) => acc + (Number(e.monto) || 0), 0);
       const entidadesData = nosis.detalle_entidades.map(e => {
         const monto = Number(e.monto) || 0;

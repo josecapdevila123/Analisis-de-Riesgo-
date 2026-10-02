@@ -1,6 +1,7 @@
 import React from 'react';
 import { RawExtraction } from '../features/extraction/schemas';
 import { ComputedRatios } from '../features/ratios/calculations';
+import { EditableNumber, Path, useEdit } from '../features/editing/editing';
 
 interface ComparativeViewProps {
   extraction: RawExtraction | null;
@@ -49,14 +50,24 @@ interface Row {
   concepto: string;
   anio_anterior: number | string | null;
   anio_actual: number | string | null;
+  // Paths en la extracción; si están presentes la celda es editable en modo edición.
+  path_anterior?: Path;
+  path_actual?: Path;
+  nullable?: boolean;
 }
+
+const ValueCell = ({ value, path, nullable }: { value: number | string | null; path?: Path; nullable?: boolean }) => {
+  const { editing } = useEdit();
+  if (!editing || !path || typeof value === 'string') return <>{formatValue(value)}</>;
+  return <EditableNumber path={path} value={value} required={!nullable} />;
+};
 
 interface TableProps {
   title: string;
   data: Row[];
 }
 
-const Table = ({ title, data }: TableProps) => (
+export const Table = ({ title, data }: TableProps) => (
   <div className="bg-white border border-[#141414] rounded-sm mb-8 overflow-hidden max-w-full print:break-inside-avoid shadow-sm">
     <div className="bg-[#FAFAFA] border-b border-[#141414]/10 px-4 py-3">
       <h3 className="text-lg font-bold text-[#141414] uppercase tracking-widest">{title}</h3>
@@ -75,8 +86,8 @@ const Table = ({ title, data }: TableProps) => (
           {data.map((row, index) => (
             <tr key={index} className="hover:bg-[#141414]/5 transition-colors">
               <td className="px-4 py-3 font-semibold text-[#141414] text-left">{row.concepto}</td>
-              <td className="px-4 py-3 text-right text-[#141414]/70">{formatValue(row.anio_anterior)}</td>
-              <td className="px-4 py-3 text-right text-[#141414] font-bold">{formatValue(row.anio_actual)}</td>
+              <td className="px-4 py-3 text-right text-[#141414]/70"><ValueCell value={row.anio_anterior} path={row.path_anterior} nullable={row.nullable} /></td>
+              <td className="px-4 py-3 text-right text-[#141414] font-bold"><ValueCell value={row.anio_actual} path={row.path_actual} nullable={row.nullable} /></td>
               <td className="px-4 py-3 text-right font-medium">{variationCell(row.anio_actual, row.anio_anterior)}</td>
             </tr>
           ))}
@@ -100,36 +111,50 @@ export function getComparativeTablesData(
       concepto: 'Activo Corriente',
       anio_anterior: anteriorEsp?.activo_corriente.total ?? null,
       anio_actual: actualEsp?.activo_corriente.total ?? null,
+      path_anterior: anteriorEsp ? ['ejercicio_anterior', 'estado_situacion_patrimonial', 'activo_corriente', 'total'] : undefined,
+      path_actual: ['ejercicio_actual', 'estado_situacion_patrimonial', 'activo_corriente', 'total'],
     },
     {
       concepto: 'Activo No Corriente',
       anio_anterior: anteriorEsp?.activo_no_corriente.total ?? null,
       anio_actual: actualEsp?.activo_no_corriente.total ?? null,
+      path_anterior: anteriorEsp ? ['ejercicio_anterior', 'estado_situacion_patrimonial', 'activo_no_corriente', 'total'] : undefined,
+      path_actual: ['ejercicio_actual', 'estado_situacion_patrimonial', 'activo_no_corriente', 'total'],
     },
     {
       concepto: 'Activo Total',
       anio_anterior: anteriorEsp?.total_activo ?? null,
       anio_actual: actualEsp?.total_activo ?? null,
+      path_anterior: anteriorEsp ? ['ejercicio_anterior', 'estado_situacion_patrimonial', 'total_activo'] : undefined,
+      path_actual: ['ejercicio_actual', 'estado_situacion_patrimonial', 'total_activo'],
     },
     {
       concepto: 'Pasivo Corriente',
       anio_anterior: anteriorEsp?.pasivo_corriente.total ?? null,
       anio_actual: actualEsp?.pasivo_corriente.total ?? null,
+      path_anterior: anteriorEsp ? ['ejercicio_anterior', 'estado_situacion_patrimonial', 'pasivo_corriente', 'total'] : undefined,
+      path_actual: ['ejercicio_actual', 'estado_situacion_patrimonial', 'pasivo_corriente', 'total'],
     },
     {
       concepto: 'Pasivo No Corriente',
       anio_anterior: anteriorEsp?.pasivo_no_corriente.total ?? null,
       anio_actual: actualEsp?.pasivo_no_corriente.total ?? null,
+      path_anterior: anteriorEsp ? ['ejercicio_anterior', 'estado_situacion_patrimonial', 'pasivo_no_corriente', 'total'] : undefined,
+      path_actual: ['ejercicio_actual', 'estado_situacion_patrimonial', 'pasivo_no_corriente', 'total'],
     },
     {
       concepto: 'Pasivo Total',
       anio_anterior: anteriorEsp?.total_pasivo ?? null,
       anio_actual: actualEsp?.total_pasivo ?? null,
+      path_anterior: anteriorEsp ? ['ejercicio_anterior', 'estado_situacion_patrimonial', 'total_pasivo'] : undefined,
+      path_actual: ['ejercicio_actual', 'estado_situacion_patrimonial', 'total_pasivo'],
     },
     {
       concepto: 'Patrimonio Neto',
       anio_anterior: anteriorEsp?.patrimonio_neto ?? null,
       anio_actual: actualEsp?.patrimonio_neto ?? null,
+      path_anterior: anteriorEsp ? ['ejercicio_anterior', 'estado_situacion_patrimonial', 'patrimonio_neto'] : undefined,
+      path_actual: ['ejercicio_actual', 'estado_situacion_patrimonial', 'patrimonio_neto'],
     },
   ];
 
@@ -138,11 +163,15 @@ export function getComparativeTablesData(
       concepto: 'Ventas Netas',
       anio_anterior: anteriorEr?.ventas_netas ?? null,
       anio_actual: actualEr?.ventas_netas ?? null,
+      path_anterior: anteriorEr ? ['ejercicio_anterior', 'estado_resultados', 'ventas_netas'] : undefined,
+      path_actual: ['ejercicio_actual', 'estado_resultados', 'ventas_netas'],
     },
     {
       concepto: 'Resultado Bruto',
       anio_anterior: anteriorEr?.resultado_bruto ?? null,
       anio_actual: actualEr?.resultado_bruto ?? null,
+      path_anterior: anteriorEr ? ['ejercicio_anterior', 'estado_resultados', 'resultado_bruto'] : undefined,
+      path_actual: ['ejercicio_actual', 'estado_resultados', 'resultado_bruto'],
     },
     {
       concepto: 'EBITDA (Calculado)',
@@ -153,16 +182,23 @@ export function getComparativeTablesData(
       concepto: 'Resultado Ordinario',
       anio_anterior: anteriorEr?.resultado_ordinario ?? null,
       anio_actual: actualEr?.resultado_ordinario ?? null,
+      path_anterior: anteriorEr ? ['ejercicio_anterior', 'estado_resultados', 'resultado_ordinario'] : undefined,
+      path_actual: ['ejercicio_actual', 'estado_resultados', 'resultado_ordinario'],
     },
     {
       concepto: 'Resultados Financieros',
       anio_anterior: anteriorEr?.resultado_financiero_y_tenencia ?? null,
       anio_actual: actualEr?.resultado_financiero_y_tenencia ?? null,
+      path_anterior: anteriorEr ? ['ejercicio_anterior', 'estado_resultados', 'resultado_financiero_y_tenencia'] : undefined,
+      path_actual: ['ejercicio_actual', 'estado_resultados', 'resultado_financiero_y_tenencia'],
+      nullable: true,
     },
     {
       concepto: 'Resultado del Ejercicio',
       anio_anterior: anteriorEr?.resultado_neto ?? null,
       anio_actual: actualEr?.resultado_neto ?? null,
+      path_anterior: anteriorEr ? ['ejercicio_anterior', 'estado_resultados', 'resultado_neto'] : undefined,
+      path_actual: ['ejercicio_actual', 'estado_resultados', 'resultado_neto'],
     },
   ];
 
@@ -200,7 +236,10 @@ export function getComparativeTablesData(
 }
 
 export function ComparativeView({ extraction, ratios }: ComparativeViewProps) {
-  const [isVerticalAnalysis, setIsVerticalAnalysis] = React.useState(false);
+  const { editing } = useEdit();
+  const [verticalSelected, setIsVerticalAnalysis] = React.useState(false);
+  // En modo edición siempre se muestran valores absolutos (los editables).
+  const isVerticalAnalysis = verticalSelected && !editing;
   const { situacionPatrimonial, estadoResultados, indicadores } = getComparativeTablesData(extraction, ratios);
 
   const totalActivoAnterior =
@@ -243,6 +282,7 @@ export function ComparativeView({ extraction, ratios }: ComparativeViewProps) {
           </button>
           <button
             onClick={() => setIsVerticalAnalysis(true)}
+            disabled={editing}
             className={`px-4 py-2 text-sm font-bold uppercase tracking-wider transition-colors ${isVerticalAnalysis ? 'bg-white shadow-sm text-[#141414]' : 'text-[#141414]/50 hover:text-[#141414]'}`}
           >
             % Análisis Vertical
