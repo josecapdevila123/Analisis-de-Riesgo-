@@ -161,8 +161,8 @@ const MiembroDirectorio = z.object({
 });
 
 const AccionistasYDirectorio = z.object({
-  accionistas: z.array(AccionistaSchema).default([]),
-  directorio: z.array(MiembroDirectorio).default([]),
+  accionistas: z.preprocess(v => v ?? [], z.array(AccionistaSchema)),
+  directorio: z.preprocess(v => v ?? [], z.array(MiembroDirectorio)),
 }).nullable();
 
 export const RawExtractionSchema = z.object({
