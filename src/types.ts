@@ -28,5 +28,7 @@ export interface ExtractionResult {
   crossCheck: CrossCheckResult | null;
   verification: VerificationResult | null;
   marketAnalysis: string | null;
+  // Fecha ISO de la última edición manual de valores en el dashboard.
+  editedAt?: string;
   error?: string;
 }

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { ComparativeView, Table, getComparativeTablesData, formatValue, getVariationText } from './components/ComparativeView';
 import { useDropzone } from 'react-dropzone';
 import { 
@@ -28,7 +28,9 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
-  CornerDownRight
+  CornerDownRight,
+  Pencil,
+  Save
 } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -40,11 +42,29 @@ import { runPipeline, CaseState } from './features/extraction/pipeline';
 import { useAuth } from './features/auth/useAuth';
 import { useCases } from './features/cases/useCases';
 import { ExtractionResult, Shareholder } from './types';
-import { RatioKey, RatioStatus } from './features/ratios/calculations';
+import { RatioKey, RatioStatus, computeRatios } from './features/ratios/calculations';
+import { runSanityChecks } from './features/ratios/sanityChecks';
+import { runCrossCheck } from './features/ratios/crossCheck';
+import { RawExtraction } from './features/extraction/schemas';
+import {
+  EditProvider,
+  EditableNumber,
+  EditableText,
+  EditableSelect,
+  AddRowButton,
+  RemoveRowButton,
+  Path,
+  setIn,
+  useEdit,
+} from './features/editing/editing';
+import { SourceDataEditor } from './features/editing/SourceDataEditor';
 import { BiBankLogo } from './components/BiBankLogo';
 
-const ShareholderTable = ({ accionistas, level = 1, parentName = '' }: { accionistas: Shareholder[], level?: number, parentName?: string }) => {
-  if (!accionistas || accionistas.length === 0) return null;
+const ShareholderTable = ({ accionistas, level = 1, parentName = '', basePath }: { accionistas: Shareholder[], level?: number, parentName?: string, basePath?: Path }) => {
+  const { editing } = useEdit();
+  const canEdit = editing && !!basePath;
+  if (!accionistas || (accionistas.length === 0 && !canEdit)) return null;
+  const rowPath = (idx: number, field: string): Path => [...(basePath ?? []), idx, field];
 
   return (
     <div className={`${level > 1 ? 'mt-8 mb-8 ml-4 md:ml-8 print:break-inside-avoid' : ''}`}>
@@ -68,11 +88,26 @@ const ShareholderTable = ({ accionistas, level = 1, parentName = '' }: { accioni
               const participacionNum = Number(accionista.participacion) || 0;
               return (
                 <tr key={idx} className="hover:bg-[#141414]/5 transition-colors">
-                  <td className="px-4 py-3 font-medium text-[#141414]">{accionista.nombre}</td>
-                  <td className="px-4 py-3 text-[#141414]/70">{accionista.dni_cuit}</td>
+                  <td className="px-4 py-3 font-medium text-[#141414]">
+                    {canEdit ? (
+                      <div className="flex items-center gap-1">
+                        <RemoveRowButton path={basePath!} list={accionistas} index={idx} />
+                        <EditableText path={rowPath(idx, 'nombre')} value={accionista.nombre} />
+                      </div>
+                    ) : accionista.nombre}
+                  </td>
+                  <td className="px-4 py-3 text-[#141414]/70">
+                    {canEdit ? <EditableText path={rowPath(idx, 'dni_cuit')} value={accionista.dni_cuit} /> : accionista.dni_cuit}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-1">
-                      <span className="font-bold text-[#141414]">{participacionNum}%</span>
+                      {canEdit ? (
+                        <span className="flex items-center gap-1">
+                          <EditableNumber path={rowPath(idx, 'participacion')} value={accionista.participacion} inputClassName="w-20" />%
+                        </span>
+                      ) : (
+                        <span className="font-bold text-[#141414]">{participacionNum}%</span>
+                      )}
                       <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden">
                         <div className="bg-blue-600 h-full" style={{ width: `${participacionNum}%` }}></div>
                       </div>
@@ -92,6 +127,11 @@ const ShareholderTable = ({ accionistas, level = 1, parentName = '' }: { accioni
           </tfoot>
         </table>
       </div>
+      {canEdit && (
+        <div className="flex gap-4">
+          <AddRowButton path={basePath!} list={accionistas} newItem={{ nombre: '', dni_cuit: '', participacion: null }} label="Agregar accionista" />
+        </div>
+      )}
       {accionistas.map((accionista, idx) => (
         accionista.subAccionistas && accionista.subAccionistas.length > 0 ? (
           <ShareholderTable 
@@ -99,7 +139,17 @@ const ShareholderTable = ({ accionistas, level = 1, parentName = '' }: { accioni
             accionistas={accionista.subAccionistas} 
             level={level + 1} 
             parentName={accionista.nombre} 
+            basePath={basePath ? [...basePath, idx, 'subAccionistas'] : undefined}
           />
+        ) : canEdit ? (
+          <div key={`sub-${idx}`} className="ml-4 md:ml-8">
+            <AddRowButton
+              path={[...basePath!, idx, 'subAccionistas']}
+              list={[]}
+              newItem={{ nombre: '', dni_cuit: '', participacion: null }}
+              label={`Agregar composición de ${accionista.nombre && accionista.nombre !== 'N/A' ? accionista.nombre : 'este accionista'}`}
+            />
+          </div>
         ) : null
       ))}
     </div>
@@ -138,11 +188,99 @@ export default function App() {
     saveCaseProcessing,
     saveCaseCompleted,
     saveCaseMarketAnalysis,
+    saveCaseEdits,
     saveCaseError,
     removeCase,
   } = useCases(user, isAuthReady);
 
-  const activeResult = results.find(r => r.id === activeResultId);
+  const storedResult = results.find(r => r.id === activeResultId);
+
+  // Modo edición: el borrador reemplaza la extracción y todo lo derivado
+  // (ratios, sanity checks, cruce Nosis) se recalcula en vivo.
+  const [draft, setDraft] = useState<{ id: string; extraction: RawExtraction } | null>(null);
+  const [isSavingEdits, setIsSavingEdits] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const isEditing = !!draft && draft.id === activeResultId;
+
+  useEffect(() => {
+    setDraft(null);
+    setEditError(null);
+  }, [activeResultId]);
+
+  const activeResult = useMemo<ExtractionResult | undefined>(() => {
+    if (!storedResult || !isEditing || !draft) return storedResult;
+    try {
+      return {
+        ...storedResult,
+        extraction: draft.extraction,
+        ratios: computeRatios(draft.extraction),
+        inconsistencias: runSanityChecks(draft.extraction),
+        crossCheck: runCrossCheck(draft.extraction),
+      };
+    } catch (err) {
+      console.error('Recálculo con valores editados falló:', err);
+      return { ...storedResult, extraction: draft.extraction };
+    }
+  }, [storedResult, isEditing, draft]);
+
+  const startEditing = () => {
+    if (!storedResult?.extraction) return;
+    setEditError(null);
+    setDraft({ id: storedResult.id, extraction: structuredClone(storedResult.extraction) });
+  };
+
+  const cancelEditing = () => {
+    setDraft(null);
+    setEditError(null);
+  };
+
+  const updateDraft = useCallback((path: Path, value: unknown) => {
+    setDraft(prev => {
+      if (!prev) return prev;
+      let next = setIn(prev.extraction, path, value);
+      // Si no había accionistas/directorio extraídos, el objeto nace con ambas listas.
+      if (path[0] === 'accionistas_y_directorio') {
+        next = {
+          ...next,
+          accionistas_y_directorio: {
+            accionistas: next.accionistas_y_directorio?.accionistas ?? [],
+            directorio: next.accionistas_y_directorio?.directorio ?? [],
+          },
+        };
+      }
+      // El total de ventas post cierre sigue a la suma de los meses cuando se editan.
+      if (path[0] === 'analisis_post_cierre' && path[1] === 'detalle_ventas_mensuales' && next.analisis_post_cierre) {
+        const total = next.analisis_post_cierre.detalle_ventas_mensuales
+          .reduce((acc, v) => acc + (Number(v.monto) || 0), 0);
+        next = setIn(next, ['analisis_post_cierre', 'total_ventas_post_cierre'], total);
+      }
+      return { ...prev, extraction: next };
+    });
+  }, []);
+
+  const saveEdits = async () => {
+    if (!activeResult || !isEditing) return;
+    setIsSavingEdits(true);
+    setEditError(null);
+    const editedAt = new Date().toISOString();
+    const edits = {
+      extraction: activeResult.extraction,
+      ratios: activeResult.ratios,
+      inconsistencias: activeResult.inconsistencias,
+      crossCheck: activeResult.crossCheck,
+    };
+    try {
+      await saveCaseEdits(activeResult.id, edits, editedAt);
+      setResults(prev => prev.map(r => r.id === activeResult.id ? { ...r, ...edits, editedAt } : r));
+      setDraft(null);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsSavingEdits(false);
+    }
+  };
+
+  const editContext = useMemo(() => ({ editing: isEditing, update: updateDraft }), [isEditing, updateDraft]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     acceptedFiles.forEach(file => {
@@ -408,6 +546,7 @@ export default function App() {
   };
 
   return (
+    <EditProvider value={editContext}>
     <div className="flex h-screen bg-[#E4E3E0] text-[#141414] font-sans selection:bg-[#141414] selection:text-[#E4E3E0]">
       {/* Sidebar */}
       <aside className={cn("border-r border-[#141414] flex flex-col bg-[#E4E3E0] transition-all duration-300 relative overflow-hidden print:hidden", isHistorySidebarOpen ? "w-72" : "w-0 border-r-0")}>
@@ -534,7 +673,37 @@ export default function App() {
           </div>
           
           <div className="flex items-center gap-4">
-            {activeResult && activeResult.status === 'completed' && (
+            {activeResult?.extraction && (activeResult.status === 'completed' || activeResult.status === 'completed_partial') && (
+              isEditing ? (
+                <>
+                  <button
+                    onClick={cancelEditing}
+                    disabled={isSavingEdits}
+                    className="flex items-center gap-2 px-4 py-2 border border-[#141414] text-xs font-bold uppercase hover:bg-[#141414]/10 transition-all disabled:opacity-50"
+                  >
+                    <X className="w-4 h-4" />
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={saveEdits}
+                    disabled={isSavingEdits}
+                    className="flex items-center gap-2 px-4 py-2 border border-amber-600 bg-amber-500 text-[#141414] text-xs font-bold uppercase hover:bg-amber-400 transition-all disabled:opacity-50"
+                  >
+                    {isSavingEdits ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Guardar cambios
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={startEditing}
+                  className="flex items-center gap-2 px-4 py-2 border border-[#141414] text-xs font-bold uppercase hover:bg-[#141414] hover:text-[#E4E3E0] transition-all"
+                >
+                  <Pencil className="w-4 h-4" />
+                  Editar valores
+                </button>
+              )
+            )}
+            {activeResult && activeResult.status === 'completed' && !isEditing && (
               <button 
                 onClick={() => downloadJson(activeResult)}
                 className="flex items-center gap-2 px-4 py-2 border border-[#141414] text-xs font-bold uppercase hover:bg-[#141414] hover:text-[#E4E3E0] transition-all"
@@ -698,6 +867,24 @@ export default function App() {
 
               {(activeResult?.status === 'completed' || activeResult?.status === 'completed_partial') && activeResult.extraction && (
                 <>
+                  {isEditing && (
+                    <div className="border-l-4 border-amber-500 bg-amber-50 p-3 text-sm text-amber-900 flex items-center gap-2 print:hidden">
+                      <Pencil className="w-4 h-4 shrink-0" />
+                      <span>
+                        <strong>Modo edición.</strong> Los campos resaltados son editables; ratios, chequeos de consistencia y cruce con Nosis se recalculan al instante. En "Balance y Ratios" están también los datos de origen.
+                      </span>
+                    </div>
+                  )}
+                  {editError && (
+                    <div className="border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-900 print:hidden">
+                      No se pudieron guardar los cambios: {editError}
+                    </div>
+                  )}
+                  {!isEditing && activeResult.editedAt && (
+                    <div className="border-l-4 border-[#141414]/40 bg-white p-3 text-xs text-[#141414]/80 print:hidden">
+                      Valores editados manualmente el {new Date(activeResult.editedAt).toLocaleString('es-AR')}. El resumen ejecutivo y el análisis de mercado se generaron con los valores originales.
+                    </div>
+                  )}
                   {activeResult.inconsistencias.length > 0 && (
                     <div className="border-l-4 border-yellow-500 bg-yellow-50 p-4 print:hidden">
                       <div className="flex items-start gap-3">
@@ -759,15 +946,22 @@ export default function App() {
                       <BiBankLogo className="h-24 w-auto grayscale" />
                     </div>
                     <h1 className="text-2xl font-sans font-bold uppercase mb-2 relative z-10">
-                      {activeResult.extraction?.company_profile?.name || "EMPRESA NO IDENTIFICADA"}
+                      <EditableText
+                        path={['company_profile', 'name']}
+                        value={activeResult.extraction?.company_profile?.name}
+                        display={activeResult.extraction?.company_profile?.name || "EMPRESA NO IDENTIFICADA"}
+                        inputClassName="text-xl font-bold uppercase"
+                      />
                     </h1>
-                    <div className="flex items-center gap-4 text-xs font-mono opacity-60 border-t border-[#141414]/10 pt-2 relative z-10">
+                    <div className="flex flex-wrap items-center gap-4 text-xs font-mono opacity-60 border-t border-[#141414]/10 pt-2 relative z-10">
                       <span>
-                        <strong className="font-bold">CUIT:</strong> {activeResult.extraction?.company_profile?.cuit || "N/A"}
+                        <strong className="font-bold">CUIT:</strong>{' '}
+                        <EditableText path={['company_profile', 'cuit']} value={activeResult.extraction?.company_profile?.cuit} display={activeResult.extraction?.company_profile?.cuit || "N/A"} inputClassName="w-40 inline-block" />
                       </span>
                       <span className="h-3 w-[1px] bg-[#141414]/20" />
                       <span>
-                        <strong className="font-bold">ACTIVIDAD:</strong> {activeResult.extraction?.company_profile?.activity || "No especificada"}
+                        <strong className="font-bold">ACTIVIDAD:</strong>{' '}
+                        <EditableText path={['company_profile', 'activity']} value={activeResult.extraction?.company_profile?.activity} display={activeResult.extraction?.company_profile?.activity || "No especificada"} inputClassName="w-64 inline-block" />
                       </span>
                       <span className="h-3 w-[1px] bg-[#141414]/20" />
                       <span className="italic text-[#000000] opacity-100">Valores expresados en miles de pesos</span>
@@ -806,7 +1000,12 @@ export default function App() {
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Total Activo</p>
                               <div className="flex items-baseline">
                                 <p className="text-xl font-bold font-mono text-[#141414]">
-                                  {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_activo)}
+                                  <EditableNumber
+                                    path={['ejercicio_actual', 'estado_situacion_patrimonial', 'total_activo']}
+                                    value={activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_activo}
+                                    display={formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_activo)}
+                                    required
+                                  />
                                 </p>
                                 <VariationBadge variation={calculateVariation(
                                   activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_activo || 0,
@@ -818,7 +1017,12 @@ export default function App() {
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Total Pasivo</p>
                               <div className="flex items-baseline">
                                 <p className="text-xl font-bold font-mono text-[#141414]">
-                                  {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_pasivo)}
+                                  <EditableNumber
+                                    path={['ejercicio_actual', 'estado_situacion_patrimonial', 'total_pasivo']}
+                                    value={activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_pasivo}
+                                    display={formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_pasivo)}
+                                    required
+                                  />
                                 </p>
                                 <VariationBadge variation={calculateVariation(
                                   activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_pasivo || 0,
@@ -830,7 +1034,12 @@ export default function App() {
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Patrimonio Neto</p>
                               <div className="flex items-baseline">
                                 <p className="text-xl font-bold font-mono text-[#141414]">
-                                  {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.patrimonio_neto)}
+                                  <EditableNumber
+                                    path={['ejercicio_actual', 'estado_situacion_patrimonial', 'patrimonio_neto']}
+                                    value={activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.patrimonio_neto}
+                                    display={formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.patrimonio_neto)}
+                                    required
+                                  />
                                 </p>
                                 <VariationBadge variation={calculateVariation(
                                   activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.patrimonio_neto || 0,
@@ -845,7 +1054,12 @@ export default function App() {
                                   "text-xl font-bold font-mono",
                                   (activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto || 0) >= 0 ? "text-[#141414]" : "text-red-600"
                                 )}>
-                                  {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto)}
+                                  <EditableNumber
+                                    path={['ejercicio_actual', 'estado_resultados', 'resultado_neto']}
+                                    value={activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto}
+                                    display={formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto)}
+                                    required
+                                  />
                                 </p>
                                 <VariationBadge variation={calculateVariation(
                                   activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto || 0,
@@ -869,7 +1083,12 @@ export default function App() {
                         </div>
                         <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">VENTAS (EN MILES)</p>
                       <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
-                        {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_resultados?.ventas_netas)}
+                        <EditableNumber
+                          path={['ejercicio_actual', 'estado_resultados', 'ventas_netas']}
+                          value={activeResult.extraction?.ejercicio_actual?.estado_resultados?.ventas_netas}
+                          display={formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_resultados?.ventas_netas)}
+                          required
+                        />
                       </p>
                       <div className="flex items-center text-xs font-sans font-bold text-gray-600 leading-tight">
                         <VariationBadge variation={calculateVariation(
@@ -934,7 +1153,12 @@ export default function App() {
                         return (
                           <>
                             <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
-                              {formatCurrencyThousands(deudaCPActual)}
+                              <EditableNumber
+                                path={['deuda_bancaria_actual', 'corriente', 'total']}
+                                value={deudaCPActual}
+                                display={formatCurrencyThousands(deudaCPActual)}
+                                required
+                              />
                             </p>
                             {deudaCPAnterior !== null && (
                               <div className="flex items-center text-xs font-sans font-bold text-gray-600 leading-tight">
@@ -968,6 +1192,7 @@ export default function App() {
                     {activeTab === 'Balance y Ratios' && (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <ComparativeView extraction={activeResult.extraction} ratios={activeResult.ratios} />
+                        {isEditing && activeResult.extraction && <SourceDataEditor extraction={activeResult.extraction} />}
                         {RATIO_BLOCKS.map(block => {
                           const rows = buildBlockRows(block);
                           if (rows.length === 0) return null;
@@ -979,7 +1204,7 @@ export default function App() {
                     {activeTab === 'Información post balance' && (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {/* Post-Closing Analysis Section (Moved Inside) */}
-                      {activeResult.extraction?.analisis_post_cierre && activeResult.extraction.analisis_post_cierre.total_ventas_post_cierre > 0 ? (
+                      {activeResult.extraction?.analisis_post_cierre && (isEditing || (activeResult.extraction.analisis_post_cierre.total_ventas_post_cierre ?? 0) > 0) ? (
                         <div className="bg-white border border-[#141414] p-6 font-sans">
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                             <h3 className="text-lg font-semibold text-[#141414]">EVOLUCIÓN DE VENTAS POST BALANCE (COMPARATIVO INTERANUAL)</h3>
@@ -1039,13 +1264,15 @@ export default function App() {
                                   const rawVentas = activeResult.extraction.analisis_post_cierre.detalle_ventas_mensuales;
                                   const ventasMensuales = Array.isArray(rawVentas) ? rawVentas : [];
                                   const baseIndex = ventasMensuales.length - 1;
+                                  const ventasPath: Path = ['analisis_post_cierre', 'detalle_ventas_mensuales'];
                                   
                                   return ventasMensuales.map((venta, idx) => {
                                     const i = baseIndex - idx;
                                     let montoActual = venta.monto || 0;
                                     let montoAnterior = venta.monto_anio_anterior;
 
-                                    if (isInflationAdjusted) {
+                                    // En modo edición se editan los valores nominales, sin ajuste.
+                                    if (isInflationAdjusted && !isEditing) {
                                       const factorMensual = Math.pow(1 + (inflationMensual / 100), i);
                                       const factorInteranual = 1 + (inflationInteranual / 100);
                                       
@@ -1059,10 +1286,21 @@ export default function App() {
 
                                     return (
                                       <tr key={idx} className="hover:bg-[#141414]/5 transition-colors">
-                                        <td className="px-4 py-3 font-medium text-[#141414]">{venta.mes}</td>
-                                        <td className="px-4 py-3 text-right font-mono">{formatCurrencyThousands(montoActual)}</td>
+                                        <td className="px-4 py-3 font-medium text-[#141414]">
+                                          {isEditing ? (
+                                            <div className="flex items-center gap-1">
+                                              <RemoveRowButton path={ventasPath} list={ventasMensuales} index={idx} />
+                                              <EditableText path={[...ventasPath, idx, 'mes']} value={venta.mes} />
+                                            </div>
+                                          ) : venta.mes}
+                                        </td>
                                         <td className="px-4 py-3 text-right font-mono">
-                                          {montoAnterior ? formatCurrencyThousands(montoAnterior) : <span className="text-xs opacity-50 italic">Sin información</span>}
+                                          <EditableNumber path={[...ventasPath, idx, 'monto']} value={venta.monto} display={formatCurrencyThousands(montoActual)} required />
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-mono">
+                                          {isEditing ? (
+                                            <EditableNumber path={[...ventasPath, idx, 'monto_anio_anterior']} value={venta.monto_anio_anterior} />
+                                          ) : montoAnterior ? formatCurrencyThousands(montoAnterior) : <span className="text-xs opacity-50 italic">Sin información</span>}
                                         </td>
                                         <td className={`px-4 py-3 text-right font-mono ${varPct !== null ? 'font-bold' : ''} ${varPct !== null && varPct >= 0 ? 'text-emerald-600' : ''} ${varPct !== null && varPct < 0 ? 'text-red-600' : ''}`}>
                                           {varPct !== null ? (
@@ -1093,7 +1331,7 @@ export default function App() {
                                     let montoActual = venta.monto || 0;
                                     let montoAnterior = venta.monto_anio_anterior || 0;
 
-                                    if (isInflationAdjusted) {
+                                    if (isInflationAdjusted && !isEditing) {
                                       const factorMensual = Math.pow(1 + (inflationMensual / 100), i);
                                       const factorInteranual = 1 + (inflationInteranual / 100);
                                       
@@ -1132,14 +1370,25 @@ export default function App() {
                               </tfoot>
                             </table>
                           </div>
+                          <AddRowButton
+                            path={['analisis_post_cierre', 'detalle_ventas_mensuales']}
+                            list={activeResult.extraction.analisis_post_cierre.detalle_ventas_mensuales}
+                            newItem={{ mes: '', monto: 0, monto_anio_anterior: null, moneda: 'ARS' }}
+                            label="Agregar mes"
+                          />
                           
-                          {isInflationAdjusted && (
+                          {isInflationAdjusted && !isEditing && (
                             <div className="mt-4 text-xs italic text-gray-500">
                               * Valores expresados en moneda homogénea del último mes, asumiendo inflación interanual del {inflationInteranual}% y mensual del {inflationMensual}%.
                             </div>
                           )}
                           
-                          {activeResult.extraction.analisis_post_cierre.notas_relevantes && (
+                          {isEditing ? (
+                            <div className="mt-4 text-xs border-t border-[#141414]/10 pt-2">
+                              <span className="font-bold uppercase opacity-60">Nota</span>
+                              <EditableText path={['analisis_post_cierre', 'notas_relevantes']} value={activeResult.extraction.analisis_post_cierre.notas_relevantes} multiline />
+                            </div>
+                          ) : activeResult.extraction.analisis_post_cierre.notas_relevantes && (
                             <div className="mt-2 text-xs opacity-70 italic border-t border-[#141414]/10 pt-2">
                               Nota: {activeResult.extraction.analisis_post_cierre.notas_relevantes}
                             </div>
@@ -1152,7 +1401,7 @@ export default function App() {
                       )}
 
                       {/* Deuda Bancaria Asumida Post Balance */}
-                      {Array.isArray(activeResult.extraction?.analisis_post_cierre?.deuda_bancaria_post_balance_detalle) && activeResult.extraction.analisis_post_cierre.deuda_bancaria_post_balance_detalle.length > 0 && (
+                      {Array.isArray(activeResult.extraction?.analisis_post_cierre?.deuda_bancaria_post_balance_detalle) && (isEditing || activeResult.extraction.analisis_post_cierre.deuda_bancaria_post_balance_detalle.length > 0) && (
                         <div className="bg-white border border-[#141414] p-6 mt-8">
                           <h3 className="text-lg font-semibold text-[#141414] mb-6">DEUDA BANCARIA ASUMIDA POST BALANCE</h3>
                           
@@ -1165,12 +1414,29 @@ export default function App() {
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-[#141414]/10">
-                                {activeResult.extraction.analisis_post_cierre.deuda_bancaria_post_balance_detalle.map((item: any, idx: number) => (
-                                  <tr key={idx} className="hover:bg-[#141414]/5 transition-colors">
-                                    <td className="px-4 py-3 font-medium text-[#141414]">{item.entidad}</td>
-                                    <td className="px-4 py-3 text-right font-mono font-bold">{formatCurrencyThousands(item.monto, item.moneda)}</td>
-                                  </tr>
-                                ))}
+                                {activeResult.extraction.analisis_post_cierre.deuda_bancaria_post_balance_detalle.map((item, idx, list) => {
+                                  const deudaPath: Path = ['analisis_post_cierre', 'deuda_bancaria_post_balance_detalle'];
+                                  return (
+                                    <tr key={idx} className="hover:bg-[#141414]/5 transition-colors">
+                                      <td className="px-4 py-3 font-medium text-[#141414]">
+                                        {isEditing ? (
+                                          <div className="flex items-center gap-1">
+                                            <RemoveRowButton path={deudaPath} list={list} index={idx} />
+                                            <EditableText path={[...deudaPath, idx, 'entidad']} value={item.entidad} />
+                                          </div>
+                                        ) : item.entidad}
+                                      </td>
+                                      <td className="px-4 py-3 text-right font-mono font-bold">
+                                        {isEditing ? (
+                                          <span className="inline-flex items-center gap-2">
+                                            <EditableSelect path={[...deudaPath, idx, 'moneda']} value={item.moneda ?? 'ARS'} options={['ARS', 'USD']} />
+                                            <EditableNumber path={[...deudaPath, idx, 'monto']} value={item.monto} required />
+                                          </span>
+                                        ) : formatCurrencyThousands(item.monto, item.moneda)}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                               <tfoot>
                                 <tr className="bg-[#F0EFED] font-bold text-[#141414]">
@@ -1185,6 +1451,12 @@ export default function App() {
                               </tfoot>
                             </table>
                           </div>
+                          <AddRowButton
+                            path={['analisis_post_cierre', 'deuda_bancaria_post_balance_detalle']}
+                            list={activeResult.extraction.analisis_post_cierre.deuda_bancaria_post_balance_detalle}
+                            newItem={{ entidad: '', monto: 0, moneda: 'ARS' }}
+                            label="Agregar deuda"
+                          />
                         </div>
                       )}
 
@@ -1241,28 +1513,37 @@ export default function App() {
                             <div>
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Score Crediticio</p>
                               <p className="text-xl font-bold font-mono text-[#141414]">
-                                {activeResult.extraction?.extraccion_nosis?.score_crediticio}
+                                <EditableNumber path={['extraccion_nosis', 'score_crediticio']} value={activeResult.extraction?.extraccion_nosis?.score_crediticio} />
                               </p>
                             </div>
                             <div>
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Peor Situación BCRA</p>
                               <p className="text-xl font-bold font-mono text-[#141414]">
-                                Categoría {activeResult.extraction?.extraccion_nosis?.situacion_bcra_peor_estado}
+                                Categoría <EditableNumber path={['extraccion_nosis', 'situacion_bcra_peor_estado']} value={activeResult.extraction?.extraccion_nosis?.situacion_bcra_peor_estado} inputClassName="w-16" />
                               </p>
                             </div>
                             <div>
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Cheques Rechazados</p>
                               <p className="text-xl font-bold font-mono text-[#141414]">
-                                {activeResult.extraction?.extraccion_nosis?.cheques_rechazados_cantidad} cheques
+                                <EditableNumber path={['extraccion_nosis', 'cheques_rechazados_cantidad']} value={activeResult.extraction?.extraccion_nosis?.cheques_rechazados_cantidad} inputClassName="w-20" /> cheques
                               </p>
                               <p className="text-xs opacity-70 mt-1">
-                                por un total de {formatCurrencyThousands(activeResult.extraction?.extraccion_nosis?.cheques_rechazados_monto)}
+                                por un total de{' '}
+                                <EditableNumber
+                                  path={['extraccion_nosis', 'cheques_rechazados_monto']}
+                                  value={activeResult.extraction?.extraccion_nosis?.cheques_rechazados_monto}
+                                  display={formatCurrencyThousands(activeResult.extraction?.extraccion_nosis?.cheques_rechazados_monto)}
+                                />
                               </p>
                             </div>
                             <div>
                               <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Deuda Total Nosis</p>
                               <p className="text-xl font-bold font-mono text-[#141414]">
-                                {formatCurrencyThousands(activeResult.extraction?.extraccion_nosis?.deuda_financiera_total_nosis)}
+                                <EditableNumber
+                                  path={['extraccion_nosis', 'deuda_financiera_total_nosis']}
+                                  value={activeResult.extraction?.extraccion_nosis?.deuda_financiera_total_nosis}
+                                  display={formatCurrencyThousands(activeResult.extraction?.extraccion_nosis?.deuda_financiera_total_nosis)}
+                                />
                               </p>
                               <p className="text-[10px] opacity-50 mt-1">(Expresado en miles)</p>
                             </div>
@@ -1293,11 +1574,27 @@ export default function App() {
                                       const participacion = totalReferencia > 0 ? (((entidad.monto ?? 0) / totalReferencia) * 100).toFixed(1) : "0.0";
                                       return (
                                         <tr key={i} className="hover:bg-[#141414]/5 transition-colors">
-                                          <td className="py-3 font-bold">{entidad.entidad}</td>
-                                          <td className="py-3 text-center font-bold text-[#141414]">{entidad.situacion}</td>
+                                          <td className="py-3 font-bold">
+                                            {isEditing ? (
+                                              <div className="flex items-center gap-1">
+                                                <RemoveRowButton path={['extraccion_nosis', 'detalle_entidades']} list={entidades} index={i} />
+                                                <EditableText path={['extraccion_nosis', 'detalle_entidades', i, 'entidad']} value={entidad.entidad} />
+                                              </div>
+                                            ) : entidad.entidad}
+                                          </td>
+                                          <td className="py-3 text-center font-bold text-[#141414]">
+                                            <EditableNumber path={['extraccion_nosis', 'detalle_entidades', i, 'situacion']} value={entidad.situacion} inputClassName="w-14 text-center" />
+                                          </td>
                                           <td className="py-3">
                                             <div className="flex flex-col gap-1 items-end">
-                                              <span className="font-bold text-[#141414]">{formatCurrencyThousands(entidad.monto)} ({participacion}%)</span>
+                                              {isEditing ? (
+                                                <span className="flex items-center gap-1">
+                                                  <EditableNumber path={['extraccion_nosis', 'detalle_entidades', i, 'monto']} value={entidad.monto} />
+                                                  <span className="text-xs opacity-60">({participacion}%)</span>
+                                                </span>
+                                              ) : (
+                                                <span className="font-bold text-[#141414]">{formatCurrencyThousands(entidad.monto)} ({participacion}%)</span>
+                                              )}
                                               <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden">
                                                 <div className="bg-blue-600 h-full" style={{ width: `${participacion}%` }}></div>
                                               </div>
@@ -1309,6 +1606,12 @@ export default function App() {
                                   })()}
                                 </tbody>
                               </table>
+                              <AddRowButton
+                                path={['extraccion_nosis', 'detalle_entidades']}
+                                list={activeResult.extraction?.extraccion_nosis?.detalle_entidades}
+                                newItem={{ entidad: '', situacion: 1, monto: 0 }}
+                                label="Agregar entidad"
+                              />
                             </div>
                             
                             {/* Pie Chart */}
@@ -1417,8 +1720,11 @@ export default function App() {
                         <h3 className="text-lg font-semibold text-[#141414] mb-6">COMPOSICIÓN SOCIAL / ACCIONISTAS</h3>
                         
                         <ShareholderTable 
+                          basePath={['accionistas_y_directorio', 'accionistas']}
                           accionistas={
-                            Array.isArray(activeResult.extraction?.accionistas_y_directorio?.accionistas) && activeResult.extraction?.accionistas_y_directorio.accionistas.length > 0
+                            isEditing
+                              ? (activeResult.extraction?.accionistas_y_directorio?.accionistas ?? [])
+                              : Array.isArray(activeResult.extraction?.accionistas_y_directorio?.accionistas) && activeResult.extraction?.accionistas_y_directorio.accionistas.length > 0
                               ? activeResult.extraction?.accionistas_y_directorio.accionistas
                               : [
                                   { nombre: 'Inversiones Globales S.A.', dni_cuit: '30-71234567-8', participacion: 52.99, subAccionistas: [
@@ -1442,7 +1748,17 @@ export default function App() {
                         <h3 className="text-base font-semibold text-black mb-6">ÓRGANO DE ADMINISTRACIÓN / DIRECTORIO</h3>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {Array.isArray(activeResult.extraction?.accionistas_y_directorio?.directorio) && activeResult.extraction?.accionistas_y_directorio.directorio.length > 0 ? (
+                          {isEditing ? (
+                            (activeResult.extraction?.accionistas_y_directorio?.directorio ?? []).map((miembro, idx, list) => (
+                              <div key={idx} className="p-4 border border-amber-400/60 bg-[#FAFAFA] rounded-sm flex flex-col gap-2">
+                                <div className="flex items-center gap-1">
+                                  <EditableText path={['accionistas_y_directorio', 'directorio', idx, 'cargo']} value={miembro.cargo} />
+                                  <RemoveRowButton path={['accionistas_y_directorio', 'directorio']} list={list} index={idx} />
+                                </div>
+                                <EditableText path={['accionistas_y_directorio', 'directorio', idx, 'nombre']} value={miembro.nombre} />
+                              </div>
+                            ))
+                          ) : Array.isArray(activeResult.extraction?.accionistas_y_directorio?.directorio) && activeResult.extraction?.accionistas_y_directorio.directorio.length > 0 ? (
                             activeResult.extraction?.accionistas_y_directorio.directorio.map((miembro, idx) => (
                               <div key={idx} className="p-4 border border-[#141414]/10 bg-[#FAFAFA] rounded-sm hover:border-[#141414]/30 transition-colors">
                                 <p className="text-[13px] uppercase tracking-wider text-[#141414]/50 mb-1">{miembro.cargo}</p>
@@ -1474,6 +1790,12 @@ export default function App() {
                             </>
                           )}
                         </div>
+                        <AddRowButton
+                          path={['accionistas_y_directorio', 'directorio']}
+                          list={activeResult.extraction?.accionistas_y_directorio?.directorio}
+                          newItem={{ cargo: '', nombre: '' }}
+                          label="Agregar miembro"
+                        />
                       </div>
                     </div>
                   )}
@@ -2282,5 +2604,6 @@ export default function App() {
 
       
     </div>
+    </EditProvider>
   );
 }

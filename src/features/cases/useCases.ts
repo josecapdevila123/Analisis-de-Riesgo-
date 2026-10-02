@@ -82,6 +82,7 @@ export function useCases(user: User | null, isAuthReady: boolean) {
               crossCheck: parseJSON(data.crossCheck, null),
               verification: parseJSON(data.verification, null),
               marketAnalysis: typeof data.marketAnalysis === 'string' ? data.marketAnalysis : null,
+              editedAt: typeof data.editedAt === 'string' ? data.editedAt : undefined,
               error: data.error,
             });
           });
@@ -149,6 +150,30 @@ export function useCases(user: User | null, isAuthReady: boolean) {
     }
   };
 
+  const saveCaseEdits = async (
+    id: string,
+    edits: Pick<ExtractionResult, 'extraction' | 'ratios' | 'inconsistencias' | 'crossCheck'>,
+    editedAt: string
+  ) => {
+    if (!user) return;
+    const stringifySafe = (v: unknown) => JSON.stringify(v ?? null);
+    try {
+      await setDoc(
+        doc(db, `users/${user.uid}/cases`, id),
+        {
+          extraction: stringifySafe(edits.extraction),
+          ratios: stringifySafe(edits.ratios),
+          inconsistencias: stringifySafe(edits.inconsistencias),
+          crossCheck: stringifySafe(edits.crossCheck),
+          editedAt,
+        },
+        { merge: true }
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}/cases/${id}`);
+    }
+  };
+
   const saveCaseMarketAnalysis = async (id: string, text: string | null) => {
     if (!user) return;
     try {
@@ -197,6 +222,7 @@ export function useCases(user: User | null, isAuthReady: boolean) {
     saveCaseProcessing,
     saveCaseCompleted,
     saveCaseMarketAnalysis,
+    saveCaseEdits,
     saveCaseError,
     removeCase,
   };
