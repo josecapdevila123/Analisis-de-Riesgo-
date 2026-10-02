@@ -250,7 +250,7 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
 
   currentY = addSectionTitle('Información post balance');
   const post = extraction.analisis_post_cierre;
-  if (post && post.total_ventas_post_cierre > 0) {
+  if (post && (post.total_ventas_post_cierre ?? 0) > 0) {
     doc.setFontSize(10);
     doc.text(
       `Total Ventas Post Cierre: ${formatCurrencyThousands(post.total_ventas_post_cierre)}`,
@@ -335,9 +335,10 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
     currentY += 34;
 
     if (nosis.detalle_entidades.length > 0) {
+      const deudaTotalNosis = nosis.deuda_financiera_total_nosis ?? 0;
       const totalRef =
-        nosis.deuda_financiera_total_nosis > 0
-          ? nosis.deuda_financiera_total_nosis
+        deudaTotalNosis > 0
+          ? deudaTotalNosis
           : nosis.detalle_entidades.reduce((acc, e) => acc + (Number(e.monto) || 0), 0);
       const entidadesData = nosis.detalle_entidades.map(e => {
         const monto = Number(e.monto) || 0;
