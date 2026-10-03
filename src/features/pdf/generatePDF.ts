@@ -337,10 +337,12 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
 
   // Mosaico de cifras clave.
   type Tile = { label: string; value: string; sub?: string; subColor?: RGB; accent?: RGB };
-  const tiles = (items: Tile[], perRow = items.length) => {
+  // compact: versión más baja para que el resumen ejecutivo entre en una carilla.
+  const tiles = (items: Tile[], perRow = items.length, compact = false) => {
     const gap = 3;
     const w = (CW - gap * (perRow - 1)) / perRow;
-    const h = 19;
+    const h = compact ? 15.5 : 19;
+    const off = compact ? { label: 4.3, value: 9.6, subBox: 11.6, sub: 13.2 } : { label: 5, value: 11.5, subBox: 14.3, sub: 15.9 };
     for (let i = 0; i < items.length; i += perRow) {
       ensure(h + 4);
       items.slice(i, i + perRow).forEach((t, j) => {
@@ -354,20 +356,20 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
           doc.rect(x, y, 1.4, h, 'F');
         }
         setText(6.5, 'bold', MUTED);
-        text(t.label.toUpperCase(), x + 3.5, y + 5);
-        setText(11.5, 'bold');
+        text(t.label.toUpperCase(), x + 3.5, y + off.label);
+        setText(compact ? 10.5 : 11.5, 'bold');
         const value = doc.splitTextToSize(pdfSafe(t.value), w - 6)[0];
-        text(value, x + 3.5, y + 11.5);
+        text(value, x + 3.5, y + off.value);
         if (t.sub) {
           if (t.subColor) {
             doc.setFillColor(...t.subColor);
-            doc.rect(x + 3.5, y + 14.3, 1.6, 1.6, 'F');
+            doc.rect(x + 3.5, y + off.subBox, 1.6, 1.6, 'F');
           }
           setText(7, 'normal', MUTED);
-          text(t.sub, x + (t.subColor ? 6.2 : 3.5), y + 15.9);
+          text(t.sub, x + (t.subColor ? 6.2 : 3.5), y + off.sub);
         }
       });
-      y += h + 4;
+      y += h + (compact ? 3 : 4);
     }
   };
 
@@ -478,6 +480,117 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
   }
   const tocY = Math.max(y + 6, 200);
 
+  const esp = extraction.ejercicio_actual.estado_situacion_patrimonial;
+  const er = extraction.ejercicio_actual.estado_resultados;
+  const espAnt = extraction.ejercicio_anterior?.estado_situacion_patrimonial;
+  const erAnt = extraction.ejercicio_anterior?.estado_resultados;
+  const varSub = (actual: number | null | undefined, anterior: number | null | undefined): Pick<Tile, 'sub' | 'subColor'> => {
+    const t = getVariationText(actual ?? null, anterior ?? null);
+    if (t === '-') return {};
+    return { sub: `${t} interanual`, subColor: t.startsWith('-') ? STATUS_RGB.critical : STATUS_RGB.good };
+  };
+
+  // ======================================================================
+  // RESUMEN EJECUTIVO: una carilla con lo más importante del análisis
+  // ======================================================================
+
+  sectionTitle('Resumen ejecutivo');
+  {
+    const history = activeResult.companyHistory;
+    subheading('Qué hace la empresa');
+    const core = history?.core_business || company.activity || 'Sin descripción de la actividad.';
+    setText(9);
+    const coreLines = doc.splitTextToSize(pdfSafe(stripMarkdown(core)), CW) as string[];
+    paragraph(coreLines.length > 4 ? `${coreLines.slice(0, 4).join(' ').replace(/\s+\S*$/, '')}…` : core, 9);
+
+    subheading('Cifras clave (miles de $)');
+    const meses = (extraction.analisis_post_cierre?.detalle_ventas_mensuales ?? []).filter(v => v.monto_anio_anterior);
+    const postAct = meses.reduce((a, v) => a + v.monto, 0);
+    const postAnt = meses.reduce((a, v) => a + (v.monto_anio_anterior ?? 0), 0);
+    const ventasPost = extraction.analisis_post_cierre?.total_ventas_post_cierre ?? null;
+    tiles([
+      { label: 'Ventas netas', value: money(er.ventas_netas), ...varSub(er.ventas_netas, erAnt?.ventas_netas) },
+      { label: 'EBITDA', value: money(ratios.ebitda.actual), sub: `Margen ${fmtRatio(ratios.margen_ebitda.actual, 'pct')}` },
+      { label: 'Resultado neto', value: money(er.resultado_neto), sub: `Margen ${fmtRatio(ratios.margen_neto.actual, 'pct')}` },
+    ], 3, true);
+    const deudaVar = ratios.deuda_bancaria_total.variacion_pct;
+    tiles([
+      {
+        label: 'Deuda bancaria', value: money(ratios.deuda_bancaria_total.actual),
+        ...(deudaVar === null ? {} : { sub: `${deudaVar > 0 ? '+' : ''}${fmtNum(deudaVar, 1)}% interanual`, subColor: deudaVar > 0 ? STATUS_RGB.critical : STATUS_RGB.good }),
+      },
+      { label: 'Patrimonio neto', value: money(esp.patrimonio_neto), ...varSub(esp.patrimonio_neto, espAnt?.patrimonio_neto) },
+      {
+        label: 'Ventas post balance', value: ventasPost ? money(ventasPost) : '-',
+        ...(postAnt > 0 ? varSub(postAct, postAnt) : { sub: ventasPost ? 'Sin comparativo' : 'Sin información' }),
+      },
+    ], 3, true);
+
+    subheading('Indicadores clave');
+    const claves: Array<{ key: RatioKey; label: string; kind: RatioKind }> = [
+      { key: 'dscr', label: 'DSCR', kind: 'x' },
+      { key: 'deuda_neta_ebitda', label: 'Deuda neta / EBITDA', kind: 'x' },
+      { key: 'cobertura_intereses', label: 'Cobertura intereses', kind: 'x' },
+      { key: 'calidad_ganancia', label: 'Calidad ganancia', kind: 'pct' },
+      { key: 'liquidez_corriente', label: 'Liquidez corriente', kind: 'x' },
+      { key: 'liquidez_acida', label: 'Prueba ácida', kind: 'x' },
+      { key: 'solvencia', label: 'Solvencia', kind: 'x' },
+      { key: 'roe', label: 'ROE', kind: 'pct' },
+    ];
+    tiles(claves.map(({ key, label, kind }) => {
+      const r = ratios[key];
+      const st = r?.status ?? null;
+      return {
+        label,
+        value: fmtRatio(r?.actual ?? null, kind),
+        sub: `Ant. ${fmtRatio(r?.anterior ?? null, kind)}${st ? ` · ${RATIO_STATUS_LABEL[st]}` : ''}`,
+        accent: st ? RATIO_STATUS_RGB[st] : undefined,
+      };
+    }), 4, true);
+
+    const nosisR = extraction.extraccion_nosis;
+    if (nosisR) {
+      subheading('Sistema financiero');
+      const cc = activeResult.crossCheck;
+      tiles([
+        { label: 'Score Nosis', value: nosisR.score_crediticio === null ? '-' : String(nosisR.score_crediticio), sub: risk?.pce_proxy != null ? `Pérdida esperada ${risk.pce_proxy}/100` : undefined },
+        {
+          label: 'Situación BCRA', value: `Hoy ${nosisR.situacion_bcra_peor_estado ?? '-'}`,
+          sub: nosisR.peor_situacion_24_meses != null ? `Peor en 24 meses: ${nosisR.peor_situacion_24_meses}` : undefined,
+          accent: situacionRGB(Math.max(nosisR.situacion_bcra_peor_estado ?? 1, nosisR.peor_situacion_24_meses ?? 1)) ?? undefined,
+        },
+        { label: 'Cheques rechazados', value: String(nosisR.cheques_rechazados_cantidad ?? 0), accent: (nosisR.cheques_rechazados_cantidad ?? 0) > 0 ? STATUS_RGB.serious : undefined },
+        {
+          label: 'Deuda balance vs Nosis', value: cc?.nosis_debt != null ? (cc.match ? 'Consistente' : 'Discrepancia') : 'Sin dato',
+          sub: cc?.nosis_debt != null ? `${money(cc.balance_debt)} vs ${money(cc.nosis_debt)}` : undefined,
+          accent: cc?.nosis_debt != null ? (cc.match ? STATUS_RGB.good : STATUS_RGB.critical) : undefined,
+        },
+      ], 4, true);
+    }
+
+    if (risk) {
+      const top = risk.opinion.riesgos.slice(0, 4);
+      if (top.length > 0) {
+        subheading('Principales riesgos');
+        table({
+          startY: y,
+          body: top.map(r => [SEVERIDAD_LABEL[r.severidad], r.titulo]),
+          columnStyles: { 0: { cellWidth: 20, fontStyle: 'bold' }, 1: { cellWidth: CW - 20 } },
+          didParseCell: data => {
+            if (data.section === 'body' && data.column.index === 0) {
+              const sev = top[data.row.index]?.severidad;
+              if (sev) data.cell.styles.fillColor = tint(SEVERIDAD_RGB[sev], 0.35);
+            }
+          },
+        });
+      }
+      if (risk.opinion.condiciones_sugeridas.length > 0) {
+        subheading('Condiciones sugeridas');
+        bullets(risk.opinion.condiciones_sugeridas.slice(0, 3));
+      }
+    }
+  }
+
   // ======================================================================
   // 1. OPINIÓN DE RIESGOS
   // ======================================================================
@@ -571,7 +684,7 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
   // ======================================================================
 
   const verification = activeResult.verification;
-  sectionTitle('Resumen ejecutivo');
+  sectionTitle('Síntesis del análisis');
   if (verification?.executive_summary) {
     paragraphs(stripRiskConclusion(verification.executive_summary));
     if (verification.alertas_coherencia.length > 0) {
@@ -637,15 +750,6 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
   // ======================================================================
 
   sectionTitle('Estados contables y ratios');
-  const esp = extraction.ejercicio_actual.estado_situacion_patrimonial;
-  const er = extraction.ejercicio_actual.estado_resultados;
-  const espAnt = extraction.ejercicio_anterior?.estado_situacion_patrimonial;
-  const erAnt = extraction.ejercicio_anterior?.estado_resultados;
-  const varSub = (actual: number | null | undefined, anterior: number | null | undefined): Pick<Tile, 'sub' | 'subColor'> => {
-    const t = getVariationText(actual ?? null, anterior ?? null);
-    if (t === '-') return {};
-    return { sub: `${t} interanual`, subColor: t.startsWith('-') ? STATUS_RGB.critical : STATUS_RGB.good };
-  };
   tiles([
     { label: 'Ventas netas', value: money(er.ventas_netas), ...varSub(er.ventas_netas, erAnt?.ventas_netas) },
     { label: 'EBITDA', value: money(ratios.ebitda.actual), ...varSub(ratios.ebitda.actual, ratios.ebitda.anterior) },
