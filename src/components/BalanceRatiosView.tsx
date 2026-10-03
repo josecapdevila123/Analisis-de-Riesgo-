@@ -215,13 +215,15 @@ function Statement({ title, sections, extraction, ratios, base, baseLabel, verti
 
 // ---------- Vista ----------
 
-export function BalanceRatiosView({ extraction, ratios, perfil = perfilEfectivo('generico'), pendienteRubro = false, documentos = [] }: {
+export function BalanceRatiosView({ extraction, ratios, perfil = perfilEfectivo('generico'), pendienteRubro = false, documentos = [], cabecera = null }: {
   extraction: RawExtraction;
   ratios: ComputedRatios;
   // Perfil del rubro (umbrales, "no aplica" y KPIs prioritarios) y portón.
   perfil?: PerfilEfectivo;
   pendienteRubro?: boolean;
   documentos?: DocumentoSectorial[];
+  // Recuadro "Perfil de evaluación" (con qué criterios se miden estos ratios).
+  cabecera?: React.ReactNode;
 }) {
   const { editing } = useEdit();
   const [verticalSelected, setVertical] = useState(false);
@@ -241,6 +243,7 @@ export function BalanceRatiosView({ extraction, ratios, perfil = perfilEfectivo(
 
   return (
     <div className="@container space-y-6 font-sans">
+      {cabecera}
       {/* Estados contables */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>

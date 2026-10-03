@@ -82,6 +82,7 @@ import { indicadoresFinancieros } from './features/ratios/financieras';
 import { DocumentoSectorial, ExtraccionDocumento, fechaDeExtraccion, MAX_DOCUMENTOS_POR_CASO } from './features/sectorDocs/tipos';
 import { runFinancialBlockExtraction, runSectorDocExtraction } from './features/extraction/geminiClient';
 import { SectorBanner } from './components/SectorBanner';
+import { PerfilAviso } from './components/PerfilAviso';
 import { stripRiskConclusion } from './features/risk/summary';
 import { CATEGORY_LABEL } from './features/risk/score';
 
@@ -282,6 +283,17 @@ export default function App() {
       return { ...storedResult, extraction };
     }
   }, [storedResult, isEditing, draft, perfilVista, sectorActivo, documentosActivos]);
+
+  // Pre-chequeo antes de la opinión (todos los rubros), con el rubro confirmado.
+  const prechequeo = useMemo(
+    () => (porton.rubroConfirmado && activeResult?.extraction
+      ? armarPrechequeo({
+          extraction: activeResult.extraction, ratios: activeResult.ratios, crossCheck: activeResult.crossCheck,
+          inconsistencias: activeResult.inconsistencias, documentos: documentosActivos, fechaCaso: activeResult.timestamp, perfil: perfilVista,
+        })
+      : null),
+    [porton.rubroConfirmado, activeResult, documentosActivos, perfilVista],
+  );
 
   const startEditing = () => {
     if (!storedResult?.extraction) return;
@@ -1166,25 +1178,12 @@ export default function App() {
                       bloqueadoPorEdicion={isEditing}
                       onConfirmar={(rubro, motivo, nota, sub) => storedResult && confirmSector(storedResult, rubro, motivo, nota, sub)}
                       onGenerarOpinion={() => storedResult && generateRiskAssessment(storedResult)}
+                      prechequeo={prechequeo ? {
+                        faltantes: prechequeo.base.filter(i => !i.ok).length + prechequeo.documentosRubro.filter(d => d.recomendado && d.cargados.length === 0).length + (prechequeo.bloqueFinanciero.requerido && !prechequeo.bloqueFinanciero.cargado ? 1 : 0),
+                        alertas: prechequeo.alertas.length,
+                      } : null}
+                      onVerPrechequeo={() => setActiveTab('Opinión de riesgos')}
                     />
-                  )}
-                  {porton.rubroConfirmado && storedResult?.extraction && activeResult.ratios && (
-                    <div className="@container">
-                      <PreChequeo
-                        prechequeo={armarPrechequeo({
-                          extraction: activeResult.extraction, ratios: activeResult.ratios, crossCheck: activeResult.crossCheck,
-                          inconsistencias: activeResult.inconsistencias, documentos: documentosActivos, fechaCaso: activeResult.timestamp, perfil: perfilVista,
-                        })}
-                        documentos={documentosActivos}
-                        fechaCaso={activeResult.timestamp}
-                        extrayendoBloque={extrayendoBloqueId === activeResult.id}
-                        balanceEnSesion={archivosSesion.current.has(activeResult.id)}
-                        onCargarDocumento={(tipo, file) => storedResult && cargarDocumento(storedResult, tipo, file)}
-                        onEditarDocumento={(id, ext) => storedResult && editarDocumento(storedResult, id, ext)}
-                        onBorrarDocumento={id => storedResult && borrarDocumento(storedResult, id)}
-                        onExtraerBloque={files => storedResult && extraerBloqueFinanciero(storedResult, files)}
-                      />
-                    </div>
                   )}
                 <div className="flex flex-col md:flex-row gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                   {/* Sidebar */}
@@ -1252,7 +1251,25 @@ export default function App() {
 
                     {activeTab === 'Balance y Ratios' && (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        {activeResult.ratios && <BalanceRatiosView extraction={activeResult.extraction} ratios={activeResult.ratios} perfil={perfilVista} pendienteRubro={!porton.rubroConfirmado} documentos={documentosActivos.filter(d => d.estado === 'ok')} />}
+                        {activeResult.ratios && (
+                          <BalanceRatiosView
+                            extraction={activeResult.extraction}
+                            ratios={activeResult.ratios}
+                            perfil={perfilVista}
+                            pendienteRubro={!porton.rubroConfirmado}
+                            documentos={documentosActivos.filter(d => d.estado === 'ok')}
+                            cabecera={porton.rubroConfirmado ? (
+                              <PerfilAviso
+                                perfil={perfilVista}
+                                sector={porton.opinion === 'vigente' && activeResult.riskAssessment?.sector ? activeResult.riskAssessment.sector : sectorActivo}
+                                mora={perfilVista.modelo === 'financiera' && activeResult.extraction
+                                  ? indicadoresFinancieros(activeResult.extraction, documentosActivos.filter(d => d.estado === 'ok'), { disponibilidades: disponibilidadesActuales(activeResult.extraction) }).mora
+                                  : null}
+                                documentos={documentosActivos}
+                              />
+                            ) : null}
+                          />
+                        )}
                         {isEditing && activeResult.extraction && <SourceDataEditor extraction={activeResult.extraction} />}
                       </div>
                     )}
@@ -1325,7 +1342,22 @@ export default function App() {
                   )}
 
                   {activeTab === 'Opinión de riesgos' && (
-                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+                      {prechequeo && storedResult && (
+                        <div className="@container">
+                          <PreChequeo
+                            prechequeo={prechequeo}
+                            documentos={documentosActivos}
+                            fechaCaso={activeResult.timestamp}
+                            extrayendoBloque={extrayendoBloqueId === activeResult.id}
+                            balanceEnSesion={archivosSesion.current.has(activeResult.id)}
+                            onCargarDocumento={(tipo, file) => cargarDocumento(storedResult, tipo, file)}
+                            onEditarDocumento={(id, ext) => editarDocumento(storedResult, id, ext)}
+                            onBorrarDocumento={id => borrarDocumento(storedResult, id)}
+                            onExtraerBloque={files => extraerBloqueFinanciero(storedResult, files)}
+                          />
+                        </div>
+                      )}
                       <RiskOpinionView
                         assessment={activeResult.riskAssessment ?? null}
                         isGenerating={riskBusyId === activeResult.id}

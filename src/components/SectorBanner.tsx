@@ -13,9 +13,12 @@ type Props = {
   bloqueadoPorEdicion: boolean;
   onConfirmar: (rubro: RubroDisponible, motivo: string, nota: string, subsegmento: SubSegmento | null) => void;
   onGenerarOpinion: () => void;
+  // Resumen del pre-chequeo (vive en la pestaña Opinión de riesgos).
+  prechequeo?: { faltantes: number; alertas: number } | null;
+  onVerPrechequeo?: () => void;
 };
 
-export function SectorBanner({ sector, porton, generando, bloqueadoPorEdicion, onConfirmar, onGenerarOpinion }: Props) {
+export function SectorBanner({ sector, porton, generando, bloqueadoPorEdicion, onConfirmar, onGenerarOpinion, prechequeo, onVerPrechequeo }: Props) {
   const [editando, setEditando] = useState(!sector.confirmado);
   const [elegido, setElegido] = useState<RubroDisponible | null>(sector.confirmado ?? sector.sugerido ?? null);
   const [motivo, setMotivo] = useState(sector.motivoCambio ?? '');
@@ -50,7 +53,14 @@ export function SectorBanner({ sector, porton, generando, bloqueadoPorEdicion, o
           </button>
         </div>
         {porton.opinion === 'desactualizada' && (
-          <span className="text-xs font-medium text-ink bg-brand-blue/10 px-2 py-1 rounded-sm">Opinión desactualizada: cambió el rubro</span>
+          <span className="text-xs font-medium text-ink bg-brand-blue/10 px-2 py-1 rounded-sm">Opinión desactualizada</span>
+        )}
+        {prechequeo && onVerPrechequeo && (
+          <button onClick={onVerPrechequeo} className="text-xs text-ink/60 hover:text-ink underline underline-offset-2">
+            Pre-chequeo: {prechequeo.faltantes === 0 && prechequeo.alertas === 0
+              ? 'todo en orden'
+              : [prechequeo.faltantes ? `${prechequeo.faltantes} faltante${prechequeo.faltantes === 1 ? '' : 's'}` : null, prechequeo.alertas ? `${prechequeo.alertas} alerta${prechequeo.alertas === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ')}
+          </button>
         )}
         <button
           onClick={onGenerarOpinion}
