@@ -131,12 +131,21 @@ const DIMS: Array<{ dimension: RiskDimension; puntaje: number | null }> = [
   { dimension: 'calidad_informacion', puntaje: 20 },
 ];
 
+const RATIOS_ORIGINALES = [
+  'ebitda', 'liquidez_corriente', 'liquidez_acida', 'liquidez_inmediata', 'solvencia', 'endeudamiento',
+  'capital_de_trabajo', 'ktno', 'margen_bruto', 'margen_ebitda', 'margen_neto', 'cobertura_intereses',
+  'deuda_bancaria_total', 'deuda_ebitda', 'deuda_dias_ventas', 'dias_de_cobro', 'dias_de_pago', 'dias_de_stock',
+  'ciclo_conversion_caja', 'indice_inmovilizacion', 'autofinanciamiento', 'roe', 'roa', 'deuda_neta_ebitda',
+  'dscr', 'calidad_ganancia', 'deuda_financiera_pn',
+];
+
 const foto = (e: RawExtraction) => {
   const ratios = computeRatios(e);
   const senales = detectSignals({ extraction: e, ratios, inconsistencias: runSanityChecks(e), crossCheck: runCrossCheck(e) });
   const pisos = senales.filter(s => s.piso !== null).map(s => ({ piso: s.piso as number, motivo: s.titulo }));
   return {
-    semaforos: Object.fromEntries(Object.entries(ratios).map(([k, r]) => [k, r.status])),
+    // Solo los 27 ratios que existían antes de los perfiles (los KPIs sectoriales no tienen semáforo).
+    semaforos: Object.fromEntries(Object.entries(ratios).filter(([k]) => RATIOS_ORIGINALES.includes(k)).map(([k, r]) => [k, r.status])),
     senales: senales.map(s => ({ id: s.id, dimension: s.dimension, severidad: s.severidad, piso: s.piso, titulo: s.titulo, detalle: s.detalle })),
     puntaje: aggregateScore(DIMS, pisos),
   };

@@ -1,4 +1,5 @@
 import type { RiskDimension, SeveridadRiesgo } from '../extraction/schemas';
+import type { RatioKey } from '../ratios/calculations';
 
 // ============================================================================
 // POLÍTICA DE RIESGOS — fuente única de umbrales, pisos, pesos y tramos.
@@ -10,6 +11,24 @@ import type { RiskDimension, SeveridadRiesgo } from '../extraction/schemas';
 // ============================================================================
 
 export const POLICY_STATUS = 'Propuesta inicial — pendiente de validación por Riesgos';
+
+// Versión de la política (semver). Un test compara un hash de umbrales, señales,
+// pesos y perfiles: si cambian, hay que subir la versión y anotar el cambio acá.
+// Los casos evaluados guardan la versión y el perfil con el que se evaluaron.
+export const POLICY_VERSION = '2.0.0';
+
+export const POLICY_CHANGELOG: Array<{ version: string; fecha: string; cambios: string[] }> = [
+  {
+    version: '2.0.0',
+    fecha: '2026-10-03',
+    cambios: [
+      'Perfiles por rubro (agro, comercio, industria, construcción, servicios) sobre la base genérica, con confirmación del analista.',
+      'Margen EBITDA con semáforo (genérico: sano > 10%, alerta ≥ 5%). Sin señal nueva: no cambia el puntaje.',
+      'KPIs sectoriales calculados desde los EECC.',
+    ],
+  },
+  { version: '1.0.0', fecha: '2026-05-01', cambios: ['Política única para todas las empresas (propuesta inicial).'] },
+];
 
 // ---------- Semáforo de ratios ----------
 // mayor = mejor: sano si valor > sano; alerta si valor ≥ alerta; si no, crítico.
@@ -33,6 +52,8 @@ export const RATIO_THRESHOLDS = {
   cobertura_intereses: { label: 'Cobertura de intereses (EBITDA / intereses)', mejorSi: 'mayor', sano: 3, alerta: 1.5, unidad: 'x' },
   dscr: { label: 'DSCR', mejorSi: 'mayor', sano: 1.25, alerta: 1.0, unidad: 'x', nota: 'Indicador principal: si el flujo alcanza para pagar intereses y capital.' },
   calidad_ganancia: { label: 'Calidad de la ganancia (FCO / EBITDA)', mejorSi: 'mayor', sano: 0.7, alerta: 0.6, unidad: '%', nota: 'Debajo de 60–70%, el EBITDA queda atrapado en capital de trabajo.' },
+  // Solo semáforo: no hay señal asociada, no cambia el puntaje.
+  margen_ebitda: { label: 'Margen EBITDA', mejorSi: 'mayor', sano: 0.1, alerta: 0.05, unidad: '%' },
 } as const satisfies Record<string, RatioThreshold>;
 
 export type RatioWithThreshold = keyof typeof RATIO_THRESHOLDS;
@@ -207,3 +228,248 @@ export const PROJECTION_PARAMS = {
   // DSCR que tiene que mantenerse para calcular el margen para deuda nueva.
   dscrObjetivoDeudaNueva: RATIO_THRESHOLDS.dscr.sano,
 } as const;
+
+// ============================================================================
+// PERFILES POR RUBRO
+// El analista confirma el rubro; el perfil efectivo es el genérico (todo lo de
+// arriba) más los overrides del rubro. "generico" no cambia nada: da exactamente
+// los resultados de la política única (test de regresión).
+//
+// ESTADO: propuesta pendiente de validación por Riesgos (umbrales, KPIs y textos).
+// ============================================================================
+
+// 'financiera' queda reservado para el prompt 3 (todavía sin perfil).
+export type RubroId = 'generico' | 'agro' | 'comercio' | 'industria' | 'construccion' | 'servicios' | 'financiera';
+export type RubroDisponible = Exclude<RubroId, 'financiera'>;
+export const RUBROS: RubroDisponible[] = ['generico', 'agro', 'comercio', 'industria', 'construccion', 'servicios'];
+
+// SIGNAL_PARAMS con los números "abiertos" (no literales) para poder sobrescribirlos.
+type Abrir<T> = T extends number ? number : T extends string ? T : { -readonly [K in keyof T]: Abrir<T[K]> };
+export type SignalParams = Abrir<typeof SIGNAL_PARAMS>;
+type ParcialProfundo<T> = { [K in keyof T]?: T[K] extends object ? ParcialProfundo<T[K]> : T[K] };
+
+// Señales que se pueden desactivar por rubro (ids de signals.ts) y el ratio del
+// que dependen: si el ratio "no aplica", su señal tampoco suma.
+export const SENAL_DE_RATIO: Partial<Record<RatioKey, string>> = {
+  liquidez_acida: 'prueba_acida_baja',
+  calidad_ganancia: 'calidad_ganancia_baja',
+  liquidez_corriente: 'liquidez_corriente_baja',
+  deuda_neta_ebitda: 'deuda_neta_ebitda_alta',
+  cobertura_intereses: 'cobertura_baja',
+};
+
+export type SectorProfile = {
+  label: string;
+  descripcion: string;
+  variableCritica: string;
+  // Orden en que la opinión tiene que leer los indicadores.
+  kpisPrioritarios: RatioKey[];
+  preguntasClave: string[];
+  umbrales?: Partial<Record<RatioWithThreshold, { sano?: number; alerta?: number; nota?: string }>>;
+  noAplica?: Partial<Record<RatioKey, string>>; // ratio → motivo
+  senales?: ParcialProfundo<SignalParams>;
+  senalesDesactivadas?: Array<{ id: string; motivo: string }>;
+  pesos?: Partial<Record<RiskDimension, number>>; // el resultado tiene que sumar 100
+  ajustes?: {
+    // Construcción: liquidez corriente y pasivo / PN sin anticipos de clientes.
+    excluirAnticiposClientes?: boolean;
+    // Agro: el semáforo del margen EBITDA usa el promedio de los 2 ejercicios.
+    margenEbitdaPromedio?: boolean;
+  };
+  // Preparado para el prompt 2 (documentos propios del rubro).
+  documentosSectoriales?: Array<{ id: string; label: string; obligatorio: boolean }>;
+};
+
+const KPIS_GENERICO: RatioKey[] = [
+  'dscr', 'deuda_neta_ebitda', 'cobertura_intereses', 'calidad_ganancia',
+  'liquidez_corriente', 'liquidez_acida', 'solvencia', 'roe',
+];
+
+export const SECTOR_PROFILES: Record<RubroDisponible, SectorProfile> = {
+  generico: {
+    label: 'Genérico',
+    descripcion: 'Criterios generales, sin ajustes por rubro. Es la política única anterior a los perfiles.',
+    variableCritica: 'Capacidad de pago: que el flujo operativo alcance para intereses y capital.',
+    kpisPrioritarios: KPIS_GENERICO,
+    preguntasClave: [
+      '¿El flujo operativo alcanza para pagar intereses y capital (DSCR)?',
+      '¿La deuda crece más rápido que las ventas o el EBITDA?',
+      '¿La liquidez permite afrontar los vencimientos de corto plazo?',
+    ],
+  },
+  agro: {
+    label: 'Agropecuario',
+    descripcion: 'Producción agrícola y ganadera. Ciclo anual atado a la cosecha; el stock de granos y hacienda funciona casi como caja.',
+    variableCritica: 'Rinde (clima) × precio de los granos × costo de arrendamiento.',
+    kpisPrioritarios: ['liquidez_corriente', 'bienes_cambio_deuda_cp', 'deuda_bancaria_ventas', 'deuda_cp_share', 'margen_ebitda_promedio'],
+    preguntasClave: [
+      '¿La deuda de corto plazo está cubierta por el stock de granos o hacienda?',
+      '¿El vencimiento de la deuda calza con la cosecha?',
+      '¿Qué pasa con una campaña mala (rinde o precio)?',
+    ],
+    umbrales: {
+      deuda_ebitda: { sano: 3, alerta: 4.5 },
+      deuda_neta_ebitda: { sano: 3, alerta: 4.5 },
+    },
+    noAplica: {
+      liquidez_acida: 'Granos y hacienda son casi caja: excluirlos del activo corriente distorsiona la liquidez.',
+      calidad_ganancia: 'La retención de granos como reserva de valor baja el flujo operativo sin ser un problema de cobro.',
+    },
+    senales: { deuda: { cortoPlazoShare: 0.9 }, liquidez: { ciclosDiasAumento: 60 } },
+    ajustes: { margenEbitdaPromedio: true },
+  },
+  comercio: {
+    label: 'Comercio y distribución',
+    descripcion: 'Compra y venta de bienes, mayorista o minorista. Margen chico y rotación alta: el capital de trabajo es el negocio.',
+    variableCritica: 'El consumo y el crédito que da a sus clientes.',
+    kpisPrioritarios: ['dias_de_stock', 'dias_de_cobro', 'dias_de_pago', 'ciclo_conversion_caja', 'margen_bruto', 'margen_ebitda', 'deuda_comercial_bancaria'],
+    preguntasClave: [
+      '¿El ciclo de caja se está alargando?',
+      '¿Financia a sus clientes con deuda bancaria?',
+      '¿El margen aguanta una caída de volumen?',
+    ],
+    umbrales: {
+      liquidez_acida: { sano: 0.8, alerta: 0.5 },
+      deuda_ebitda: { sano: 2, alerta: 3 },
+      deuda_neta_ebitda: { sano: 2, alerta: 3 },
+      margen_ebitda: { sano: 0.05, alerta: 0.02 },
+    },
+    senales: { deuda: { pasivoPnMedia: 4, pasivoPnAlta: 6 }, liquidez: { ciclosDiasAumento: 20 } },
+  },
+  industria: {
+    label: 'Industria',
+    descripcion: 'Fabricación y transformación. Intensiva en capital: importa si reinvierte y cuánto depende de insumos y del tipo de cambio.',
+    variableCritica: 'Costo de insumos / tipo de cambio y competencia importada.',
+    kpisPrioritarios: ['margen_bruto', 'margen_ebitda', 'dscr', 'deuda_ebitda', 'capex_depreciacion', 'deuda_me_share'],
+    preguntasClave: [
+      '¿Reinvierte o consume sus activos (capex vs. depreciación)?',
+      '¿Tiene deuda en dólares sin ingresos en dólares?',
+      '¿El margen viene cayendo?',
+    ],
+    umbrales: {
+      deuda_ebitda: { sano: 3, alerta: 4.5 },
+      deuda_neta_ebitda: { sano: 3, alerta: 4.5 },
+    },
+  },
+  construccion: {
+    label: 'Construcción',
+    descripcion: 'Obras públicas y privadas. Se financia con anticipos y certificados: la liquidez se mide sin los anticipos de clientes.',
+    variableCritica: 'Continuidad de la obra y cobro de certificados.',
+    kpisPrioritarios: ['dias_de_cobro', 'liquidez_corriente_sin_anticipos', 'anticipos_ventas', 'margen_ebitda', 'deuda_neta_ebitda'],
+    preguntasClave: [
+      '¿Depende de anticipos de clientes para financiarse?',
+      '¿Cuánto tarda en cobrar los certificados?',
+      '¿Qué pasa si se frena una obra grande?',
+    ],
+    umbrales: { margen_ebitda: { sano: 0.08, alerta: 0.04 } },
+    senales: { deuda: { cortoPlazoShare: 0.8 }, liquidez: { ciclosDiasAumento: 45 } },
+    ajustes: { excluirAnticiposClientes: true },
+  },
+  servicios: {
+    label: 'Servicios',
+    descripcion: 'Prestación de servicios con pocos activos. El respaldo es el flujo y la cartera de clientes, no el patrimonio.',
+    variableCritica: 'Clientes y contratos.',
+    kpisPrioritarios: ['margen_ebitda', 'dscr', 'calidad_ganancia', 'dias_de_cobro', 'pn_activo'],
+    preguntasClave: [
+      '¿Depende de pocos clientes?',
+      '¿Qué respaldo patrimonial tiene, con pocos activos?',
+      '¿El flujo es recurrente (contratos, abonos)?',
+    ],
+    umbrales: {
+      deuda_ebitda: { sano: 2, alerta: 3 },
+      deuda_neta_ebitda: { sano: 2, alerta: 3 },
+      margen_ebitda: { sano: 0.15, alerta: 0.08 },
+    },
+    pesos: { negocio_mercado: 15, liquidez_solvencia: 10 },
+  },
+};
+
+// Perfil efectivo: genérico + overrides del rubro. Es lo que usan cálculos,
+// señales y puntaje, y lo que se guarda como foto en el caso evaluado.
+export type PerfilEfectivo = {
+  rubro: RubroDisponible;
+  version: string;
+  label: string;
+  descripcion: string;
+  variableCritica: string;
+  kpisPrioritarios: RatioKey[];
+  preguntasClave: string[];
+  umbrales: Record<RatioWithThreshold, RatioThreshold>;
+  noAplica: Partial<Record<RatioKey, string>>;
+  senales: SignalParams;
+  senalesDesactivadas: Array<{ id: string; motivo: string }>;
+  pesos: Record<RiskDimension, number>;
+  ajustes: NonNullable<SectorProfile['ajustes']>;
+};
+
+const fusionar = <T>(base: T, over: unknown): T => {
+  if (over === undefined || over === null || typeof over !== 'object') return (over === undefined ? base : over) as T;
+  const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
+  for (const [k, v] of Object.entries(over as Record<string, unknown>)) {
+    out[k] = typeof v === 'object' && v !== null && !Array.isArray(v) ? fusionar(out[k], v) : v;
+  }
+  return out as T;
+};
+
+export function perfilEfectivo(rubro: RubroDisponible = 'generico'): PerfilEfectivo {
+  const p = SECTOR_PROFILES[rubro];
+  const umbrales = Object.fromEntries(
+    (Object.keys(RATIO_THRESHOLDS) as RatioWithThreshold[]).map(k => [k, { ...RATIO_THRESHOLDS[k], ...(p.umbrales?.[k] ?? {}) }]),
+  ) as Record<RatioWithThreshold, RatioThreshold>;
+  const noAplica = { ...(p.noAplica ?? {}) };
+  const desactivadas = [
+    ...Object.entries(noAplica).flatMap(([ratio, motivo]) => {
+      const id = SENAL_DE_RATIO[ratio as RatioKey];
+      return id ? [{ id, motivo: `${RATIO_LABEL_CORTO[ratio as RatioKey] ?? ratio} no aplica: ${motivo}` }] : [];
+    }),
+    ...(p.senalesDesactivadas ?? []),
+  ];
+  const pesos = Object.fromEntries(
+    (Object.keys(DIMENSION_WEIGHTS) as RiskDimension[]).map(d => [d, p.pesos?.[d] ?? DIMENSION_WEIGHTS[d].weight]),
+  ) as Record<RiskDimension, number>;
+  return {
+    rubro,
+    version: POLICY_VERSION,
+    label: p.label,
+    descripcion: p.descripcion,
+    variableCritica: p.variableCritica,
+    kpisPrioritarios: [...p.kpisPrioritarios],
+    preguntasClave: [...p.preguntasClave],
+    umbrales,
+    noAplica,
+    senales: fusionar(JSON.parse(JSON.stringify(SIGNAL_PARAMS)) as SignalParams, p.senales),
+    senalesDesactivadas: desactivadas,
+    pesos,
+    ajustes: { ...(p.ajustes ?? {}) },
+  };
+}
+
+// Nombres cortos de los ratios para avisos y para la página de política.
+export const RATIO_LABEL_CORTO: Partial<Record<RatioKey, string>> = {
+  liquidez_corriente: 'Liquidez corriente',
+  liquidez_acida: 'Prueba ácida',
+  liquidez_inmediata: 'Liquidez inmediata',
+  solvencia: 'Solvencia',
+  deuda_ebitda: 'Deuda / EBITDA',
+  deuda_neta_ebitda: 'Deuda neta / EBITDA',
+  cobertura_intereses: 'Cobertura de intereses',
+  dscr: 'DSCR',
+  calidad_ganancia: 'Calidad de la ganancia',
+  margen_ebitda: 'Margen EBITDA',
+  margen_bruto: 'Margen bruto',
+  roe: 'ROE',
+  dias_de_stock: 'Días de stock',
+  dias_de_cobro: 'Días de cobro',
+  dias_de_pago: 'Días de pago',
+  ciclo_conversion_caja: 'Ciclo de caja',
+  bienes_cambio_deuda_cp: 'Bienes de cambio / deuda bancaria corriente',
+  deuda_bancaria_ventas: 'Deuda bancaria / ventas',
+  deuda_cp_share: 'Deuda bancaria que vence en 12 meses',
+  margen_ebitda_promedio: 'Margen EBITDA promedio 2 ejercicios',
+  deuda_comercial_bancaria: 'Deuda comercial / deuda bancaria',
+  capex_depreciacion: 'Capex / depreciación',
+  deuda_me_share: 'Deuda en moneda extranjera / deuda bancaria',
+  liquidez_corriente_sin_anticipos: 'Liquidez corriente sin anticipos',
+  anticipos_ventas: 'Anticipos de clientes / ventas',
+  pn_activo: 'PN / activo',
+};
