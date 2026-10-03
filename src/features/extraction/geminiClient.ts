@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import {
-  GEMINI_MODEL,
-  GEMINI_FALLBACK_MODEL,
+  GEMINI_MODELS,
+  GeminiStage,
   GEMINI_GENERATION_CONFIG,
   GEMINI_MAX_RETRIES,
   GEMINI_BASE_DELAY_MS,
@@ -68,14 +68,15 @@ async function generateWithRetry(model: string, parts: GeminiPart[]): Promise<st
   }
 }
 
-async function callGemini(parts: GeminiPart[]): Promise<string> {
+async function callGemini(stage: GeminiStage, parts: GeminiPart[]): Promise<string> {
+  const { primary, fallback } = GEMINI_MODELS[stage];
   try {
-    return await generateWithRetry(GEMINI_MODEL, parts);
+    return await generateWithRetry(primary, parts);
   } catch (err) {
     if (!isRetryableError(err)) throw err;
-    console.warn(`Gemini ${GEMINI_MODEL} saturado, usando ${GEMINI_FALLBACK_MODEL}`);
+    console.warn(`Gemini ${primary} saturado, usando ${fallback}`);
     try {
-      return await generateWithRetry(GEMINI_FALLBACK_MODEL, parts);
+      return await generateWithRetry(fallback, parts);
     } catch (fallbackErr) {
       if (!isRetryableError(fallbackErr)) throw fallbackErr;
       throw new Error('El servicio de IA de Google está saturado en este momento. Probá de nuevo en unos minutos.');
@@ -84,7 +85,7 @@ async function callGemini(parts: GeminiPart[]): Promise<string> {
 }
 
 export async function runExtraction(files: UploadedFile[]): Promise<RawExtraction> {
-  const text = await callGemini([{ text: EXTRACTION_PROMPT }, ...filesToParts(files)]);
+  const text = await callGemini('extraction', [{ text: EXTRACTION_PROMPT }, ...filesToParts(files)]);
   const parsed = JSON.parse(text);
   return RawExtractionSchema.parse(parsed);
 }
@@ -97,7 +98,7 @@ export async function runVerification(
   crossCheck: CrossCheckResult
 ): Promise<VerificationResult> {
   const context = JSON.stringify({ extraction, ratios, inconsistencias, crossCheck }, null, 2);
-  const text = await callGemini([
+  const text = await callGemini('verification', [
     { text: VERIFICATION_PROMPT },
     { text: `\n\nDATOS A VERIFICAR:\n${context}` },
     ...filesToParts(files),
@@ -111,7 +112,7 @@ export async function runMarketAnalysis(
   extraction: RawExtraction
 ): Promise<string> {
   const profile = JSON.stringify(extraction.company_profile, null, 2);
-  const text = await callGemini([
+  const text = await callGemini('marketAnalysis', [
     { text: MARKET_ANALYSIS_PROMPT },
     { text: `\n\nPERFIL DE LA EMPRESA:\n${profile}` },
     ...filesToParts(files),
