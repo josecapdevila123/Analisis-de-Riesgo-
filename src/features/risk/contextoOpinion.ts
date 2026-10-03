@@ -3,7 +3,11 @@ import { ComputedRatios, RatioKey } from '../ratios/calculations';
 import { Inconsistencia } from '../ratios/sanityChecks';
 import { CrossCheckResult } from '../ratios/crossCheck';
 import { SECTOR_KPI_SPECS, RATIO_BLOCKS } from '../ratios/blocks';
-import { PerfilEfectivo, RATIO_LABEL_CORTO, SECTOR_PROFILES } from './policy';
+import { DOCUMENTOS_SECTORIALES, PerfilEfectivo, RATIO_LABEL_CORTO, SECTOR_PROFILES, subsegmentoLabel } from './policy';
+import { DocumentoSectorial } from '../sectorDocs/tipos';
+import { indicadoresFinancieros } from '../ratios/financieras';
+import { disponibilidadesActuales } from '../ratios/calculations';
+import { RiskDimension } from '../extraction/schemas';
 import { RiskSignal } from './signals';
 import { SectorCaso } from './porton';
 import { stripRiskConclusion } from './summary';
@@ -23,6 +27,7 @@ export type ContextoOpinionInput = {
   pce: number | null;
   perfil: PerfilEfectivo;
   sector: SectorCaso | null;
+  documentos?: DocumentoSectorial[] | null;
 };
 
 // El análisis de mercado puede ser largo; alcanza con el inicio para el contexto sectorial.
@@ -35,9 +40,19 @@ const nombreRatio = (k: RatioKey) =>
 
 export function armarContextoOpinion(i: ContextoOpinionInput) {
   const { extraction, ratios, perfil, sector } = i;
+  const documentos = (i.documentos ?? []).filter(d => d.estado === 'ok');
+  const fin = perfil.modelo === 'financiera'
+    ? indicadoresFinancieros(extraction, documentos, { disponibilidades: disponibilidadesActuales(extraction) })
+    : null;
   return {
     perfil_de_evaluacion: {
       rubro: perfil.label,
+      subsegmento: subsegmentoLabel(perfil.subsegmento),
+      // Dimensiones a puntuar en este perfil (con peso > 0) y su nombre.
+      dimensiones: (Object.keys(perfil.pesos) as RiskDimension[])
+        .filter(d => perfil.pesos[d] > 0)
+        .map(d => ({ dimension: d, nombre: perfil.etiquetasDimensiones[d], peso: perfil.pesos[d] })),
+      instrucciones_del_perfil: perfil.instruccionesOpinion,
       descripcion: perfil.descripcion,
       politica_version: perfil.version,
       confirmado_por: sector?.confirmadoPor ?? null,
@@ -56,6 +71,30 @@ export function armarContextoOpinion(i: ContextoOpinionInput) {
       preguntas_clave: perfil.preguntasClave,
       no_aplican: Object.entries(perfil.noAplica).map(([k, motivo]) => ({ indicador: nombreRatio(k as RatioKey), motivo })),
       senales_desactivadas: perfil.senalesDesactivadas,
+    },
+    // Documentos sectoriales: DECLARADOS por el cliente, no auditados.
+    documentacion_sectorial: documentos.map(d => ({
+      tipo: DOCUMENTOS_SECTORIALES[d.tipo].label,
+      archivo: d.nombreArchivo,
+      fecha: d.fechaDocumento,
+      editado_por_el_analista: d.editado,
+      datos: d.extraccion,
+      naturaleza: 'Información declarada por el cliente, no auditada.',
+    })),
+    documentacion_sectorial_recomendada_faltante: perfil.documentos
+      .filter(r => r.recomendado && !documentos.some(d => d.tipo === r.tipo))
+      .map(r => DOCUMENTOS_SECTORIALES[r.tipo].label),
+    indicadores_financieros: fin && {
+      fuente_de_la_mora: fin.mora.fuente === 'reporte' ? 'Reporte de mora (declarado, no auditado)' : fin.mora.fuente === 'balance' ? 'Balance (EECC auditados)' : 'Sin datos',
+      fecha_de_corte_de_la_mora: fin.mora.fechaCorte,
+      fuente_de_las_previsiones: fin.mora.fuentePrevisiones,
+      cartera: fin.mora.cartera,
+      cartera_mas_90_dias: fin.mora.vencida90,
+      previsiones: fin.mora.previsiones,
+      pn_ajustado_con_balance: fin.pnAjustadoBalance,
+      cruce_cartera_reporte_vs_balance: fin.cruce,
+      mora_por_producto: fin.moraPorProducto,
+      datos_faltantes: Object.entries(fin.valores).filter(([, v]) => v.actual === null).map(([k, v]) => ({ indicador: nombreRatio(k as RatioKey), motivo: v.motivo })),
     },
     empresa: extraction.company_profile,
     estados_contables: {

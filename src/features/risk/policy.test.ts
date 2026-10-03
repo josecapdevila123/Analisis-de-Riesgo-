@@ -19,7 +19,7 @@ const hashPolitica = () =>
 
 // Si cambiás umbrales, señales, pesos o perfiles: subí POLICY_VERSION, anotá el
 // cambio en POLICY_CHANGELOG y actualizá esta línea con la versión y el hash nuevos.
-const REGISTRADA = { version: '2.0.0', hash: '61fb7fd4' };
+const REGISTRADA = { version: '2.1.0', hash: '84f155d4' };
 
 describe('versión de la política', () => {
   it('el hash coincide con la versión registrada (si falla: subí la versión y actualizá REGISTRADA)', () => {

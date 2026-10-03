@@ -8,6 +8,7 @@ import { aggregateScore, AggregatedScore, DIMENSIONS, pceProxy } from './score';
 import { armarContextoOpinion } from './contextoOpinion';
 import { PerfilEfectivo, perfilEfectivo, POLICY_VERSION } from './policy';
 import { SectorCaso } from './porton';
+import { DocumentoSectorial, firmaDocumentos } from '../sectorDocs/tipos';
 
 // Último paso, a pedido del analista (botón), con el rubro ya confirmado:
 // 1. Reglas fijas detectan señales objetivas con el perfil del rubro (algunas con piso).
@@ -27,6 +28,8 @@ export type RiskAssessment = {
   perfil?: PerfilEfectivo;
   politicaVersion?: string;
   sector?: SectorCaso | null;
+  // Documentos sectoriales considerados (firma para detectar cambios posteriores).
+  documentosFirma?: string;
 };
 
 export type RiskAssessmentInput = {
@@ -38,17 +41,19 @@ export type RiskAssessmentInput = {
   companyHistory: CompanyHistory | null;
   // Rubro confirmado por el analista (el portón no deja llegar acá sin él).
   sector: SectorCaso;
+  documentos?: DocumentoSectorial[] | null;
 };
 
 export async function runRiskAssessment(input: RiskAssessmentInput): Promise<RiskAssessment> {
   const { extraction, inconsistencias, crossCheck, companyHistory, sector } = input;
   if (!sector.confirmado) throw new Error('Confirmá el rubro antes de generar la opinión de riesgos.');
-  const perfil = perfilEfectivo(sector.confirmado);
-  const ratios = computeRatios(extraction, perfil);
-  const senales = detectSignals({ extraction, ratios, inconsistencias, crossCheck, companyHistory, perfil });
+  const documentos = (input.documentos ?? []).filter(d => d.estado === 'ok');
+  const perfil = perfilEfectivo(sector.confirmado, sector.subsegmento ?? null);
+  const ratios = computeRatios(extraction, perfil, documentos);
+  const senales = detectSignals({ extraction, ratios, inconsistencias, crossCheck, companyHistory, perfil, documentos });
   const pce = pceProxy(extraction.extraccion_nosis?.score_crediticio);
 
-  const context = armarContextoOpinion({ ...input, ratios, senales, pce, perfil, sector });
+  const context = armarContextoOpinion({ ...input, ratios, senales, pce, perfil, sector, documentos });
   const opinion = await runRiskOpinion(JSON.stringify(context, null, 2));
 
   const porDimension = new Map(opinion.dimensiones.map(d => [d.dimension, d.puntaje]));
@@ -69,5 +74,6 @@ export async function runRiskAssessment(input: RiskAssessmentInput): Promise<Ris
     perfil,
     politicaVersion: POLICY_VERSION,
     sector,
+    documentosFirma: firmaDocumentos(documentos),
   };
 }

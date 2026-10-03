@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { avisoPerfil } from './avisoPerfil';
-import { perfilEfectivo } from './policy';
+import { perfilEfectivo, POLICY_VERSION } from './policy';
 import { confirmarRubro, sectorInicial } from './porton';
 import { buildExtraction } from '../ratios/__fixtures__/extraction';
 
@@ -34,7 +34,7 @@ describe('aviso del perfil de evaluación', () => {
 
   it('foto con una versión anterior → aviso de versión', () => {
     const a = avisoPerfil({ ...perfilEfectivo('generico'), version: '1.0.0' }, null);
-    expect(a.versionDesactualizada).toMatch(/Evaluado con política v1\.0\.0; vigente v2\.0\.0/);
+    expect(a.versionDesactualizada).toBe(`Evaluado con política v1.0.0; vigente v${POLICY_VERSION}.`);
     expect(a.politica).toMatch(/^Política de riesgos v1\.0\.0 — Propuesta inicial/);
   });
 });

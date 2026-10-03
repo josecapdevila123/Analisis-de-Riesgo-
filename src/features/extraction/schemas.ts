@@ -204,6 +204,40 @@ const AccionistasYDirectorio = z.object({
   directorio: z.preprocess(v => v ?? [], z.array(MiembroDirectorio)),
 }).nullable();
 
+// Bloque financiero de los EECC (financieras no bancarias). Opcional: se
+// extrae a demanda cuando el analista confirma el rubro "Financiera".
+// Montos en miles de pesos; solo datos crudos, nada calculado.
+const TramoCarteraVencida = z.object({
+  tramo: lenientStringNA,            // texto tal como figura ("de 3 a 6 meses")
+  desde_dias: lenientNum,            // 0, 90, 180, 270, 365…
+  hasta_dias: lenientNum,            // null = sin tope ("más de 1 año")
+  monto: lenientNum,
+});
+
+export const FUENTES_FONDEO = ['bancos', 'obligaciones_negociables', 'fideicomisos_financieros', 'accionistas_vinculadas', 'otros'] as const;
+const FuenteFondeo = z.object({
+  fuente: z.enum(FUENTES_FONDEO).catch('otros'),
+  monto: lenientNum,
+});
+
+export const ExtraccionFinancieraSchema = z.object({
+  fecha_cierre: z.string().nullable().catch(null).optional(),
+  cartera_total: lenientNum,            // préstamos y créditos financieros, brutos de previsiones
+  cartera_total_anterior: lenientNum,   // del comparativo
+  cartera_vencida_por_tramo: z.preprocess(v => v ?? [], z.array(TramoCarteraVencida)),
+  previsiones_incobrabilidad: lenientNum,
+  cargo_incobrabilidad: lenientNum,
+  ingresos_financieros: lenientNum,
+  egresos_financieros: lenientNum,
+  creditos_a_vencer_90_dias: lenientNum,
+  pasivos_a_vencer_90_dias: lenientNum,
+  inversiones_corrientes: lenientNum,
+  fondeo: z.preprocess(v => v ?? [], z.array(FuenteFondeo)),
+  // Carga manual del analista (no sale del balance).
+  top10_deudores_monto: lenientNum.optional(),
+}).nullable();
+export type ExtraccionFinanciera = NonNullable<z.infer<typeof ExtraccionFinancieraSchema>>;
+
 export const RawExtractionSchema = z.object({
   company_profile: CompanyProfile,
   ejercicio_actual: EstadosContablesEjercicio,
@@ -212,6 +246,8 @@ export const RawExtractionSchema = z.object({
   deuda_bancaria_anterior: DeudaBancariaEjercicio.nullable(),
   analisis_post_cierre: AnalisisPostCierre,
   extraccion_nosis: ExtraccionNosis,
+  // Opcional: los casos viejos y las empresas no financieras no lo tienen.
+  extraccion_financiera: ExtraccionFinancieraSchema.optional(),
   accionistas_y_directorio: z.union([AccionistasYDirectorio, 
   z.array(z.any()).transform(() => null)]).nullable(),
   informacion_complementaria: InformacionComplementaria.optional(),
@@ -272,6 +308,8 @@ export const RISK_DIMENSIONS = [
   'ventas_post_balance',
   'negocio_mercado',
   'calidad_informacion',
+  // Solo pesa en el perfil Financiera (peso 0 en los demás).
+  'calidad_cartera',
 ] as const;
 export type RiskDimension = (typeof RISK_DIMENSIONS)[number];
 

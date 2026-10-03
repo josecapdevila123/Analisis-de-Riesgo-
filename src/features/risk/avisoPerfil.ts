@@ -6,8 +6,10 @@ import type { SectorCaso } from './porton';
 // riesgos y el PDF. Todo sale de comparar la foto del perfil contra el genérico:
 // no se escribe ninguna diferencia a mano.
 
-const fmtUmbral = (v: number, unidad: 'x' | '%') =>
-  unidad === '%' ? `${(v * 100).toLocaleString('es-AR', { maximumFractionDigits: 1 })}%` : `${v.toLocaleString('es-AR', { maximumFractionDigits: 2 })}x`;
+const fmtUmbral = (v: number, unidad: 'x' | '%' | 'pp') =>
+  unidad === '%' ? `${(v * 100).toLocaleString('es-AR', { maximumFractionDigits: 1 })}%`
+    : unidad === 'pp' ? `${(v * 100).toLocaleString('es-AR', { maximumFractionDigits: 1 })} p.p.`
+    : `${v.toLocaleString('es-AR', { maximumFractionDigits: 2 })}x`;
 
 const fechaCorta = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : null;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeRatios, RatioKey } from './calculations';
+import type { FinKey } from './financieras';
 import { buildExtraction, extractionWith } from './__fixtures__/extraction';
 
 // Valores calculados a mano sobre el fixture (montos en miles de pesos).
@@ -16,7 +17,7 @@ type KpiSectorial =
   | 'deuda_comercial_bancaria' | 'capex_depreciacion' | 'deuda_me_share' | 'anticipos_clientes'
   | 'anticipos_ventas' | 'liquidez_corriente_sin_anticipos' | 'endeudamiento_sin_anticipos' | 'pn_activo';
 
-const EXPECTED: Record<Exclude<RatioKey, KpiSectorial>, Expected> = {
+const EXPECTED: Record<Exclude<RatioKey, KpiSectorial | FinKey>, Expected> = {
   // actual: 7300 − 2000 − 2300 + 400 | anterior: 5475 − 1500 − 2000 + 300
   ebitda: { actual: 3400, anterior: 2275 },
   // AC / PC
@@ -76,8 +77,8 @@ const EXPECTED: Record<Exclude<RatioKey, KpiSectorial>, Expected> = {
 describe('computeRatios — los 23 ratios sobre un balance realista', () => {
   const ratios = computeRatios(buildExtraction());
 
-  it('calcula 27 ratios clásicos + 12 KPIs sectoriales', () => {
-    expect(Object.keys(ratios)).toHaveLength(39);
+  it('calcula 27 ratios clásicos + 12 KPIs sectoriales + 12 de financieras', () => {
+    expect(Object.keys(ratios)).toHaveLength(51);
     expect(Object.keys(EXPECTED)).toHaveLength(27);
   });
 
