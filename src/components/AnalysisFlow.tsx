@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { FileText } from 'lucide-react';
+import { FileText, ShieldCheck } from 'lucide-react';
 import { CaseState } from '../features/extraction/pipeline';
 import { cn } from '../lib/utils';
 
@@ -36,6 +36,26 @@ const MENSAJES: string[][] = [
     'Mirando el sector y la historia de la empresa',
   ],
 ];
+
+// Estrellitas que caen de la gota al informe: desvío horizontal (px), tamaño,
+// demora y duración. Fijas para que el dibujo no cambie en cada render.
+const ESTRELLAS = [
+  { x: -30, tam: 16, delay: 0, dur: 3.8 },
+  { x: 16, tam: 12, delay: 0.6, dur: 4.4 },
+  { x: -6, tam: 20, delay: 1.3, dur: 4.0 },
+  { x: 34, tam: 14, delay: 2.0, dur: 4.8 },
+  { x: -42, tam: 10, delay: 2.6, dur: 4.2 },
+  { x: 6, tam: 15, delay: 3.2, dur: 3.9 },
+  { x: 26, tam: 10, delay: 3.8, dur: 4.6 },
+];
+const CAIDA = 92;
+
+// Estrella de cuatro puntas.
+const Estrella = ({ tam }: { tam: number }) => (
+  <svg width={tam} height={tam} viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 0C13 8 16 11 24 12C16 13 13 16 12 24C11 16 8 13 0 12C8 11 11 8 12 0Z" fill="#35EEC8" style={{ filter: 'drop-shadow(0 0 3px rgb(53 238 200 / 0.8))' }} />
+  </svg>
+);
 
 const MAX_ARCHIVOS = 4;
 const ALTO = 104;
@@ -157,6 +177,40 @@ export function AnalysisFlow({ stage, fileNames }: { stage: CaseState | null; fi
           style={{ background: 'radial-gradient(circle at 60% 65%, #35EEC8 0%, #9af5e1 70%)', animationDelay: '-5s', animationDuration: '15s' }}
         />
         <span className="absolute left-[38%] top-[34%] h-4 w-4 rounded-full bg-white/80 blur-[3px]" />
+      </div>
+
+      {/* Estrellitas que caen de la gota y nutren el informe */}
+      <div className="relative mx-auto -mt-7 w-32" style={{ height: CAIDA }} aria-hidden="true">
+        {ESTRELLAS.map((e, i) => (
+          <span
+            key={i}
+            className="agua-estrella absolute left-1/2 top-0 block"
+            style={{
+              '--x': `${e.x}px`,
+              marginLeft: -e.tam / 2,
+              '--caida': `${CAIDA - 4}px`,
+              animationDelay: `${e.delay}s`,
+              animationDuration: `${e.dur}s`,
+            } as React.CSSProperties}
+          >
+            <Estrella tam={e.tam} />
+          </span>
+        ))}
+      </div>
+
+      {/* El informe que se va formando: una línea más por etapa */}
+      <div className="agua-nutre mx-auto w-52 rounded-xl border border-ink/10 bg-white px-4 py-3">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-ink/50" />
+          <span className="text-xs font-semibold text-ink/70">Informe de riesgo</span>
+        </div>
+        <div className="mt-2.5 space-y-1.5">
+          {['w-full', 'w-4/5', 'w-3/5'].map((w, i) => (
+            <div key={w} className={cn('h-1 overflow-hidden rounded-full bg-ink/[0.06]', w)}>
+              <div className={cn('h-full rounded-full bg-brand-green/70 transition-all duration-[1500ms] ease-out', i < paso ? 'w-full' : i === paso ? 'w-1/2' : 'w-0')} />
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Qué está haciendo */}
