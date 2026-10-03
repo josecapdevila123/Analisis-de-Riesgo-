@@ -96,7 +96,7 @@ describe('detectSignals', () => {
         x.deuda_bancaria_actual.no_corriente.total = 1900; // 600 + 1900 = 2500 vs 1750
       }));
       expect(s).toContain('deuda_sube_ventas_bajan');
-      expect(s).toContain('ventas_caen_nominal');
+      expect(s).toContain('ventas_caen');
     });
 
     it('EBITDA negativo con deuda → crítica piso 65', () => {
@@ -183,19 +183,168 @@ describe('detectSignals', () => {
       x.deuda_bancaria_actual.corriente.total = 1800;
       x.deuda_bancaria_actual.no_corriente.total = 300;
     }));
-    expect(s.map(x => x.severidad)).toEqual(['critica', 'media']);
+    const rank = { critica: 0, alta: 1, media: 2, baja: 3 };
+    const ranks = s.map(x => rank[x.severidad]);
+    expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
+    expect(s[0].severidad).toBe('critica');
+  });
+
+  describe('capacidad de pago', () => {
+    it('ejemplo de política: DSCR 0,83 → crítica con piso 65', () => {
+      const s = signalsFor(extractionWith(x => {
+        const y = x.ejercicio_actual;
+        y.estado_resultados.resultado_bruto = 2850;
+        y.estado_resultados.gastos_administracion = -1000;
+        y.estado_resultados.gastos_comercializacion = -1000;
+        y.estado_resultados.gastos_financieros = -300;
+        y.estado_resultados.impuesto_ganancias = -100;
+        y.flujo_efectivo.depreciacion_bienes_de_uso = 150;
+        y.flujo_efectivo.flujo_neto_operativo = 800;
+        x.deuda_bancaria_actual.corriente.total = 600;
+        x.deuda_bancaria_actual.no_corriente.total = 2400;
+        x.extraccion_nosis!.deuda_financiera_total_nosis = 3000;
+      }));
+      expect(s.find(x => x.id === 'dscr_menor_1')).toMatchObject({ severidad: 'critica', piso: 65 });
+      // deuda neta / EBITDA 2,5x y cobertura 3,3x no disparan nada: por eso el DSCR manda
+      expect(s.map(x => x.id)).not.toContain('deuda_neta_ebitda_alta');
+      expect(s.map(x => x.id)).not.toContain('cobertura_baja');
+    });
+
+    it('DSCR entre 1 y 1,25 → alta sin piso', () => {
+      // (3400 − 400 − 540) / (500 + 1700) = 1,12
+      const s = signalsFor(extractionWith(x => {
+        x.deuda_bancaria_actual.corriente.total = 1700;
+        x.deuda_bancaria_actual.no_corriente.total = 400;
+      }));
+      expect(s.find(x => x.id === 'dscr_ajustado')).toMatchObject({ severidad: 'alta', piso: null });
+    });
+
+    it('EBITDA negativo no duplica la señal de DSCR', () => {
+      const s = ids(extractionWith(x => { x.ejercicio_actual.estado_resultados.resultado_bruto = -3000; }));
+      expect(s).toContain('ebitda_negativo_con_deuda');
+      expect(s).not.toContain('dscr_menor_1');
+    });
+
+    it('deuda neta / EBITDA > 4x → alta', () => {
+      // EBITDA 1.000 con deuda 6.000 y caja 500 → 5,5x
+      expect(ids(extractionWith(x => {
+        const er = x.ejercicio_actual.estado_resultados;
+        er.resultado_bruto = 4900;
+        x.deuda_bancaria_actual.corriente.total = 500;
+        x.deuda_bancaria_actual.no_corriente.total = 5500;
+        x.extraccion_nosis!.deuda_financiera_total_nosis = 6000;
+      }))).toContain('deuda_neta_ebitda_alta');
+    });
+
+    it('calidad de la ganancia < 60% → media', () => {
+      expect(ids(extractionWith(x => {
+        x.ejercicio_actual.flujo_efectivo.flujo_neto_operativo = 1700; // 50% de 3.400
+      }))).toEqual(['calidad_ganancia_baja']);
+    });
+
+    it('descalce de moneda: deuda en USD sin exportaciones → alta si supera el 30% de la deuda', () => {
+      const s = signalsFor(extractionWith(x => {
+        x.informacion_complementaria!.deuda_financiera_moneda_extranjera = 1000;
+        x.informacion_complementaria!.porcentaje_ventas_exportacion = 0;
+      }));
+      expect(s.find(x => x.id === 'descalce_moneda')).toMatchObject({ severidad: 'alta' });
+    });
+
+    it('deuda en USD cubierta por exportaciones → sin descalce', () => {
+      expect(ids(extractionWith(x => {
+        x.informacion_complementaria!.deuda_financiera_moneda_extranjera = 1000;
+        x.informacion_complementaria!.porcentaje_ventas_exportacion = 70;
+      }))).not.toContain('descalce_moneda');
+    });
+  });
+
+  describe('comportamiento y señales externas', () => {
+    it('hoy situación 1 pero 3 en los últimos 24 meses → alta', () => {
+      expect(signalsFor(extractionWith(x => { x.extraccion_nosis!.peor_situacion_24_meses = 3; }))[0])
+        .toMatchObject({ id: 'bcra_historial_24m', severidad: 'alta' });
+    });
+
+    it('historial 24 meses no duplica si la situación actual ya es igual o peor', () => {
+      expect(ids(extractionWith(x => {
+        x.extraccion_nosis!.situacion_bcra_peor_estado = 2;
+        x.extraccion_nosis!.peor_situacion_24_meses = 2;
+      }))).toEqual(['bcra_situacion_2']);
+    });
+
+    it('cheques rechazados todos levantados → baja', () => {
+      expect(signalsFor(extractionWith(x => {
+        x.extraccion_nosis!.cheques_rechazados_cantidad = 6;
+        x.extraccion_nosis!.cheques_rechazados_levantados = 6;
+        x.extraccion_nosis!.cheques_rechazados_monto = 500;
+      }))[0]).toMatchObject({ id: 'cheques_rechazados', severidad: 'baja', piso: null });
+    });
+
+    it('deuda con ARCA → alta; planes de pago → baja', () => {
+      const s = signalsFor(extractionWith(x => {
+        x.extraccion_nosis!.deuda_fiscal_previsional = 300;
+        x.extraccion_nosis!.planes_de_pago_arca = true;
+      }));
+      expect(s.find(x => x.id === 'deuda_arca')?.severidad).toBe('alta');
+      expect(s.find(x => x.id === 'planes_arca')?.severidad).toBe('baja');
+    });
+
+    it('juicios o embargos → alta; pedido de quiebra → crítica piso 80', () => {
+      const s = signalsFor(extractionWith(x => {
+        x.extraccion_nosis!.embargos_cantidad = 1;
+        x.extraccion_nosis!.pedidos_quiebra_cantidad = 1;
+      }));
+      expect(s[0]).toMatchObject({ id: 'pedido_quiebra', severidad: 'critica', piso: 80 });
+      expect(s.find(x => x.id === 'juicios_embargos')?.severidad).toBe('alta');
+    });
+  });
+
+  describe('calidad de la información y RT 6', () => {
+    it('auditor con salvedades → alta; adversa o abstención → crítica piso 70', () => {
+      expect(signalsFor(extractionWith(x => { x.informacion_complementaria!.opinion_auditor = 'con_salvedades'; }))[0])
+        .toMatchObject({ id: 'auditor_salvedades', severidad: 'alta' });
+      expect(signalsFor(extractionWith(x => { x.informacion_complementaria!.opinion_auditor = 'abstencion'; }))[0])
+        .toMatchObject({ id: 'auditor_adverso', severidad: 'critica', piso: 70 });
+    });
+
+    it('balance sin ajuste por inflación → media; caída de ventas se informa como nominal', () => {
+      const s = signalsFor(extractionWith(x => {
+        x.informacion_complementaria!.balance_ajustado_por_inflacion = false;
+        x.ejercicio_actual.estado_resultados.ventas_netas = 10000;
+      }));
+      expect(s.map(x => x.id)).toContain('sin_ajuste_inflacion');
+      expect(s.find(x => x.id === 'ventas_caen')?.titulo).toBe('Caída nominal de ventas');
+    });
+
+    it('balance en moneda homogénea → la caída de ventas es real', () => {
+      expect(signalsFor(extractionWith(x => {
+        x.ejercicio_actual.estado_resultados.ventas_netas = 10000;
+      })).find(x => x.id === 'ventas_caen')?.titulo).toBe('Caída real de ventas');
+    });
+
+    it('RECPAM mayor al 50% del resultado neto → media', () => {
+      expect(ids(extractionWith(x => { x.ejercicio_actual.estado_resultados.recpam = 900; }))).toEqual(['recpam_relevante']);
+    });
+
+    it('casos viejos sin información complementaria → no dispara señales de RT 6 ni auditor', () => {
+      expect(signalsFor(extractionWith(x => { delete x.informacion_complementaria; }))).toEqual([]);
+    });
   });
 });
 
-describe('pceProxy (score Nosis 1–999, más alto = mejor)', () => {
-  it('extremos y punto medio', () => {
-    expect(pceProxy(999)).toBe(0);
-    expect(pceProxy(1)).toBe(100);
-    expect(pceProxy(500)).toBe(50);
+describe('pceProxy — tramos no lineales de score Nosis (más alto = menor pérdida)', () => {
+  it('cada tramo según la política', () => {
+    expect([999, 800, 799, 700, 650, 547, 500, 450, 350, 299, 1].map(pceProxy))
+      .toEqual([5, 5, 12, 12, 25, 45, 45, 65, 82, 95, 95]);
   });
-  it('fuera de rango se acota; sin score → null', () => {
-    expect(pceProxy(1500)).toBe(0);
+  it('no lineal: perder 100 puntos de score pesa más en la zona media que en la alta', () => {
+    // 800 → 700: +7 de pérdida esperada; 600 → 500: +20
+    expect(pceProxy(700)! - pceProxy(800)!).toBe(7);
+    expect(pceProxy(500)! - pceProxy(600)!).toBe(20);
+  });
+  it('sin score → null; fuera de rango usa el tramo extremo', () => {
     expect(pceProxy(null)).toBeNull();
+    expect(pceProxy(1500)).toBe(5);
+    expect(pceProxy(-3)).toBe(95);
   });
 });
 

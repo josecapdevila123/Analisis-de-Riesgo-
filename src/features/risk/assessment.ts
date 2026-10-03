@@ -5,6 +5,7 @@ import { Inconsistencia } from '../ratios/sanityChecks';
 import { CrossCheckResult } from '../ratios/crossCheck';
 import { detectSignals, RiskSignal } from './signals';
 import { aggregateScore, AggregatedScore, DIMENSIONS, pceProxy } from './score';
+import { stripRiskConclusion } from './summary';
 
 // Etapa final del pipeline: lectura integral de riesgo.
 // 1. Reglas fijas detectan señales objetivas (algunas con piso de puntaje).
@@ -50,16 +51,18 @@ export async function runRiskAssessment(input: RiskAssessmentInput): Promise<Ris
     },
     post_balance: extraction.analisis_post_cierre,
     nosis: extraction.extraccion_nosis,
+    informacion_complementaria: extraction.informacion_complementaria ?? null,
+    accionistas_y_directorio: extraction.accionistas_y_directorio,
     cruce_balance_nosis: crossCheck,
     inconsistencias,
     verificacion: verification
-      ? { alertas_coherencia: verification.alertas_coherencia, resumen_ejecutivo: verification.executive_summary }
+      ? { alertas_coherencia: verification.alertas_coherencia, resumen_ejecutivo: stripRiskConclusion(verification.executive_summary) }
       : null,
     historia_y_actividad: companyHistory,
     analisis_mercado: marketAnalysis ? marketAnalysis.slice(0, MAX_MARKET_CHARS) : null,
     pce_proxy: {
       valor: pce,
-      supuesto: 'Pérdida esperada aproximada por el score Nosis (1–999, más alto = mejor). Índice relativo 0–100, no es un porcentaje.',
+      supuesto: 'Pérdida esperada aproximada por tramos de score Nosis: relación inversa y no lineal (más score, menos pérdida). Índice relativo 0–100, no es un porcentaje.',
     },
     senales_automaticas: senales,
   };

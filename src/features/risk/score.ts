@@ -1,25 +1,15 @@
 import { RiskDimension, SeveridadRiesgo } from '../extraction/schemas';
+import { DIMENSION_WEIGHTS, PCE_TRAMOS, SCORE_BANDS } from './policy';
 
 // Escala de riesgo: 1 = riesgo mínimo, 100 = riesgo máximo.
 
 export type RiskCategory = 'bajo' | 'moderado' | 'alto' | 'critico';
 
-export const DIMENSIONS: Record<RiskDimension, { label: string; weight: number }> = {
-  nosis_bcra: { label: 'Nosis / BCRA', weight: 25 },
-  endeudamiento: { label: 'Endeudamiento', weight: 20 },
-  liquidez_solvencia: { label: 'Liquidez y solvencia', weight: 15 },
-  rentabilidad: { label: 'Rentabilidad y ventas', weight: 15 },
-  ventas_post_balance: { label: 'Ventas y deuda post balance', weight: 10 },
-  negocio_mercado: { label: 'Negocio y mercado', weight: 10 },
-  calidad_informacion: { label: 'Calidad de la información', weight: 5 },
-};
+// Pesos y bandas vienen de la política de riesgos.
+export const DIMENSIONS = DIMENSION_WEIGHTS;
 
-export const categoryOf = (score: number): RiskCategory => {
-  if (score <= 25) return 'bajo';
-  if (score <= 50) return 'moderado';
-  if (score <= 75) return 'alto';
-  return 'critico';
-};
+export const categoryOf = (score: number): RiskCategory =>
+  (SCORE_BANDS.find(b => score <= b.hasta) ?? SCORE_BANDS[SCORE_BANDS.length - 1]).categoria;
 
 export const CATEGORY_LABEL: Record<RiskCategory, string> = {
   bajo: 'Riesgo bajo',
@@ -35,16 +25,13 @@ export const SEVERIDAD_LABEL: Record<SeveridadRiesgo, string> = {
   critica: 'Crítica',
 };
 
-// Pérdida crediticia esperada: transitoriamente se aproxima con el score Nosis.
-// Supuesto: score Nosis en escala 1–999, donde más alto = mejor pagador.
-// Devuelve un índice relativo 0–100 (100 = mayor pérdida esperada), NO un %.
-export const NOSIS_SCORE_MIN = 1;
-export const NOSIS_SCORE_MAX = 999;
-
+// Pérdida crediticia esperada: proxy transitorio por tramos de score Nosis
+// (relación inversa y no lineal, ver PCE_TRAMOS en la política).
+// Índice relativo 0–100 (100 = mayor pérdida esperada), NO un %.
 export const pceProxy = (nosisScore: number | null | undefined): number | null => {
   if (nosisScore === null || nosisScore === undefined || !Number.isFinite(nosisScore)) return null;
-  const s = Math.min(NOSIS_SCORE_MAX, Math.max(NOSIS_SCORE_MIN, nosisScore));
-  return Math.round(((NOSIS_SCORE_MAX - s) / (NOSIS_SCORE_MAX - NOSIS_SCORE_MIN)) * 100);
+  const tramo = PCE_TRAMOS.find(t => nosisScore >= t.desde) ?? PCE_TRAMOS[PCE_TRAMOS.length - 1];
+  return tramo.pce;
 };
 
 export type DimensionScore = { dimension: RiskDimension; puntaje: number | null };
