@@ -81,6 +81,7 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
   const verification = activeResult.verification;
   const crossCheck = activeResult.crossCheck;
   const marketAnalysis = activeResult.marketAnalysis;
+  const companyHistory = activeResult.companyHistory;
   const company = extraction.company_profile;
 
   const addSectionTitle = (title: string, isFirstPage = false) => {
@@ -148,6 +149,27 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
     return currentY;
   };
 
+  const addSubheading = (text: string, startY: number) => {
+    const y = startY > 255 ? (doc.addPage(), 20) : startY;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text(text, 14, y);
+    doc.setFont('helvetica', 'normal');
+    return y + 4;
+  };
+
+  const addBulletList = (items: string[], startY: number) => {
+    autoTable(doc, {
+      startY,
+      body: items.map(item => ['-', item]),
+      theme: 'plain',
+      styles: { fontSize: 10, cellPadding: { top: 0.8, bottom: 0.8, left: 0, right: 0 }, textColor: [20, 20, 20] },
+      columnStyles: { 0: { cellWidth: 5 }, 1: { cellWidth: 177, halign: 'justify' } },
+      margin: { left: 14, right: 14 },
+    });
+    return (doc as any).lastAutoTable.finalY + 8;
+  };
+
   doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
   doc.text('Reporte de Riesgo para Comité', 14, 22);
@@ -166,7 +188,49 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
     addLongText(verification.executive_summary, 65);
   }
 
-  let currentY = addSectionTitle('Balance y Ratios');
+  let currentY = addSectionTitle('Historia y actividad de la empresa');
+  if (companyHistory) {
+    if (!companyHistory.memoria_disponible) {
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'italic');
+      doc.text('No se encontró la Memoria del Directorio: la descripción surge de las Notas a los EECC.', 14, currentY);
+      doc.setFont('helvetica', 'normal');
+      currentY += 8;
+    }
+    currentY = addSubheading('Core business', currentY);
+    currentY = addLongText(companyHistory.core_business || 'Sin información sobre la actividad.', currentY);
+
+    if (companyHistory.historia) {
+      currentY = addSubheading('Historia', currentY);
+      currentY = addLongText(companyHistory.historia, currentY);
+    }
+    if (companyHistory.datos_relevantes.length > 0) {
+      currentY = addSubheading('Datos relevantes', currentY);
+      currentY = addBulletList(companyHistory.datos_relevantes, currentY);
+    }
+    if (companyHistory.proyecciones.length > 0) {
+      currentY = addSubheading('Proyecciones de la empresa', currentY);
+      currentY = addBulletList(companyHistory.proyecciones, currentY);
+    }
+    if (companyHistory.explicaciones_balance.length > 0) {
+      currentY = addSubheading('Explicaciones sobre el balance', currentY);
+      autoTable(doc, {
+        startY: currentY,
+        head: [['Tema', 'Explicación']],
+        body: companyHistory.explicaciones_balance.map(e => [e.tema, e.explicacion]),
+        theme: 'grid',
+        headStyles: { fillColor: [240, 240, 240], textColor: [20, 20, 20], fontStyle: 'bold' },
+        styles: { fontSize: 9, cellPadding: 2 },
+        columnStyles: { 0: { cellWidth: 50, fontStyle: 'bold' }, 1: { cellWidth: 132 } },
+        margin: { left: 14, right: 14 },
+      });
+    }
+  } else {
+    doc.setFontSize(10);
+    doc.text('Historia y actividad no disponible para este caso.', 14, currentY);
+  }
+
+  currentY = addSectionTitle('Balance y Ratios');
 
   const ratioData = RATIO_CARDS.map(spec => {
     const r = ratios[spec.key];

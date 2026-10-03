@@ -59,6 +59,7 @@ import {
 } from './features/editing/editing';
 import { SourceDataEditor } from './features/editing/SourceDataEditor';
 import { BiBankLogo } from './components/BiBankLogo';
+import { CompanyHistoryView } from './components/CompanyHistoryView';
 
 const ShareholderTable = ({ accionistas, level = 1, parentName = '', basePath }: { accionistas: Shareholder[], level?: number, parentName?: string, basePath?: Path }) => {
   const { editing } = useEdit();
@@ -177,6 +178,7 @@ export default function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStage, setProcessingStage] = useState<CaseState | null>(null);
   const [marketAnalysisBusyId, setMarketAnalysisBusyId] = useState<string | null>(null);
+  const [companyHistoryBusyId, setCompanyHistoryBusyId] = useState<string | null>(null);
   const [currentFiles, setCurrentFiles] = useState<{ file: File; preview: string }[]>([]);
   const { user, isAuthReady, handleLogin, handleLogout } = useAuth(() => {
     setActiveResultId(null);
@@ -188,6 +190,7 @@ export default function App() {
     saveCaseProcessing,
     saveCaseCompleted,
     saveCaseMarketAnalysis,
+    saveCaseCompanyHistory,
     saveCaseEdits,
     saveCaseError,
     removeCase,
@@ -326,11 +329,17 @@ export default function App() {
       crossCheck: null,
       verification: null,
       marketAnalysis: null,
+      companyHistory: null,
     };
 
     setResults(prev => [newResult, ...prev]);
     setActiveResultId(newId);
     setMarketAnalysisBusyId(newId);
+    setCompanyHistoryBusyId(newId);
+    const clearBusy = () => {
+      setMarketAnalysisBusyId(curr => (curr === newId ? null : curr));
+      setCompanyHistoryBusyId(curr => (curr === newId ? null : curr));
+    };
 
     try {
       await saveCaseProcessing(newResult);
@@ -346,9 +355,20 @@ export default function App() {
           setResults(prev => prev.map(r => r.id === newId ? { ...r, marketAnalysis: text } : r));
           saveCaseMarketAnalysis(newId, text);
         },
+        onCompanyHistory: (history, err) => {
+          setCompanyHistoryBusyId(curr => (curr === newId ? null : curr));
+          if (err) {
+            console.error('Company history failed:', err);
+            return;
+          }
+          setResults(prev => prev.map(r => r.id === newId ? { ...r, companyHistory: history } : r));
+          saveCaseCompanyHistory(newId, history);
+        },
       });
 
       if (pipelineResult.state === 'error') {
+        // Si falla la extracción, mercado e historia nunca se lanzan.
+        clearBusy();
         setResults(prev => prev.map(r =>
           r.id === newId ? { ...r, status: 'error', error: pipelineResult.failure?.message } : r
         ));
@@ -377,7 +397,7 @@ export default function App() {
         r.id === newId ? { ...r, status: 'error', error: (error as Error).message } : r
       ));
       await saveCaseError(newId, (error as Error).message);
-      setMarketAnalysisBusyId(curr => (curr === newId ? null : curr));
+      clearBusy();
     } finally {
       setIsProcessing(false);
       setProcessingStage(null);
@@ -397,6 +417,7 @@ export default function App() {
       crossCheck: result.crossCheck,
       verification: result.verification,
       marketAnalysis: result.marketAnalysis,
+      companyHistory: result.companyHistory,
     };
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
     const downloadAnchorNode = document.createElement('a');
@@ -914,6 +935,12 @@ export default function App() {
                     <div className="border-l-4 border-blue-500 bg-blue-50 p-3 text-xs text-blue-900 flex items-center gap-2 print:hidden">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Generando análisis de mercado en segundo plano...
+                    </div>
+                  )}
+                  {companyHistoryBusyId === activeResult.id && !activeResult.companyHistory && (
+                    <div className="border-l-4 border-blue-500 bg-blue-50 p-3 text-xs text-blue-900 flex items-center gap-2 print:hidden">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Leyendo la Memoria para historia y actividad de la empresa...
                     </div>
                   )}
                 <div className="flex flex-col md:flex-row gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -1816,7 +1843,16 @@ export default function App() {
                     </div>
                   )}
 
-                  {['Historia y actividad de la empresa', 'Opinión de riesgos'].includes(activeTab) && (
+                  {activeTab === 'Historia y actividad de la empresa' && (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                      <CompanyHistoryView
+                        history={activeResult.companyHistory ?? null}
+                        isGenerating={companyHistoryBusyId === activeResult.id}
+                      />
+                    </div>
+                  )}
+
+                  {activeTab === 'Opinión de riesgos' && (
                       <div className="bg-white border border-[#141414] p-12 text-center text-[#141414]/60 font-mono text-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
                         Contenido de {activeTab} en desarrollo
                       </div>

@@ -3,8 +3,9 @@ import {
   runExtraction,
   runVerification,
   runMarketAnalysis,
+  runCompanyHistory,
 } from './geminiClient';
-import { RawExtraction, VerificationResult } from './schemas';
+import { CompanyHistory, RawExtraction, VerificationResult } from './schemas';
 import { ComputedRatios, computeRatios } from '../ratios/calculations';
 import { Inconsistencia, runSanityChecks } from '../ratios/sanityChecks';
 import { CrossCheckResult, runCrossCheck } from '../ratios/crossCheck';
@@ -36,6 +37,7 @@ export type PipelineResult = {
 export type PipelineCallbacks = {
   onStateChange?: (state: CaseState) => void;
   onMarketAnalysis?: (text: string | null, error?: Error) => void;
+  onCompanyHistory?: (history: CompanyHistory | null, error?: Error) => void;
 };
 
 const emptyFailure = (state: 'error', failure: PipelineFailure): PipelineResult => ({
@@ -76,6 +78,11 @@ export async function runPipeline(
   void runMarketAnalysis(files, extraction)
     .then(text => callbacks?.onMarketAnalysis?.(text))
     .catch(err => callbacks?.onMarketAnalysis?.(null, err instanceof Error ? err : new Error(String(err))));
+
+  // Etapa 4b — historia y actividad desde la Memoria (también en paralelo, no bloquea)
+  void runCompanyHistory(files, extraction)
+    .then(history => callbacks?.onCompanyHistory?.(history))
+    .catch(err => callbacks?.onCompanyHistory?.(null, err instanceof Error ? err : new Error(String(err))));
 
   // Etapa 3 — verificación + síntesis cualitativa (Gemini)
   callbacks?.onStateChange?.('verifying');

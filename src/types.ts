@@ -1,4 +1,4 @@
-import type { RawExtraction, VerificationResult } from './features/extraction/schemas';
+import type { CompanyHistory, RawExtraction, VerificationResult } from './features/extraction/schemas';
 import type { ComputedRatios } from './features/ratios/calculations';
 import type { Inconsistencia } from './features/ratios/sanityChecks';
 import type { CrossCheckResult } from './features/ratios/crossCheck';
@@ -28,6 +28,8 @@ export interface ExtractionResult {
   crossCheck: CrossCheckResult | null;
   verification: VerificationResult | null;
   marketAnalysis: string | null;
+  // Historia, core business y proyecciones leídas de la Memoria. null en casos viejos.
+  companyHistory: CompanyHistory | null;
   // Fecha ISO de la última edición manual de valores en el dashboard.
   editedAt?: string;
   error?: string;

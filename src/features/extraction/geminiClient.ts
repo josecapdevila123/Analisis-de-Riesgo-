@@ -9,12 +9,15 @@ import {
 import { EXTRACTION_PROMPT } from '../../lib/prompts/extraction';
 import { VERIFICATION_PROMPT } from '../../lib/prompts/verification';
 import { MARKET_ANALYSIS_PROMPT } from '../../lib/prompts/marketAnalysis';
+import { COMPANY_HISTORY_PROMPT } from '../../lib/prompts/companyHistory';
 import {
   RawExtraction,
   RawExtractionSchema,
   VerificationResult,
   VerificationResultSchema,
   MarketAnalysisResultSchema,
+  CompanyHistory,
+  CompanyHistorySchema,
 } from './schemas';
 import { ComputedRatios } from '../ratios/calculations';
 import { Inconsistencia } from '../ratios/sanityChecks';
@@ -122,3 +125,16 @@ export async function runMarketAnalysis(
   return validated.analisis_mercado;
 }
 
+
+export async function runCompanyHistory(
+  files: UploadedFile[],
+  extraction: RawExtraction
+): Promise<CompanyHistory> {
+  const profile = JSON.stringify(extraction.company_profile, null, 2);
+  const text = await callGemini('companyHistory', [
+    { text: COMPANY_HISTORY_PROMPT },
+    { text: `\n\nPERFIL DE LA EMPRESA:\n${profile}` },
+    ...filesToParts(files),
+  ]);
+  return CompanyHistorySchema.parse(JSON.parse(text));
+}

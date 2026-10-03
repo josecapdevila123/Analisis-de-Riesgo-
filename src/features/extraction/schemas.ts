@@ -205,3 +205,19 @@ export const MarketAnalysisResultSchema = z.object({
 });
 
 export type MarketAnalysisResult = z.infer<typeof MarketAnalysisResultSchema>;
+// Texto tolerante: null/undefined → '' (el modelo a veces manda null en campos vacíos).
+const lenientString = z.preprocess(v => (v === null || v === undefined ? '' : v), z.string());
+
+export const CompanyHistorySchema = z.object({
+  memoria_disponible: z.boolean().catch(false),
+  core_business: lenientString,
+  historia: lenientString,
+  datos_relevantes: z.preprocess(v => v ?? [], z.array(z.string())),
+  proyecciones: z.preprocess(v => v ?? [], z.array(z.string())),
+  explicaciones_balance: z.preprocess(
+    v => v ?? [],
+    z.array(z.object({ tema: lenientString, explicacion: lenientString }))
+  ),
+});
+
+export type CompanyHistory = z.infer<typeof CompanyHistorySchema>;

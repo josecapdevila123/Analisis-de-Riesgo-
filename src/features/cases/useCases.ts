@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { db, OperationType, handleFirestoreError } from '../../firebase';
 import { ExtractionResult, CaseStatus } from '../../types';
+import { CompanyHistory } from '../extraction/schemas';
 import { PipelineResult } from '../extraction/pipeline';
 
 const SCHEMA_VERSION = 2;
@@ -82,6 +83,7 @@ export function useCases(user: User | null, isAuthReady: boolean) {
               crossCheck: parseJSON(data.crossCheck, null),
               verification: parseJSON(data.verification, null),
               marketAnalysis: typeof data.marketAnalysis === 'string' ? data.marketAnalysis : null,
+              companyHistory: parseJSON<CompanyHistory | null>(data.companyHistory, null),
               editedAt: typeof data.editedAt === 'string' ? data.editedAt : undefined,
               error: data.error,
             });
@@ -187,6 +189,19 @@ export function useCases(user: User | null, isAuthReady: boolean) {
     }
   };
 
+  const saveCaseCompanyHistory = async (id: string, history: CompanyHistory | null) => {
+    if (!user) return;
+    try {
+      await setDoc(
+        doc(db, `users/${user.uid}/cases`, id),
+        { companyHistory: JSON.stringify(history) },
+        { merge: true }
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}/cases/${id}`);
+    }
+  };
+
   const saveCaseError = async (id: string, errorMessage: string) => {
     if (!user) return;
     try {
@@ -222,6 +237,7 @@ export function useCases(user: User | null, isAuthReady: boolean) {
     saveCaseProcessing,
     saveCaseCompleted,
     saveCaseMarketAnalysis,
+    saveCaseCompanyHistory,
     saveCaseEdits,
     saveCaseError,
     removeCase,

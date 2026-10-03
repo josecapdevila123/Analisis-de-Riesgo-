@@ -7,7 +7,7 @@ Herramienta interna de **análisis de riesgo crediticio para BiBank**. El analis
 1. **Extrae** con Gemini los datos del balance, el estado de resultados, la deuda bancaria, las ventas post cierre, el informe Nosis/BCRA y los accionistas y directorio.
 2. **Calcula 23 ratios en código**, sin IA (`src/features/ratios/calculations.ts`), además de chequeos de consistencia contable y un cruce de deuda Balance vs Nosis.
 3. **Verifica y redacta** con Gemini: interpreta los ratios ya calculados, explica las inconsistencias y genera el resumen ejecutivo.
-4. Genera en paralelo un **análisis de mercado** del sector.
+4. Genera en paralelo un **análisis de mercado** del sector y la **historia y actividad de la empresa**, leída de la Memoria del balance.
 
 El resultado se ve en un dashboard por pestañas, se guarda por usuario en Firestore y se exporta como PDF para el comité (`src/features/pdf/generatePDF.ts`). Los valores extraídos se pueden corregir a mano desde el dashboard ("Editar valores"), y en ese caso los ratios se recalculan.
 
@@ -23,6 +23,7 @@ Orquestado en `src/features/extraction/pipeline.ts` (`runPipeline`):
 | 2. Cómputo | `computeRatios`, `runSanityChecks` y `runCrossCheck`. Determinístico, sin IA | `src/features/ratios/` | — |
 | 3. Verificación | Gemini recibe extracción, ratios, inconsistencias y cruce. Interpreta, **no recalcula** | `runVerification`, prompt en `verification.ts` | Estado `completed_partial` (hay ratios, falta el resumen) |
 | 4. Mercado | Se lanza en paralelo a la etapa 3 y no bloquea; el resultado llega por callback | `runMarketAnalysis`, prompt en `marketAnalysis.ts` | Se loguea y el caso queda sin análisis de mercado |
+| 4b. Historia y actividad | En paralelo, como el mercado. Lee la Memoria: **core business** (lo principal), historia, datos relevantes, proyecciones y explicaciones del balance. Salida validada con `CompanyHistorySchema` | `runCompanyHistory`, prompt en `companyHistory.ts`, vista en `components/CompanyHistoryView.tsx` | Se loguea y el caso queda sin historia |
 
 Puntos clave:
 - **Los números los calcula el código, no la IA.** El prompt de verificación le prohíbe a Gemini recalcular o proponer otros valores.
