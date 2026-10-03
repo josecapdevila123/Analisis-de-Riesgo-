@@ -19,12 +19,15 @@ import { RATIO_ASSUMPTIONS } from '../risk/policy';
 
 type RGB = [number, number, number];
 
-const INK: RGB = [20, 20, 20];
-const MUTED: RGB = [110, 110, 110];
-const RULE: RGB = [220, 218, 214];
-const SOFT: RGB = [240, 239, 237];
-const ZEBRA: RGB = [250, 249, 247];
+// Manual de marca BiBank: negro y verde institucional; Inter para texto y
+// Poppins para títulos (se incrustan al generar; si fallan, Helvetica).
+const INK: RGB = [0, 0, 0];
+const MUTED: RGB = [102, 102, 102];
+const RULE: RGB = [224, 224, 224];
+const SOFT: RGB = [244, 244, 244];
+const ZEBRA: RGB = [250, 250, 250];
 const WHITE: RGB = [255, 255, 255];
+const GREEN: RGB = [53, 238, 200]; // verde institucional #35EEC8 (identidad, no estado)
 
 // Paleta de estados (igual que la app).
 const STATUS_RGB = {
@@ -151,10 +154,22 @@ const CW = PAGE_W - 2 * M; // ancho de contenido
 const TOP = 24;          // primera línea útil (debajo del encabezado)
 const BOTTOM = 280;      // última línea útil (arriba del pie)
 
-export const generatePDF = (activeResult: ExtractionResult | null | undefined) => {
+export const generatePDF = async (activeResult: ExtractionResult | null | undefined) => {
   if (!activeResult || !activeResult.extraction || !activeResult.ratios) return;
 
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+
+  // Tipografías de marca (módulo dinámico: solo se descarga al generar el PDF).
+  let BODY = 'helvetica';
+  let DISPLAY = 'helvetica';
+  try {
+    const { registerBrandFonts } = await import('./pdfFonts');
+    registerBrandFonts(doc);
+    BODY = 'Inter';
+    DISPLAY = 'Poppins';
+  } catch (err) {
+    console.warn('No se pudieron cargar las tipografías de marca; se usa Helvetica.', err);
+  }
   const extraction = activeResult.extraction;
   const ratios = activeResult.ratios;
   const company = extraction.company_profile;
@@ -166,10 +181,43 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
 
   // ---------- Primitivas ----------
 
-  const setText = (size: number, style: 'normal' | 'bold' | 'italic' = 'normal', color: RGB = INK) => {
-    doc.setFont('helvetica', style);
+  type Weight = 'normal' | 'semibold' | 'bold' | 'italic';
+  // Helvetica no tiene semibold: en el respaldo se usa bold.
+  const fontStyle = (family: string, w: Weight) => (family === 'helvetica' && w === 'semibold' ? 'bold' : w);
+  const setText = (size: number, style: Weight = 'normal', color: RGB = INK) => {
+    doc.setFont(BODY, fontStyle(BODY, style));
     doc.setFontSize(size);
     doc.setTextColor(...color);
+  };
+  const setDisplay = (size: number, style: 'semibold' | 'bold' = 'bold', color: RGB = INK) => {
+    doc.setFont(DISPLAY, fontStyle(DISPLAY, style));
+    doc.setFontSize(size);
+    doc.setTextColor(...color);
+  };
+  const PT_PER_MM = 1 / 0.3528;
+
+  // Logo según el manual: anillo abierto con el punto verde en el corte, "Bi"
+  // adentro y "Bank" al lado. bg = color de fondo (para abrir el anillo).
+  const drawLogo = (x: number, yTop: number, h: number, color: RGB, bg: RGB, withWordmark = true) => {
+    const r = h * 0.4;
+    const cx = x + h / 2;
+    const cy = yTop + h / 2;
+    doc.setDrawColor(...color);
+    doc.setLineWidth(h * 0.085);
+    doc.circle(cx, cy, r, 'S');
+    const a = (50 * Math.PI) / 180;
+    const dx = cx + r * Math.cos(a);
+    const dy = cy - r * Math.sin(a);
+    doc.setFillColor(...bg);
+    doc.circle(dx, dy, h * 0.135, 'F');
+    doc.setFillColor(...GREEN);
+    doc.circle(dx, dy, h * 0.075, 'F');
+    setDisplay(h * 0.44 * PT_PER_MM, 'bold', color);
+    doc.text('Bi', cx - h * 0.01, yTop + h * 0.65, { align: 'center' });
+    if (withWordmark) {
+      setDisplay(h * 0.56 * PT_PER_MM, 'semibold', color);
+      doc.text('Bank', x + h * 1.04, yTop + h * 0.69);
+    }
   };
   const text = (s: string | number, x: number, yy: number, opts?: Parameters<jsPDF['text']>[3]) =>
     doc.text(pdfSafe(s), x, yy, opts);
@@ -182,7 +230,7 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
     rowPageBreak: 'avoid',
     margin: { left: M, right: M, top: TOP, bottom: PAGE_H - BOTTOM },
     headStyles: { fillColor: INK, textColor: WHITE, fontStyle: 'bold', fontSize: 7.5, cellPadding: { top: 2, bottom: 2, left: 2, right: 2 } },
-    styles: { font: 'helvetica', fontSize: 8, textColor: INK, cellPadding: { top: 1.7, bottom: 1.7, left: 2, right: 2 }, lineColor: RULE, lineWidth: { bottom: 0.2 } },
+    styles: { font: BODY, fontSize: 8, textColor: INK, cellPadding: { top: 1.7, bottom: 1.7, left: 2, right: 2 }, lineColor: RULE, lineWidth: { bottom: 0.2 } },
     alternateRowStyles: { fillColor: ZEBRA },
   };
   const table = (opts: UserOptions) => {
@@ -213,11 +261,13 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
     doc.rect(M, y - 5.5, 8, 8, 'F');
     setText(10, 'bold', WHITE);
     text(String(n), M + 4, y + 0.2, { align: 'center' });
-    setText(14, 'bold');
-    text(title.toUpperCase(), M + 11.5, y + 0.6);
-    doc.setDrawColor(...INK);
-    doc.setLineWidth(0.6);
+    setDisplay(14, 'bold');
+    text(title, M + 11.5, y + 0.8);
+    doc.setDrawColor(...RULE);
+    doc.setLineWidth(0.3);
     doc.line(M, y + 5, M + CW, y + 5);
+    doc.setFillColor(...GREEN);
+    doc.rect(M, y + 4.4, 28, 1.3, 'F');
     y += 13;
   };
 
@@ -243,7 +293,7 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
       theme: 'plain',
       margin: { left: M, right: M, top: TOP, bottom: PAGE_H - BOTTOM },
       // Alineado a la izquierda: con 'justify', autoTable y jsPDF miden distinto y a veces una palabra queda sola en un renglón.
-      styles: { font: 'helvetica', fontStyle: style, fontSize: size, textColor: INK, halign: 'left', cellPadding: 0, overflow: 'linebreak' },
+      styles: { font: BODY, fontStyle: style, fontSize: size, textColor: INK, halign: 'left', cellPadding: 0, overflow: 'linebreak' },
       columnStyles: { 0: { cellWidth: CW } },
     });
     y = lastY() + 4;
@@ -261,7 +311,7 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
       body: items.map(i => ['', pdfSafe(stripMarkdown(i))]),
       theme: 'plain',
       margin: { left: M, right: M, top: TOP, bottom: PAGE_H - BOTTOM },
-      styles: { font: 'helvetica', fontSize: 9, textColor: INK, cellPadding: { top: 1, bottom: 1, left: 0, right: 0 }, overflow: 'linebreak' },
+      styles: { font: BODY, fontSize: 9, textColor: INK, cellPadding: { top: 1, bottom: 1, left: 0, right: 0 }, overflow: 'linebreak' },
       columnStyles: { 0: { cellWidth: 5 }, 1: { cellWidth: CW - 5, halign: 'left' } },
       didDrawCell: data => {
         if (data.section === 'body' && data.column.index === 0) {
@@ -342,18 +392,19 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
   // ======================================================================
 
   doc.setFillColor(...INK);
-  doc.rect(0, 0, PAGE_W, 46, 'F');
-  setText(20, 'bold', WHITE);
-  text('BiBank', M, 17);
-  setText(8, 'normal', [200, 200, 200]);
-  text('ANÁLISIS DE RIESGO CREDITICIO', M, 23);
-  setText(18, 'bold', WHITE);
-  text('Informe para comité de crédito', M, 37);
-  setText(8, 'normal', [200, 200, 200]);
-  text(`Generado el ${fechaGeneracion}`, PAGE_W - M, 37, { align: 'right' });
+  doc.rect(0, 0, PAGE_W, 48, 'F');
+  drawLogo(M, 9, 12, WHITE, INK);
+  setText(7.5, 'semibold', [190, 190, 190]);
+  text('BANCA EMPRESAS · ANÁLISIS DE RIESGO CREDITICIO', PAGE_W - M, 16.5, { align: 'right' });
+  setDisplay(19, 'bold', WHITE);
+  text('Informe para comité de crédito', M, 38);
+  setText(8, 'normal', [190, 190, 190]);
+  text(`Generado el ${fechaGeneracion}`, PAGE_W - M, 38, { align: 'right' });
+  doc.setFillColor(...GREEN);
+  doc.rect(0, 48, PAGE_W, 1.4, 'F');
 
-  y = 60;
-  setText(17, 'bold');
+  y = 62;
+  setDisplay(17, 'semibold');
   doc.splitTextToSize(pdfSafe(company.name || 'Empresa no identificada'), CW).slice(0, 2).forEach((line: string) => {
     text(line, M, y);
     y += 7.5;
@@ -382,7 +433,7 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
 
     setText(7.5, 'bold', MUTED);
     text('OPINIÓN DE RIESGOS', M + 7, y + 8);
-    setText(40, 'bold');
+    setDisplay(40, 'bold');
     text(String(puntaje.final), M + 7, y + 25);
     const sw = doc.getTextWidth(String(puntaje.final));
     setText(10, 'normal', MUTED);
@@ -559,7 +610,7 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
     ensure(coreH + 4);
     doc.setFillColor(...INK);
     doc.rect(M, y, CW, coreH, 'F');
-    setText(7.5, 'bold', [190, 190, 190]);
+    setText(7.5, 'bold', GREEN);
     text('CORE BUSINESS', M + 6, y + 7);
     setText(9.5, 'normal', WHITE);
     coreLines.forEach((line, i) => text(line, M + 6, y + 13 + i * 4.6));
@@ -885,10 +936,9 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
     if (i > 1) {
-      setText(7, 'bold', INK);
-      text('BiBank', M, 12);
+      drawLogo(M, 7.6, 5.4, INK, WHITE);
       setText(7, 'normal', MUTED);
-      text('· Informe de riesgo crediticio', M + 9.5, 12);
+      text('Informe de riesgo crediticio', M + 19, 12);
       text(company.name || '', PAGE_W - M, 12, { align: 'right' });
       doc.setDrawColor(...RULE);
       doc.setLineWidth(0.25);
