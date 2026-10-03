@@ -37,25 +37,18 @@ const MENSAJES: string[][] = [
   ],
 ];
 
-// Estrellitas que caen de la gota al informe: desvío horizontal (px), tamaño,
+// Partículas que caen de la gota al informe: desvío horizontal (px), tamaño,
 // demora y duración. Fijas para que el dibujo no cambie en cada render.
-const ESTRELLAS = [
-  { x: -30, tam: 16, delay: 0, dur: 3.8 },
-  { x: 16, tam: 12, delay: 0.6, dur: 4.4 },
-  { x: -6, tam: 20, delay: 1.3, dur: 4.0 },
-  { x: 34, tam: 14, delay: 2.0, dur: 4.8 },
-  { x: -42, tam: 10, delay: 2.6, dur: 4.2 },
-  { x: 6, tam: 15, delay: 3.2, dur: 3.9 },
-  { x: 26, tam: 10, delay: 3.8, dur: 4.6 },
+const PARTICULAS = [
+  { x: -24, tam: 4, delay: 0, dur: 4.2 },
+  { x: 12, tam: 3, delay: 0.7, dur: 4.8 },
+  { x: -6, tam: 5, delay: 1.4, dur: 4.4 },
+  { x: 28, tam: 3, delay: 2.1, dur: 5.2 },
+  { x: -34, tam: 2.5, delay: 2.8, dur: 4.6 },
+  { x: 4, tam: 4, delay: 3.4, dur: 4.3 },
+  { x: 20, tam: 2.5, delay: 4.0, dur: 5.0 },
 ];
 const CAIDA = 92;
-
-// Estrella de cuatro puntas.
-const Estrella = ({ tam }: { tam: number }) => (
-  <svg width={tam} height={tam} viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M12 0C13 8 16 11 24 12C16 13 13 16 12 24C11 16 8 13 0 12C8 11 11 8 12 0Z" fill="#35EEC8" style={{ filter: 'drop-shadow(0 0 3px rgb(53 238 200 / 0.8))' }} />
-  </svg>
-);
 
 const MAX_ARCHIVOS = 4;
 const ALTO = 104;
@@ -90,8 +83,7 @@ export function AnalysisFlow({ stage, fileNames }: { stage: CaseState | null; fi
   }, []);
 
   const visibles = fileNames.slice(0, MAX_ARCHIVOS);
-  const resto = fileNames.length - visibles.length;
-  const columnas = visibles.length + (resto > 0 ? 1 : 0) || 1;
+  const columnas = visibles.length || 1;
   const centro = ancho / 2;
   const camino = (i: number, dx: number) => {
     const x = ((i + 0.5) / columnas) * ancho + dx;
@@ -123,11 +115,6 @@ export function AnalysisFlow({ stage, fileNames }: { stage: CaseState | null; fi
               <span className="relative hidden truncate text-xs text-ink/60 sm:inline">{nombre}</span>
             </div>
           ))}
-          {resto > 0 && (
-            <div className="mx-auto flex w-full max-w-[150px] items-center justify-center rounded-xl border border-ink/10 bg-panel px-2.5 py-2.5 text-xs text-ink/40">
-              +{resto}
-            </div>
-          )}
         </div>
 
         {/* Hilos de agua hacia la gota */}
@@ -179,22 +166,23 @@ export function AnalysisFlow({ stage, fileNames }: { stage: CaseState | null; fi
         <span className="absolute left-[38%] top-[34%] h-4 w-4 rounded-full bg-white/80 blur-[3px]" />
       </div>
 
-      {/* Estrellitas que caen de la gota y nutren el informe */}
+      {/* Partículas que caen de la gota y nutren el informe */}
       <div className="relative mx-auto -mt-7 w-32" style={{ height: CAIDA }} aria-hidden="true">
-        {ESTRELLAS.map((e, i) => (
+        {PARTICULAS.map((e, i) => (
           <span
             key={i}
-            className="agua-estrella absolute left-1/2 top-0 block"
+            className="agua-particula absolute left-1/2 top-0 block rounded-full bg-brand-green"
             style={{
               '--x': `${e.x}px`,
-              marginLeft: -e.tam / 2,
               '--caida': `${CAIDA - 4}px`,
+              width: e.tam,
+              height: e.tam,
+              marginLeft: -e.tam / 2,
+              boxShadow: '0 0 6px 1px rgb(53 238 200 / 0.6)',
               animationDelay: `${e.delay}s`,
               animationDuration: `${e.dur}s`,
             } as React.CSSProperties}
-          >
-            <Estrella tam={e.tam} />
-          </span>
+          />
         ))}
       </div>
 
