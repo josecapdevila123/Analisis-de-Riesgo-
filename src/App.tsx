@@ -36,6 +36,8 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import ReactMarkdown from 'react-markdown';
 import { cn, formatCurrencyThousands } from './lib/utils';
 import { generatePDF } from './features/pdf/generatePDF';
+import { ACCEPT_PLANILLAS, esPlanilla, planillaATexto } from './lib/planillas';
+import type { UploadedFile } from './features/extraction/geminiClient';
 import { runPipeline, CaseState } from './features/extraction/pipeline';
 import { useAuth } from './features/auth/useAuth';
 import { useCases } from './features/cases/useCases';
@@ -208,7 +210,7 @@ export default function App() {
   // Proyecciones: se actualizan en vivo y se guardan en el caso con un retardo
   // corto (no se escribe en Firestore por cada tecla).
   const proyeccionesTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [currentFiles, setCurrentFiles] = useState<{ file: File; preview: string }[]>([]);
+  const [currentFiles, setCurrentFiles] = useState<UploadedFile[]>([]);
   const { user, isAuthReady, handleLogin, handleLogout } = useAuth(() => {
     setActiveResultId(null);
     setCurrentFiles([]);
@@ -349,6 +351,13 @@ export default function App() {
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     acceptedFiles.forEach(file => {
+      // Excel / CSV: se convierten a texto en el navegador (Gemini no los lee como archivo).
+      if (esPlanilla(file)) {
+        planillaATexto(file)
+          .then(texto => setCurrentFiles(prev => [...prev, { file, preview: '', texto }]))
+          .catch(err => alert(`No se pudo leer la planilla "${file.name}": ${err instanceof Error ? err.message : String(err)}`));
+        return;
+      }
       const reader = new FileReader();
       reader.onload = () => {
         setCurrentFiles(prev => [...prev, {
@@ -364,7 +373,8 @@ export default function App() {
     onDrop,
     accept: {
       'image/*': ['.jpeg', '.jpg', '.png'],
-      'application/pdf': ['.pdf']
+      'application/pdf': ['.pdf'],
+      ...ACCEPT_PLANILLAS,
     },
     multiple: true
   });
@@ -887,12 +897,12 @@ export default function App() {
                     ) : isDragActive ? (
                       <>
                         <p className="font-display text-lg font-semibold">Soltá los archivos para empezar</p>
-                        <p className="text-sm text-ink/55 mt-0.5">PDF o imágenes, uno o varios a la vez.</p>
+                        <p className="text-sm text-ink/55 mt-0.5">PDF, imágenes, Excel o CSV, uno o varios a la vez.</p>
                       </>
                     ) : (
                       <>
                         <p className="font-display text-lg font-semibold">Cargá la documentación del cliente</p>
-                        <p className="text-sm text-ink/55 mt-0.5">Arrastrá los archivos a esta tarjeta o elegilos desde tu computadora. PDF o imágenes.</p>
+                        <p className="text-sm text-ink/55 mt-0.5">Arrastrá los archivos a esta tarjeta o elegilos desde tu computadora. PDF, imágenes, Excel o CSV.</p>
                       </>
                     )}
                   </div>

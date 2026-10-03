@@ -26,7 +26,9 @@ import { ComputedRatios } from '../ratios/calculations';
 import { Inconsistencia } from '../ratios/sanityChecks';
 import { CrossCheckResult } from '../ratios/crossCheck';
 
-export type UploadedFile = { file: File; preview: string };
+// `texto`: contenido de una planilla (Excel/CSV) ya convertida a texto, porque
+// Gemini no lee esos formatos como archivo.
+export type UploadedFile = { file: File; preview: string; texto?: string };
 
 type GeminiPart =
   | { text: string }
@@ -34,13 +36,15 @@ type GeminiPart =
 
 const buildClient = () => new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-const filesToParts = (files: UploadedFile[]): GeminiPart[] =>
-  files.map(f => ({
-    inlineData: {
-      data: f.preview.split(',')[1],
-      mimeType: f.file.type,
-    },
-  }));
+export const filesToParts = (files: UploadedFile[]): GeminiPart[] =>
+  files.map(f => f.texto !== undefined
+    ? { text: `\n\nARCHIVO "${f.file.name}" (planilla convertida a texto: una tabla CSV por hoja):\n${f.texto}` }
+    : {
+        inlineData: {
+          data: f.preview.split(',')[1],
+          mimeType: f.file.type,
+        },
+      });
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
