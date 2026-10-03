@@ -1,4 +1,5 @@
 import { RatioKey } from './calculations';
+import type { PerfilEfectivo } from '../risk/policy';
 
 // Agrupación de ratios por bloque, compartida por la pestaña Balance y Ratios,
 // el resumen y el informe PDF (antes estaba duplicada en cada uno).
@@ -65,3 +66,35 @@ export const RATIO_BLOCKS: Array<{ bloque: string; descripcion: string; ratios: 
     ],
   },
 ];
+
+// ---------- Perfiles por rubro ----------
+// Fórmulas de los KPIs sectoriales (los usa el bloque "Prioritarios del rubro").
+export const SECTOR_KPI_SPECS: Partial<Record<RatioKey, RatioSpec>> = {
+  bienes_cambio_deuda_cp: { key: 'bienes_cambio_deuda_cp', name: 'Bienes de cambio / deuda bancaria corriente', kind: 'x', formula: 'Bienes de cambio / deuda bancaria corriente' },
+  deuda_bancaria_ventas: { key: 'deuda_bancaria_ventas', name: 'Deuda bancaria / ventas', kind: 'pct', formula: 'Deuda bancaria / ventas' },
+  deuda_cp_share: { key: 'deuda_cp_share', name: 'Deuda que vence en 12 meses', kind: 'pct', formula: 'Deuda bancaria corriente / deuda bancaria total' },
+  margen_ebitda_promedio: { key: 'margen_ebitda_promedio', name: 'Margen EBITDA promedio 2 ejercicios', kind: 'pct', formula: '(Margen EBITDA actual + anterior) / 2' },
+  deuda_comercial_bancaria: { key: 'deuda_comercial_bancaria', name: 'Deuda comercial / deuda bancaria', kind: 'x', formula: 'Deudas comerciales / deuda bancaria' },
+  capex_depreciacion: { key: 'capex_depreciacion', name: 'Capex / depreciación', kind: 'x', formula: 'Pagos por bienes de uso / depreciación (> 1: reinvierte)' },
+  deuda_me_share: { key: 'deuda_me_share', name: 'Deuda en moneda extranjera', kind: 'pct', formula: 'Deuda financiera en ME / deuda bancaria' },
+  anticipos_ventas: { key: 'anticipos_ventas', name: 'Anticipos de clientes / ventas', kind: 'pct', formula: 'Anticipos de clientes (pasivo) / ventas' },
+  liquidez_corriente_sin_anticipos: { key: 'liquidez_corriente_sin_anticipos', name: 'Liquidez corriente sin anticipos', kind: 'x', formula: 'Activo corriente / (pasivo corriente − anticipos de clientes)' },
+  pn_activo: { key: 'pn_activo', name: 'PN / activo', kind: 'pct', formula: 'Patrimonio neto / activo total' },
+};
+
+const specDe = (key: RatioKey): RatioSpec | null =>
+  RATIO_BLOCKS.flatMap(b => b.ratios).find(r => r.key === key) ?? SECTOR_KPI_SPECS[key] ?? null;
+
+export type RatioSpecConPerfil = RatioSpec & { noAplica?: string };
+
+// Bloques para un perfil: primero los KPIs prioritarios del rubro (en el orden
+// en que los lee la opinión) y después los bloques de siempre. Los ratios que
+// no aplican llevan su motivo (se muestran "No aplica", sin semáforo).
+export function bloquesDelPerfil(perfil: PerfilEfectivo): Array<{ bloque: string; descripcion: string; ratios: RatioSpecConPerfil[] }> {
+  const marcar = (r: RatioSpec): RatioSpecConPerfil => (perfil.noAplica[r.key] ? { ...r, noAplica: perfil.noAplica[r.key] } : r);
+  const prioritarios = perfil.kpisPrioritarios.map(specDe).filter((r): r is RatioSpec => r !== null).map(marcar);
+  return [
+    { bloque: `Prioritarios · ${perfil.label}`, descripcion: perfil.variableCritica, ratios: prioritarios },
+    ...RATIO_BLOCKS.map(b => ({ ...b, ratios: b.ratios.map(marcar) })),
+  ];
+}
