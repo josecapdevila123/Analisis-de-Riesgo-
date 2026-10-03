@@ -184,3 +184,26 @@ export const PENDING_ITEMS: Array<{ tema: string; detalle: string }> = [
   { tema: 'Tendencia de 3 ejercicios', detalle: 'Hoy se analizan 2 ejercicios (el balance y su comparativo). Requiere cargar el balance anterior.' },
   { tema: 'Grupo económico consolidado', detalle: 'Medir el riesgo del grupo en conjunto requiere los balances de las sociedades vinculadas.' },
 ];
+
+// ---------- Supuestos de proyección (flujo de fondos para capacidad de repago) ----------
+// Parámetros fijos que la pestaña Proyecciones usa como sugeridos cuando no
+// salen de la extracción. Propuesta inicial, a validar con Riesgos.
+export const PROJECTION_PARAMS = {
+  horizonte: 3,
+  tasaReal: 0.08,
+  alicuota: 0.35,
+  aniosAmortizacionNoCorriente: 2,
+  aniosAmortizacionPostBalance: 2,
+  // Crecimiento real sugerido acotado a este rango.
+  crecimientoMin: -0.2,
+  crecimientoMax: 0.15,
+  estres: {
+    crecimientoAnio1: -0.15,
+    crecimientoSiguientes: 0,
+    margenEbitdaDelta: -0.03, // p.p. sobre el margen del escenario Base
+    tasaRealDelta: 0.04,      // p.p. sobre la tasa del escenario Base
+    liberarCapitalTrabajo: false,
+  },
+  // DSCR que tiene que mantenerse para calcular el margen para deuda nueva.
+  dscrObjetivoDeudaNueva: RATIO_THRESHOLDS.dscr.sano,
+} as const;
