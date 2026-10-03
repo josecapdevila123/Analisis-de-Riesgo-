@@ -18,6 +18,8 @@ type Line = {
   nullable?: boolean;
   total?: boolean;
   calculado?: 'ebitda';
+  // En análisis vertical, muestra además qué % del pasivo total representa.
+  shareOfPasivo?: boolean;
 };
 type Section = { titulo?: string; lines: Line[] };
 
@@ -28,12 +30,20 @@ const ESP: Section[] = [
     { concepto: 'Activo total', get: y => y.estado_situacion_patrimonial.total_activo, path: ['estado_situacion_patrimonial', 'total_activo'], total: true },
   ]},
   { titulo: 'Pasivo', lines: [
-    { concepto: 'Pasivo corriente', get: y => y.estado_situacion_patrimonial.pasivo_corriente.total, path: ['estado_situacion_patrimonial', 'pasivo_corriente', 'total'] },
-    { concepto: 'Pasivo no corriente', get: y => y.estado_situacion_patrimonial.pasivo_no_corriente.total, path: ['estado_situacion_patrimonial', 'pasivo_no_corriente', 'total'] },
+    { concepto: 'Pasivo corriente', get: y => y.estado_situacion_patrimonial.pasivo_corriente.total, path: ['estado_situacion_patrimonial', 'pasivo_corriente', 'total'], shareOfPasivo: true },
+    { concepto: 'Pasivo no corriente', get: y => y.estado_situacion_patrimonial.pasivo_no_corriente.total, path: ['estado_situacion_patrimonial', 'pasivo_no_corriente', 'total'], shareOfPasivo: true },
     { concepto: 'Pasivo total', get: y => y.estado_situacion_patrimonial.total_pasivo, path: ['estado_situacion_patrimonial', 'total_pasivo'], total: true },
   ]},
   { titulo: 'Patrimonio', lines: [
     { concepto: 'Patrimonio neto', get: y => y.estado_situacion_patrimonial.patrimonio_neto, path: ['estado_situacion_patrimonial', 'patrimonio_neto'], total: true },
+  ]},
+  // Cierre del lado del financiamiento: tiene que igualar al activo total (= 100% en vertical).
+  { lines: [
+    {
+      concepto: 'Pasivo + patrimonio neto',
+      get: y => y.estado_situacion_patrimonial.total_pasivo + y.estado_situacion_patrimonial.patrimonio_neto,
+      total: true,
+    },
   ]},
 ];
 
@@ -70,7 +80,7 @@ const Variation = ({ value, unit = '%' }: { value: number | null; unit?: '%' | '
   if (value === null || !Number.isFinite(value)) return <span className="text-ink/30">—</span>;
   const Icon = value > 0.05 ? ArrowUpRight : value < -0.05 ? ArrowDownRight : Minus;
   return (
-    <span className="inline-flex items-center justify-end gap-0.5 text-ink/70 tabular-nums">
+    <span className="inline-flex items-center justify-end gap-0.5 text-ink/70 tabular-nums whitespace-nowrap">
       <Icon className="w-3 h-3" />
       {value > 0 ? '+' : ''}{fmtNum(value, 1)}{unit === 'p.p.' ? ' p.p.' : '%'}
     </span>
@@ -88,8 +98,9 @@ const cuadra = (y: Year | null | undefined) => {
 
 // ---------- Estado contable ----------
 
-function Statement({ title, sections, extraction, ratios, base, vertical, badge }: {
+function Statement({ title, sections, extraction, ratios, base, baseLabel, vertical, badge }: {
   title: string;
+  baseLabel: string;
   sections: Section[];
   extraction: RawExtraction;
   ratios: ComputedRatios;
@@ -118,15 +129,40 @@ function Statement({ title, sections, extraction, ratios, base, vertical, badge 
     if (v === null || v === undefined) return <span className="text-ink/30">—</span>;
     if (vertical) {
       const b = base(y);
-      return b ? `${fmtNum((v / b) * 100, 1)}%` : '—';
+      const main = b ? `${fmtNum((v / b) * 100, 1)}%` : '—';
+      const tp = y.estado_situacion_patrimonial.total_pasivo;
+      if (line.shareOfPasivo && tp) {
+        return (
+          <span className="inline-flex flex-col items-end leading-tight">
+            {main}
+            <span className="text-[10px] text-ink/45 whitespace-nowrap">{fmtNum((v / tp) * 100, 0)}% del pasivo</span>
+          </span>
+        );
+      }
+      return main;
     }
     return fmtNum(v, 0);
+  };
+
+  // Variación: en vertical, cambio del peso en puntos porcentuales; si no, variación del monto.
+  const variationOf = (line: Line) => {
+    const a = valueOf(line, act, 'actual');
+    const p = valueOf(line, ant, 'anterior');
+    if (!vertical) return { value: variation(a, p), unit: '%' as const };
+    if (a === null || a === undefined || p === null || p === undefined || !ant) return { value: null, unit: 'p.p.' as const };
+    const ba = base(act);
+    const bp = base(ant);
+    if (!ba || !bp) return { value: null, unit: 'p.p.' as const };
+    return { value: (a / ba - p / bp) * 100, unit: 'p.p.' as const };
   };
 
   return (
     <section className="bg-white border border-ink/15 flex flex-col">
       <header className="flex items-center justify-between gap-3 px-5 py-4 border-b border-ink/10">
-        <h3 className="font-display text-base font-semibold">{title}</h3>
+        <div>
+          <h3 className="font-display text-base font-semibold">{title}</h3>
+          {vertical && <p className="text-[11px] text-ink/50">Base: {baseLabel} = 100%</p>}
+        </div>
         {badge}
       </header>
       <div className="overflow-x-auto">
@@ -136,7 +172,7 @@ function Statement({ title, sections, extraction, ratios, base, vertical, badge 
             <th className="text-left font-semibold px-5 py-2.5">Concepto</th>
             <th className="text-right font-semibold px-3 py-2.5">{anioAnt}</th>
             <th className="text-right font-semibold px-3 py-2.5">{anioAct}</th>
-            <th className="text-right font-semibold px-5 py-2.5">Var.</th>
+            <th className="text-right font-semibold px-5 py-2.5">{vertical ? 'Var. p.p.' : 'Var.'}</th>
           </tr>
         </thead>
         {sections.map((section, si) => (
@@ -149,8 +185,7 @@ function Statement({ title, sections, extraction, ratios, base, vertical, badge 
               </tr>
             )}
             {section.lines.map(line => {
-              const a = valueOf(line, act, 'actual');
-              const p = valueOf(line, ant, 'anterior');
+              const v = variationOf(line);
               return (
                 <tr key={line.concepto} className={line.total ? 'border-t border-ink/15 font-semibold' : 'hover:bg-ink/[0.02]'}>
                   <td className="!text-left px-5 py-2">
@@ -163,7 +198,7 @@ function Statement({ title, sections, extraction, ratios, base, vertical, badge 
                   </td>
                   <td className="px-3 py-2 tabular-nums text-ink/60">{cell(line, ant, 'anterior')}</td>
                   <td className="px-3 py-2 tabular-nums text-ink">{cell(line, act, 'actual')}</td>
-                  <td className="px-5 py-2 text-xs"><Variation value={variation(a, p)} /></td>
+                  <td className="px-5 py-2 text-xs"><Variation value={v.value} unit={v.unit} /></td>
                 </tr>
               );
             })}
@@ -201,7 +236,9 @@ export function BalanceRatiosView({ extraction, ratios }: { extraction: RawExtra
         <div>
           <h2 className="font-display text-xl font-semibold">Estados contables</h2>
           <p className="text-xs text-ink/50">
-            {vertical ? 'Análisis vertical: % del activo total y % de las ventas.' : 'Valores en miles de pesos.'}
+            {vertical
+              ? 'Análisis vertical: cada rubro como % del activo total (que es igual a pasivo + patrimonio) y cada resultado como % de las ventas. La variación muestra cuánto cambió el peso, en puntos porcentuales.'
+              : 'Valores en miles de pesos.'}
           </p>
         </div>
         <div className="inline-flex rounded-full border border-ink/15 bg-white p-1">
@@ -226,6 +263,7 @@ export function BalanceRatiosView({ extraction, ratios }: { extraction: RawExtra
           extraction={extraction}
           ratios={ratios}
           base={y => y.estado_situacion_patrimonial.total_activo}
+          baseLabel="activo total (= pasivo + patrimonio)"
           vertical={vertical}
           badge={balanceBadge}
         />
@@ -235,6 +273,7 @@ export function BalanceRatiosView({ extraction, ratios }: { extraction: RawExtra
           extraction={extraction}
           ratios={ratios}
           base={y => y.estado_resultados.ventas_netas}
+          baseLabel="ventas netas"
           vertical={vertical}
         />
       </div>
