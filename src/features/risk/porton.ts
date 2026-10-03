@@ -1,4 +1,5 @@
-import { PerfilEfectivo, perfilEfectivo, POLICY_VERSION, RubroDisponible, SECTOR_PROFILES } from './policy';
+import { PerfilEfectivo, perfilEfectivo, POLICY_VERSION, RubroDisponible, SECTOR_PROFILES, SubSegmento } from './policy';
+import { DocumentoSectorial, firmaDocumentos } from '../sectorDocs/tipos';
 import { Coincidencia, sugerirRubro } from './sector';
 import type { RawExtraction } from '../extraction/schemas';
 
@@ -13,6 +14,8 @@ export type SectorCaso = {
   confirmadoEn: string | null; // ISO
   motivoCambio: string | null;
   nota: string | null;
+  // Financiera: sub-segmento obligatorio (define los umbrales de mora).
+  subsegmento?: SubSegmento | null;
 };
 
 // Caso nuevo o viejo sin rubro: se sugiere y queda "genérico" sin confirmar.
@@ -24,8 +27,9 @@ export const sectorInicial = (extraction: Pick<RawExtraction, 'company_profile'>
 export const MOTIVO_MINIMO = 10;
 
 // Error de validación de la confirmación, o null si se puede confirmar.
-export function validarConfirmacion(sector: SectorCaso, elegido: RubroDisponible | null, motivo: string): string | null {
+export function validarConfirmacion(sector: SectorCaso, elegido: RubroDisponible | null, motivo: string, subsegmento: SubSegmento | null = null): string | null {
   if (!elegido) return 'Elegí un rubro.';
+  if (SECTOR_PROFILES[elegido].requiereSubsegmento && !subsegmento) return `Elegí el sub-segmento de ${SECTOR_PROFILES[elegido].label}: define los umbrales de mora.`;
   const sugerido = sector.sugerido ?? null;
   if (sugerido !== null && elegido !== sugerido && motivo.trim().length < MOTIVO_MINIMO) {
     return `Elegiste un rubro distinto del sugerido (${SECTOR_PROFILES[sugerido].label}): explicá el motivo (mínimo ${MOTIVO_MINIMO} caracteres).`;
@@ -40,8 +44,9 @@ export function confirmarRubro(
   nota: string,
   email: string | null,
   ahora = new Date(),
+  subsegmento: SubSegmento | null = null,
 ): SectorCaso {
-  const error = validarConfirmacion(sector, elegido, motivo);
+  const error = validarConfirmacion(sector, elegido, motivo, subsegmento);
   if (error) throw new Error(error);
   const cambio = sector.sugerido !== null && elegido !== sector.sugerido;
   return {
@@ -51,6 +56,7 @@ export function confirmarRubro(
     confirmadoEn: ahora.toISOString(),
     motivoCambio: cambio ? motivo.trim() : null,
     nota: nota.trim() || null,
+    subsegmento: SECTOR_PROFILES[elegido].requiereSubsegmento ? subsegmento : null,
   };
 }
 
@@ -74,16 +80,22 @@ export type EstadoPorton = {
 
 export function estadoPorton(
   sector: SectorCaso | null | undefined,
-  opinion: { perfil?: PerfilEfectivo; politicaVersion?: string } | null | undefined,
+  opinion: { perfil?: PerfilEfectivo; politicaVersion?: string; documentosFirma?: string } | null | undefined,
+  documentos: DocumentoSectorial[] | null = null,
 ): EstadoPorton {
   const confirmado = sector?.confirmado ?? null;
   const rubroEvaluado = opinion ? (opinion.perfil?.rubro ?? 'generico') : null;
+  const subEvaluado = opinion?.perfil?.subsegmento ?? null;
   const politicaEvaluada = opinion ? (opinion.politicaVersion ?? VERSION_PREVIA) : null;
-  const estadoOpinion: EstadoOpinion = !opinion ? 'sin_opinion' : confirmado !== null && rubroEvaluado !== confirmado ? 'desactualizada' : 'vigente';
+  const cambioRubro = !!opinion && confirmado !== null && (rubroEvaluado !== confirmado || subEvaluado !== (sector?.subsegmento ?? null));
+  // Cargar, editar o borrar un documento después de la opinión la deja vieja.
+  const cambioDocs = !!opinion && (opinion.documentosFirma ?? '') !== firmaDocumentos(documentos);
+  const estadoOpinion: EstadoOpinion = !opinion ? 'sin_opinion' : confirmado !== null && (cambioRubro || cambioDocs) ? 'desactualizada' : 'vigente';
 
   let motivo: string | null = null;
   if (confirmado === null) motivo = 'Pendiente de rubro: confirmá el rubro para habilitar semáforos, puntaje, opinión y PDF.';
-  else if (estadoOpinion === 'desactualizada') motivo = 'Cambió el rubro después de generar la opinión: volvé a generarla para habilitar el PDF.';
+  else if (cambioRubro) motivo = 'Cambió el rubro o el sub-segmento después de generar la opinión: volvé a generarla para habilitar el PDF.';
+  else if (cambioDocs) motivo = 'Se cargó, editó o borró un documento después de generar la opinión: volvé a generarla para habilitar el PDF.';
 
   return {
     rubroConfirmado: confirmado !== null,
@@ -104,6 +116,7 @@ export function perfilDelCaso(
   opinion: { perfil?: PerfilEfectivo } | null | undefined,
 ): PerfilEfectivo {
   const confirmado = sector?.confirmado ?? null;
-  if (opinion?.perfil && (confirmado === null || opinion.perfil.rubro === confirmado)) return opinion.perfil;
-  return perfilEfectivo(confirmado ?? 'generico');
+  const sub = sector?.subsegmento ?? null;
+  if (opinion?.perfil && (confirmado === null || (opinion.perfil.rubro === confirmado && (opinion.perfil.subsegmento ?? null) === sub))) return opinion.perfil;
+  return perfilEfectivo(confirmado ?? 'generico', sub);
 }

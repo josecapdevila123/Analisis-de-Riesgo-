@@ -4,6 +4,9 @@ import { Inconsistencia } from '../ratios/sanityChecks';
 import { CrossCheckResult } from '../ratios/crossCheck';
 import { pceProxy } from './score';
 import { PerfilEfectivo, perfilEfectivo } from './policy';
+import { disponibilidadesActuales } from '../ratios/calculations';
+import { indicadoresFinancieros } from '../ratios/financieras';
+import type { DocumentoSectorial } from '../sectorDocs/tipos';
 
 // Señales de riesgo objetivas, calculadas con reglas fijas (sin IA). Se le pasan
 // al modelo como evidencia y algunas fijan un PISO al puntaje final, para que una
@@ -27,6 +30,8 @@ export type SignalsInput = {
   companyHistory?: CompanyHistory | null;
   // Perfil del rubro confirmado (por defecto, el genérico).
   perfil?: PerfilEfectivo;
+  // Documentos sectoriales (ej. reporte de mora). Declarados, no auditados.
+  documentos?: DocumentoSectorial[] | null;
 };
 
 const fmtPct = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(0)}%`;
@@ -38,7 +43,7 @@ const variation = (actual: number | null | undefined, anterior: number | null | 
   return ((actual - anterior) / Math.abs(anterior)) * 100;
 };
 
-export function detectSignals({ extraction, ratios, inconsistencias, crossCheck, companyHistory, perfil = perfilEfectivo('generico') }: SignalsInput): RiskSignal[] {
+export function detectSignals({ extraction, ratios, inconsistencias, crossCheck, companyHistory, perfil = perfilEfectivo('generico'), documentos = null }: SignalsInput): RiskSignal[] {
   const out: RiskSignal[] = [];
   // Parámetros y umbrales del perfil efectivo (genérico + overrides del rubro).
   const P = perfil.senales;
@@ -430,8 +435,118 @@ export function detectSignals({ extraction, ratios, inconsistencias, crossCheck,
     });
   }
 
+  // ---------- Financieras (modelo propio) ----------
+  if (perfil.modelo === 'financiera' && perfil.senalesFinanciera) {
+    detectarSenalesFinanciera(extraction, ratios, perfil, documentos, add);
+  }
+
   // Señales desactivadas por el rubro (o de ratios que no aplican): no suman.
   const desactivadas = new Set(perfil.senalesDesactivadas.map(d => d.id));
   const orden: Record<SeveridadRiesgo, number> = { critica: 0, alta: 1, media: 2, baja: 3 };
   return out.filter(s => !desactivadas.has(s.id)).sort((a, b) => orden[a.severidad] - orden[b.severidad]);
+}
+
+// Señales de financieras. Los documentos (reporte de mora) son declarados por el
+// cliente: pueden agregar señales, pero una señal con piso que dispara el
+// balance no se levanta por un reporte más favorable.
+function detectarSenalesFinanciera(
+  extraction: RawExtraction,
+  ratios: ComputedRatios,
+  perfil: PerfilEfectivo,
+  documentos: DocumentoSectorial[] | null,
+  add: (s: RiskSignal) => void,
+) {
+  const F = perfil.senalesFinanciera!;
+  const U = perfil.umbrales;
+  const ind = indicadoresFinancieros(extraction, documentos, { disponibilidades: disponibilidadesActuales(extraction) });
+  const v = ind.valores;
+  const pct = (x: number) => `${(x * 100).toFixed(1).replace('.', ',')}%`;
+  const fuente = ind.mora.fuente === 'reporte'
+    ? ` (fuente: reporte de mora${ind.mora.fechaCorte ? ` al ${ind.mora.fechaCorte}` : ''}, declarado por el cliente)`
+    : ind.mora.fuente === 'balance' ? ' (fuente: balance)' : '';
+
+  if (ind.mora.fuente === null) {
+    add({
+      id: 'sin_datos_cartera', dimension: 'calidad_informacion', severidad: 'alta', piso: null,
+      titulo: 'Sin datos de la cartera',
+      detalle: 'No hay reporte de mora ni bloque financiero del balance: no se puede medir la calidad de la cartera.',
+    });
+  }
+
+  const mora = v.mora.actual;
+  if (mora !== null && U.mora && mora > U.mora.alerta) {
+    add({
+      id: 'mora_alta', dimension: 'calidad_cartera', severidad: 'alta', piso: null,
+      titulo: 'Mora por encima del umbral de alerta',
+      detalle: `Mora ${pct(mora)}${fuente}; alerta del sub-segmento: ${pct(U.mora.alerta)}.`,
+    });
+  }
+  const cob = v.cobertura.actual;
+  if (cob !== null && cob < F.coberturaMinima) {
+    add({
+      id: 'cobertura_mora_baja', dimension: 'calidad_cartera', severidad: 'alta', piso: null,
+      titulo: 'Mora poco previsionada',
+      detalle: `Previsiones / cartera > 90 días ${pct(cob)}${fuente} (mínimo ${pct(F.coberturaMinima)}).`,
+    });
+  }
+
+  // PN ajustado: se evalúa con la fuente elegida y con el balance; manda el peor.
+  const pn = extraction.ejercicio_actual.estado_situacion_patrimonial.patrimonio_neto;
+  const candidatos = [v.pn_ajustado.actual, ind.pnAjustadoBalance].filter((x): x is number => x !== null);
+  const pnAj = candidatos.length ? Math.min(...candidatos) : null;
+  if (pnAj !== null && pnAj <= 0) {
+    add({
+      id: 'pn_ajustado_negativo', dimension: 'endeudamiento', severidad: 'critica', piso: F.pnAjustadoNegativoPiso,
+      titulo: 'La mora no cubierta se come el patrimonio',
+      detalle: `PN ajustado $ ${Math.round(pnAj).toLocaleString('es-AR')} miles (PN − cartera > 90 días no previsionada).`,
+    });
+  } else if (pnAj !== null && pn > 0 && pnAj / pn < F.pnAjustadoMinimoSobrePn) {
+    add({
+      id: 'pn_ajustado_bajo', dimension: 'endeudamiento', severidad: 'alta', piso: null,
+      titulo: 'PN ajustado por mora bajo',
+      detalle: `PN ajustado $ ${Math.round(pnAj).toLocaleString('es-AR')} miles: ${pct(pnAj / pn)} del PN (mínimo ${pct(F.pnAjustadoMinimoSobrePn)}).`,
+    });
+  }
+
+  const cargo = v.cargo_sobre_resultado.actual;
+  if (cargo !== null && cargo > F.cargoSobreResultadoMaximo) {
+    add({
+      id: 'cargo_incobrabilidad_alto', dimension: 'calidad_cartera', severidad: 'alta', piso: null,
+      titulo: 'La incobrabilidad se come el resultado',
+      detalle: `Cargo por incobrabilidad / resultado antes de previsiones ${pct(cargo)} (máximo ${pct(F.cargoSobreResultadoMaximo)}).`,
+    });
+  }
+  const liq = v.liquidez_90d.actual;
+  if (liq !== null && liq < F.liquidez90Minima) {
+    add({
+      id: 'liquidez_90d_baja', dimension: 'liquidez_solvencia', severidad: 'alta', piso: null,
+      titulo: 'No cubre lo que vence en 90 días',
+      detalle: `Liquidez a 90 días ${liq.toFixed(2).replace('.', ',')}x: lo que cobra y tiene en caja no alcanza para los pasivos que vencen.`,
+    });
+  }
+  const conc = v.concentracion_fondeo.actual;
+  if (conc !== null && conc > F.concentracionFondeoMaxima) {
+    add({
+      id: 'fondeo_concentrado', dimension: 'liquidez_solvencia', severidad: 'media', piso: null,
+      titulo: 'Fondeo concentrado',
+      detalle: `La principal fuente de fondeo es el ${pct(conc)} del total.`,
+    });
+  }
+  const roa = ratios.roa;
+  if (roa.actual !== null && roa.actual < 0) {
+    const repetido = roa.anterior !== null && roa.anterior < 0;
+    add({
+      id: 'roa_negativo', dimension: 'rentabilidad', severidad: repetido ? 'alta' : 'media', piso: null,
+      titulo: repetido ? 'ROA negativo en los dos ejercicios' : 'ROA negativo',
+      detalle: `ROA ${pct(roa.actual)}${repetido ? ` (anterior ${pct(roa.anterior!)})` : ''}.`,
+    });
+  }
+  const brecha = v.brecha_crecimiento_cartera_pn.actual;
+  if (brecha !== null && brecha > F.brechaCarteraPnMaxima) {
+    add({
+      id: 'cartera_crece_sobre_pn', dimension: 'endeudamiento', severidad: 'media', piso: null,
+      titulo: 'La cartera crece mucho más que el patrimonio',
+      detalle: `La cartera crece ${(brecha * 100).toFixed(0)} p.p. por encima del PN (máximo ${(F.brechaCarteraPnMaxima * 100).toFixed(0)} p.p.).`,
+    });
+  }
 }

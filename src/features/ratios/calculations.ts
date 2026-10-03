@@ -1,5 +1,7 @@
 import { RawExtraction } from '../extraction/schemas';
-import { PerfilEfectivo, perfilEfectivo, RATIO_THRESHOLDS, RatioWithThreshold } from '../risk/policy';
+import { PerfilEfectivo, perfilEfectivo } from '../risk/policy';
+import { FIN_KEYS, FinKey, indicadoresFinancieros } from './financieras';
+import type { DocumentoSectorial } from '../sectorDocs/tipos';
 
 export type RatioStatus = 'healthy' | 'alert' | 'critical';
 
@@ -50,7 +52,9 @@ export type RatioKey =
   | 'anticipos_ventas'
   | 'liquidez_corriente_sin_anticipos'
   | 'endeudamiento_sin_anticipos'
-  | 'pn_activo';
+  | 'pn_activo'
+  // Financieras (ver financieras.ts)
+  | FinKey;
 
 export type ComputedRatios = Record<RatioKey, Ratio>;
 
@@ -163,11 +167,13 @@ const computeEBITDA = (year: Year): number => {
 // umbrales del perfil efectivo del rubro. Un ratio que "no aplica" no tiene semáforo.
 const evaluateRatioStatus = (key: RatioKey, value: number | null, perfil: PerfilEfectivo): RatioStatus | null => {
   if (!isFiniteNumber(value)) return null;
-  if (!(key in RATIO_THRESHOLDS)) return null;
+  const t = perfil.umbrales[key];
+  if (!t) return null;
   if (perfil.noAplica[key]) return null;
-  const t = perfil.umbrales[key as RatioWithThreshold];
+  // Inclusivo (financieras): el valor exacto del umbral cae en el tramo mejor.
+  const inc = t.inclusivo === true;
   if (t.mejorSi === 'mayor') {
-    if (value > t.sano) return 'healthy';
+    if (inc ? value >= t.sano : value > t.sano) return 'healthy';
     if (value >= t.alerta) return 'alert';
     return 'critical';
   }
@@ -279,6 +285,7 @@ const computeYearValues = (year: Year, deudaCorriente: number, deudaNoCorriente:
     liquidez_corriente_sin_anticipos: safeDivide(ac, pc - anticipos.corriente),
     endeudamiento_sin_anticipos: safeDivide(totalPasivo - anticipos.total, pnPositivo),
     pn_activo: safeDivide(pn, totalActivo),
+    ...(Object.fromEntries(FIN_KEYS.map(k => [k, null])) as Record<FinKey, null>),
   };
 };
 
@@ -322,6 +329,7 @@ const RATIO_KEYS: RatioKey[] = [
   'liquidez_corriente_sin_anticipos',
   'endeudamiento_sin_anticipos',
   'pn_activo',
+  ...FIN_KEYS,
 ];
 
 // Ratio cuyo valor se usa para el semáforo de otro, según el perfil:
@@ -333,7 +341,14 @@ const valorParaSemaforo = (key: RatioKey, perfil: PerfilEfectivo): RatioKey => {
   return key;
 };
 
-export function computeRatios(extraction: RawExtraction, perfil: PerfilEfectivo = perfilEfectivo('generico')): ComputedRatios {
+// Caja y bancos del ejercicio actual (lo usan también las señales de financieras).
+export const disponibilidadesActuales = (extraction: RawExtraction) => getDisponibilidades(extraction.ejercicio_actual);
+
+export function computeRatios(
+  extraction: RawExtraction,
+  perfil: PerfilEfectivo = perfilEfectivo('generico'),
+  documentos: DocumentoSectorial[] | null = null,
+): ComputedRatios {
   const actualValues = computeYearValues(
     extraction.ejercicio_actual,
     extraction.deuda_bancaria_actual.corriente.total,
@@ -357,6 +372,13 @@ export function computeRatios(extraction: RawExtraction, perfil: PerfilEfectivo 
   // Deuda en moneda extranjera sobre la deuda bancaria (descalce de moneda).
   const deudaME = extraction.informacion_complementaria?.deuda_financiera_moneda_extranjera ?? null;
   actualValues.deuda_me_share = deudaME === null ? null : safeDivide(deudaME, actualValues.deuda_bancaria_total);
+
+  // Financieras: solo con bloque financiero del balance o reporte de mora.
+  // Sin esos datos quedan en null (las empresas productivas no los tienen).
+  if (extraction.extraccion_financiera || (documentos ?? []).some(d => d.tipo === 'reporte_mora')) {
+    const f = indicadoresFinancieros(extraction, documentos, { disponibilidades: getDisponibilidades(extraction.ejercicio_actual) });
+    for (const k of FIN_KEYS) actualValues[k] = f.valores[k].actual;
+  }
 
   const result = {} as ComputedRatios;
   for (const key of RATIO_KEYS) {

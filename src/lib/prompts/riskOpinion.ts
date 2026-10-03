@@ -22,6 +22,8 @@ Recibís \`perfil_de_evaluacion\`: el rubro con el que se evalúa la empresa, co
 - Los indicadores de \`no_aplican\` NO se penalizan ni cuentan como riesgo: si los mencionás, aclará que no aplican al rubro y por qué. Lo mismo con las \`senales_desactivadas\`.
 - Mencioná con qué perfil se evaluó (ej. "Evaluada con el perfil Comercio y distribución"). Si hay \`motivo_del_cambio\` (el analista eligió un rubro distinto del sugerido) o \`nota_del_analista\` (negocio mixto), tenelos en cuenta.
 - Los rangos del marco general de abajo son los del perfil genérico: si el rubro tiene otros umbrales, mandan los semáforos que recibís.
+- Seguí las \`instrucciones_del_perfil\` (por ejemplo, el orden de análisis de una financiera). Si el perfil es de una financiera, el marco de abajo (DSCR, EBITDA, liquidez corriente) NO aplica: usá \`indicadores_financieros\` (mora, cobertura, PN ajustado, liquidez a 90 días, fondeo, rentabilidad, concentración).
+- \`documentacion_sectorial\` es información DECLARADA por el cliente, no auditada: puede matizar la lectura, pero nunca compensa una señal automática con piso. Decilo cuando la uses. Si falta documentación recomendada (\`documentacion_sectorial_recomendada_faltante\`), pedila en \`informacion_faltante\`.
 
 ===========================================================
 MARCO DE ANÁLISIS (en este orden de importancia)
@@ -50,7 +52,7 @@ Buscá activamente estas conexiones, entre otras:
 ===========================================================
 PUNTAJE POR DIMENSIÓN (1 = riesgo mínimo, 100 = riesgo máximo)
 ===========================================================
-Puntuá cada una de estas 7 dimensiones. Si una dimensión no tiene datos, puntaje null y explicalo en el comentario.
+Puntuá las dimensiones de \`perfil_de_evaluacion.dimensiones\` (las que tienen peso en el perfil; usá su \`nombre\` en los comentarios). En los perfiles de empresa productiva son estas 7; en financieras se suma calidad_cartera y no se puntúa ventas_post_balance. Si una dimensión no tiene datos, puntaje null y explicalo en el comentario.
 - nosis_bcra: situación BCRA, cheques rechazados, score/pce_proxy, cruce de deuda.
 - endeudamiento: capacidad de pago (DSCR primero), deuda neta/EBITDA, cobertura de intereses, evolución y plazo de la deuda, descalce de moneda.
 - liquidez_solvencia: liquidez, capital de trabajo, ciclo de caja, calidad de la ganancia, patrimonio neto.
@@ -58,6 +60,7 @@ Puntuá cada una de estas 7 dimensiones. Si una dimensión no tiene datos, punta
 - ventas_post_balance: evolución de ventas y deuda después del cierre.
 - negocio_mercado: core business, concentración, dependencias, contexto sectorial y macro.
 - calidad_informacion: opinión del auditor, ajuste por inflación, consistencia y completitud de la información recibida.
+- calidad_cartera (solo financieras): mora, cobertura con previsiones, cargo por incobrabilidad y mora por producto.
 
 Referencia de la escala: 1–25 riesgo bajo, 26–50 moderado, 51–75 alto, 76–100 crítico.
 Pisos: las señales automáticas con \`piso\` fijan un puntaje mínimo que el sistema aplica igual (ej. situación 2 en BCRA, DSCR < 1, patrimonio neto negativo, pedido de quiebra). Tus puntajes por dimensión tienen que ser coherentes con esas señales.
@@ -68,7 +71,7 @@ CAMPOS DE SALIDA
 - postura: "favorable" | "favorable_con_condiciones" | "desfavorable".
 - dictamen: 2-3 oraciones, directo, para leer en 10 segundos. Coherente con los pisos y señales.
 - lectura_integral: 250-450 palabras, tono frío y objetivo, conectando las fuentes. Sin viñetas.
-- dimensiones: las 7, cada una con puntaje y un comentario de 1-2 oraciones que justifique el puntaje con datos.
+- dimensiones: las del perfil, cada una con puntaje y un comentario de 1-2 oraciones que justifique el puntaje con datos.
 - riesgos: entre 3 y 10, ordenados de más a menos grave. Cada uno con titulo corto, severidad ("baja" | "media" | "alta" | "critica"), dimension, evidencia (datos concretos y de qué fuente salen) y mitigante (si existe en los datos; si no, string vacío).
 - fortalezas: hasta 6, con datos.
 - condiciones_sugeridas: hasta 6 condiciones concretas para otorgar (garantías, covenants, plazo, monto, seguimiento de ventas post balance, regularización en BCRA, etc.). Si la postura es "favorable" pueden ser de seguimiento.

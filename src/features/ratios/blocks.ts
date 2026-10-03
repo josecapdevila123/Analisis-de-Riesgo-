@@ -80,21 +80,53 @@ export const SECTOR_KPI_SPECS: Partial<Record<RatioKey, RatioSpec>> = {
   anticipos_ventas: { key: 'anticipos_ventas', name: 'Anticipos de clientes / ventas', kind: 'pct', formula: 'Anticipos de clientes (pasivo) / ventas' },
   liquidez_corriente_sin_anticipos: { key: 'liquidez_corriente_sin_anticipos', name: 'Liquidez corriente sin anticipos', kind: 'x', formula: 'Activo corriente / (pasivo corriente − anticipos de clientes)' },
   pn_activo: { key: 'pn_activo', name: 'PN / activo', kind: 'pct', formula: 'Patrimonio neto / activo total' },
+  // Financieras (fuente de mora y previsiones: reporte de mora si está; si no, balance)
+  cartera_financiera: { key: 'cartera_financiera', name: 'Cartera', kind: 'monto', formula: 'Préstamos y créditos financieros, brutos de previsiones' },
+  mora: { key: 'mora', name: 'Mora', kind: 'pct', formula: 'Cartera con más de 90 días de atraso / cartera total' },
+  cobertura: { key: 'cobertura', name: 'Cobertura de la mora', kind: 'pct', formula: 'Previsiones / cartera con más de 90 días' },
+  irregular_no_previsionada: { key: 'irregular_no_previsionada', name: 'Cartera irregular no previsionada', kind: 'monto', formula: 'máx(0, cartera > 90 días − previsiones)' },
+  cargo_sobre_resultado: { key: 'cargo_sobre_resultado', name: 'Cargo / resultado antes de previsiones', kind: 'pct', formula: 'Cargo por incobrabilidad / (ingresos fin. − egresos fin. − gastos de estructura + cargo)' },
+  pn_ajustado: { key: 'pn_ajustado', name: 'PN ajustado', kind: 'monto', formula: 'PN − (cartera > 90 días − previsiones)' },
+  pn_ajustado_sobre_pn: { key: 'pn_ajustado_sobre_pn', name: 'PN ajustado / PN', kind: 'pct', formula: 'PN ajustado / patrimonio neto' },
+  liquidez_90d: { key: 'liquidez_90d', name: 'Liquidez a 90 días', kind: 'x', formula: '(Caja + inversiones corrientes + créditos a vencer ≤ 90 días) / pasivos a vencer ≤ 90 días' },
+  concentracion_fondeo: { key: 'concentracion_fondeo', name: 'Concentración de fondeo', kind: 'pct', formula: 'Mayor fuente de fondeo / fondeo total' },
+  eficiencia: { key: 'eficiencia', name: 'Eficiencia', kind: 'pct', formula: 'Gastos de administración y comercialización / (ingresos fin. − egresos fin.)' },
+  top10_sobre_cartera: { key: 'top10_sobre_cartera', name: 'Top 10 deudores / cartera', kind: 'pct', formula: 'Monto de los 10 principales deudores (carga manual) / cartera' },
+  brecha_crecimiento_cartera_pn: { key: 'brecha_crecimiento_cartera_pn', name: 'Crecimiento cartera − PN (p.p.)', kind: 'pct', formula: 'Variación de la cartera − variación del PN' },
+  endeudamiento: { key: 'endeudamiento', name: 'Pasivo / PN', kind: 'x', formula: 'Pasivo total / patrimonio neto' },
+  roa: { key: 'roa', name: 'ROA', kind: 'pct', formula: 'Resultado neto / activo total' },
+  roe: { key: 'roe', name: 'ROE', kind: 'pct', formula: 'Resultado neto / patrimonio neto' },
 };
 
 const specDe = (key: RatioKey): RatioSpec | null =>
   RATIO_BLOCKS.flatMap(b => b.ratios).find(r => r.key === key) ?? SECTOR_KPI_SPECS[key] ?? null;
 
 export type RatioSpecConPerfil = RatioSpec & { noAplica?: string };
+export type BloqueConPerfil = { bloque: string; descripcion: string; ratios: RatioSpecConPerfil[]; colapsado?: boolean };
 
 // Bloques para un perfil: primero los KPIs prioritarios del rubro (en el orden
 // en que los lee la opinión) y después los bloques de siempre. Los ratios que
 // no aplican llevan su motivo (se muestran "No aplica", sin semáforo).
-export function bloquesDelPerfil(perfil: PerfilEfectivo): Array<{ bloque: string; descripcion: string; ratios: RatioSpecConPerfil[] }> {
+export function bloquesDelPerfil(perfil: PerfilEfectivo): BloqueConPerfil[] {
   const marcar = (r: RatioSpec): RatioSpecConPerfil => (perfil.noAplica[r.key] ? { ...r, noAplica: perfil.noAplica[r.key] } : r);
   const prioritarios = perfil.kpisPrioritarios.map(specDe).filter((r): r is RatioSpec => r !== null).map(marcar);
-  return [
-    { bloque: `Prioritarios · ${perfil.label}`, descripcion: perfil.variableCritica, ratios: prioritarios },
-    ...RATIO_BLOCKS.map(b => ({ ...b, ratios: b.ratios.map(marcar) })),
-  ];
+  const bloquePrioritarios = { bloque: `Prioritarios · ${perfil.label}`, descripcion: perfil.variableCritica, ratios: prioritarios };
+
+  // Perfiles con agrupación propia (financiera: 5 ejes). Los ratios de siempre
+  // que no aplican van al final, colapsados.
+  if (perfil.bloques) {
+    const propios = perfil.bloques.map(b => ({
+      bloque: b.bloque,
+      descripcion: b.descripcion,
+      ratios: b.ratios.map(k => SECTOR_KPI_SPECS[k] ?? specDe(k)).filter((r): r is RatioSpec => !!r).map(marcar),
+    }));
+    const usados = new Set(perfil.bloques.flatMap(b => b.ratios));
+    const noAplican = RATIO_BLOCKS.flatMap(b => b.ratios).filter(r => !usados.has(r.key) && perfil.noAplica[r.key]).map(marcar);
+    return [
+      bloquePrioritarios,
+      ...propios,
+      { bloque: 'Ratios de empresa productiva (no aplican)', descripcion: 'Se calculan pero no se evalúan en este rubro.', ratios: noAplican, colapsado: true },
+    ];
+  }
+  return [bloquePrioritarios, ...RATIO_BLOCKS.map(b => ({ ...b, ratios: b.ratios.map(marcar) }))];
 }

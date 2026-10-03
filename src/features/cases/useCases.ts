@@ -1,3 +1,4 @@
+import type { DocumentoSectorial } from '../sectorDocs/tipos';
 import { SectorCaso, sectorInicial } from '../risk/porton';
 import { useEffect, useState } from 'react';
 import { User } from 'firebase/auth';
@@ -118,6 +119,7 @@ export function useCases(user: User | null, isAuthReady: boolean) {
               riskAssessment: parseJSON<RiskAssessment | null>(data.riskAssessment, null),
               proyecciones: parseJSON<ProyeccionesGuardadas | null>(data.proyecciones, null),
               sector: parseJSON<SectorCaso | null>(data.sector, null) ?? (extraction ? sectorInicial(extraction) : null),
+              documentosSectoriales: parseJSON<DocumentoSectorial[]>(data.documentosSectoriales, []),
               editedAt: typeof data.editedAt === 'string' ? data.editedAt : undefined,
               error: data.error,
             });
@@ -249,6 +251,15 @@ export function useCases(user: User | null, isAuthReady: boolean) {
     }
   };
 
+  const saveCaseDocumentos = async (id: string, documentos: DocumentoSectorial[]) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, `users/${user.uid}/cases`, id), { documentosSectoriales: JSON.stringify(documentos) }, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}/cases/${id}`);
+    }
+  };
+
   const saveCaseSector = async (id: string, sector: SectorCaso) => {
     if (!user) return;
     try {
@@ -310,6 +321,7 @@ export function useCases(user: User | null, isAuthReady: boolean) {
     saveCaseRiskAssessment,
     saveCaseProyecciones,
     saveCaseSector,
+    saveCaseDocumentos,
     saveCaseEdits,
     saveCaseError,
     removeCase,

@@ -8,6 +8,8 @@ import { stripRiskConclusion } from '../features/risk/summary';
 import { formatCurrencyThousands } from '../lib/utils';
 import { CATEGORY_STATUS, SEVERIDAD_STATUS, STATUS, Status, StatusBadge } from './riskColors';
 import { PerfilAviso } from './PerfilAviso';
+import { indicadoresFinancieros } from '../features/ratios/financieras';
+import { disponibilidadesActuales } from '../features/ratios/calculations';
 import { PerfilEfectivo, RATIO_LABEL_CORTO } from '../features/risk/policy';
 import { EstadoPorton } from '../features/risk/porton';
 import { RATIO_BLOCKS, RatioKind, SECTOR_KPI_SPECS } from '../features/ratios/blocks';
@@ -128,7 +130,14 @@ export function ExecutiveSummaryView({ result, riskBusy, onOpenTab, onGeneratePd
 
   return (
     <div className="@container space-y-5 font-sans">
-      {porton.rubroConfirmado && <PerfilAviso perfil={perfil} sector={porton.opinion === 'vigente' && result.riskAssessment?.sector ? result.riskAssessment.sector : result.sector} />}
+      {porton.rubroConfirmado && (
+        <PerfilAviso
+          perfil={perfil}
+          sector={porton.opinion === 'vigente' && result.riskAssessment?.sector ? result.riskAssessment.sector : result.sector}
+          mora={perfil.modelo === 'financiera' ? indicadoresFinancieros(extraction, (result.documentosSectoriales ?? []).filter(d => d.estado === 'ok'), { disponibilidades: disponibilidadesActuales(extraction) }).mora : null}
+          documentos={result.documentosSectoriales}
+        />
+      )}
       {porton.opinion === 'desactualizada' && (
         <p className="text-xs font-medium text-ink bg-brand-blue/10 px-3 py-2">{porton.motivo}</p>
       )}
