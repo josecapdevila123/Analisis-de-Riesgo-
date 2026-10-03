@@ -13,7 +13,10 @@ import {
 } from 'firebase/firestore';
 import { db, OperationType, handleFirestoreError } from '../../firebase';
 import { ExtractionResult, CaseStatus } from '../../types';
-import { CompanyHistory } from '../extraction/schemas';
+import { CompanyHistory, RawExtraction } from '../extraction/schemas';
+import { ComputedRatios, computeRatios } from '../ratios/calculations';
+import { Inconsistencia, runSanityChecks } from '../ratios/sanityChecks';
+import { CrossCheckResult, runCrossCheck } from '../ratios/crossCheck';
 import { RiskAssessment } from '../risk/assessment';
 import { PipelineResult } from '../extraction/pipeline';
 
@@ -26,6 +29,27 @@ const parseJSON = <T,>(raw: unknown, fallback: T): T => {
     return JSON.parse(raw) as T;
   } catch {
     return fallback;
+  }
+};
+
+// Ratios, sanity checks y cruce Nosis son datos derivados de la extracción: se
+// recalculan al cargar para que los casos viejos usen siempre las fórmulas y la
+// política vigentes (y tengan los ratios agregados después). Si algo falla con
+// una extracción vieja, se usa lo guardado.
+const deriveFromExtraction = (
+  extraction: RawExtraction | null,
+  stored: { ratios: ComputedRatios | null; inconsistencias: Inconsistencia[]; crossCheck: CrossCheckResult | null }
+) => {
+  if (!extraction) return stored;
+  try {
+    return {
+      ratios: computeRatios(extraction),
+      inconsistencias: runSanityChecks(extraction),
+      crossCheck: runCrossCheck(extraction),
+    };
+  } catch (err) {
+    console.warn('No se pudieron recalcular los ratios de un caso guardado:', err);
+    return stored;
   }
 };
 
@@ -72,16 +96,20 @@ export function useCases(user: User | null, isAuthReady: boolean) {
           const loaded: ExtractionResult[] = [];
           snapshot.forEach((d) => {
             const data = d.data();
+            const extraction = parseJSON<RawExtraction | null>(data.extraction, null);
+            const derived = deriveFromExtraction(extraction, {
+              ratios: parseJSON(data.ratios, null),
+              inconsistencias: parseJSON(data.inconsistencias, []),
+              crossCheck: parseJSON(data.crossCheck, null),
+            });
             loaded.push({
               id: data.id,
               timestamp: data.timestamp,
               fileNames: data.fileNames ?? [],
               schemaVersion: SCHEMA_VERSION,
               status: (data.status ?? 'processing') as CaseStatus,
-              extraction: parseJSON(data.extraction, null),
-              ratios: parseJSON(data.ratios, null),
-              inconsistencias: parseJSON(data.inconsistencias, []),
-              crossCheck: parseJSON(data.crossCheck, null),
+              extraction,
+              ...derived,
               verification: parseJSON(data.verification, null),
               marketAnalysis: typeof data.marketAnalysis === 'string' ? data.marketAnalysis : null,
               companyHistory: parseJSON<CompanyHistory | null>(data.companyHistory, null),
