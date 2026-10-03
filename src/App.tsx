@@ -25,8 +25,8 @@ import {
   X,
   ChevronRight,
   LogOut,
-  PanelLeftClose,
-  PanelLeftOpen,
+  ChevronsLeft,
+  ChevronsRight,
   CornerDownRight,
   Pencil,
   Save
@@ -169,7 +169,14 @@ const ShareholderTable = ({ accionistas, level = 1, parentName = '', basePath }:
 export default function App() {
   const [activeResultId, setActiveResultId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('Resumen Ejecutivo');
-  const [isHistorySidebarOpen, setIsHistorySidebarOpen] = useState(true);
+  // Barra lateral abierta o contraída; se recuerda en este navegador.
+  const [isHistorySidebarOpen, setIsHistorySidebarOpenState] = useState<boolean>(() => {
+    try { return localStorage.getItem('sidebarAbierta') !== 'false'; } catch { return true; }
+  });
+  const setIsHistorySidebarOpen = (open: boolean) => {
+    setIsHistorySidebarOpenState(open);
+    try { localStorage.setItem('sidebarAbierta', String(open)); } catch { /* sin almacenamiento: no pasa nada */ }
+  };
   const [isInflationAdjusted, setIsInflationAdjusted] = useState(false);
   const [inflationInteranual, setInflationInteranual] = useState(60);
   const [inflationMensual, setInflationMensual] = useState(3);
@@ -620,19 +627,45 @@ export default function App() {
     <EditProvider value={editContext}>
     <div className="flex h-screen bg-white text-ink font-sans selection:bg-ink selection:text-white">
       {/* Sidebar */}
-      <aside className={cn("flex flex-col bg-ink text-white transition-all duration-300 relative overflow-hidden print:hidden", isHistorySidebarOpen ? "w-72" : "w-0")}>
-        <div className={cn("w-72 flex flex-col h-full transition-opacity duration-300 overflow-hidden", isHistorySidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none")}>
+      <div className="relative flex shrink-0 print:hidden">
+      {/* Manija en el borde para contraer / expandir la barra */}
+      <button
+        onClick={() => setIsHistorySidebarOpen(!isHistorySidebarOpen)}
+        className="absolute -right-3.5 top-[26px] z-40 w-7 h-7 rounded-full bg-white border border-ink/15 shadow-sm flex items-center justify-center text-ink/70 hover:text-ink hover:border-ink/40 hover:shadow transition"
+        title={isHistorySidebarOpen ? 'Contraer barra lateral' : 'Expandir barra lateral'}
+        aria-label={isHistorySidebarOpen ? 'Contraer barra lateral' : 'Expandir barra lateral'}
+      >
+        {isHistorySidebarOpen ? <ChevronsLeft className="w-4 h-4" /> : <ChevronsRight className="w-4 h-4" />}
+      </button>
+      <aside className={cn("flex flex-col bg-ink text-white transition-[width] duration-300 relative overflow-hidden", isHistorySidebarOpen ? "w-72" : "w-16")}>
+        {/* Contraída: franja con el isologo y accesos con ícono */}
+        {!isHistorySidebarOpen && (
+          <div className="w-16 flex flex-col items-center h-full py-5 gap-2">
+            <button onClick={() => setActiveResultId(null)} className="mb-4 hover:opacity-80 transition-opacity" title="Ir al inicio">
+              <BiBankLogo variant="light" layout="icon" className="h-9 w-9" />
+            </button>
+            <button
+              onClick={() => setShowPolicy(v => !v)}
+              className={cn("w-10 h-10 rounded-full flex items-center justify-center transition", showPolicy ? "bg-brand-green text-ink" : "text-white/70 hover:text-white hover:bg-white/10")}
+              title="Política de riesgos"
+            >
+              <Scale className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setIsHistorySidebarOpen(true)}
+              className="w-10 h-10 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition"
+              title={`Historial de casos (${results.length})`}
+            >
+              <History className="w-4 h-4" />
+            </button>
+            <div className="mt-auto w-2 h-2 rounded-full bg-brand-green animate-pulse" title="Sistema activo" />
+          </div>
+        )}
+        <div className={cn("w-72 flex flex-col h-full transition-opacity duration-300 overflow-hidden", isHistorySidebarOpen ? "opacity-100" : "hidden")}>
           <div className="px-6 pt-6 pb-5 border-b border-white/15">
             <div className="flex items-center justify-between mb-6">
               <button onClick={() => setActiveResultId(null)} className="hover:opacity-80 transition-opacity" title="Ir al inicio">
                 <BiBankLogo variant="light" className="h-9 w-auto" />
-              </button>
-              <button
-                onClick={() => setIsHistorySidebarOpen(false)}
-                className="p-1 text-white/60 hover:text-white hover:bg-white/10 rounded transition-colors"
-                title="Ocultar historial"
-              >
-                <PanelLeftClose className="w-5 h-5" />
               </button>
             </div>
             <p className="font-display text-lg font-semibold leading-tight">Análisis de riesgo</p>
@@ -734,6 +767,7 @@ export default function App() {
           </div>
         </div>
       </aside>
+      </div>
 
       {/* Main Content */}
       <main className="relative flex-1 flex flex-col overflow-hidden bg-canvas print:hidden">
@@ -746,15 +780,6 @@ export default function App() {
         {/* Header */}
         <header className="h-16 border-b border-ink/10 flex items-center justify-between px-8 bg-white">
           <div className="flex items-center gap-4">
-            {!isHistorySidebarOpen && (
-              <button
-                onClick={() => setIsHistorySidebarOpen(true)}
-                className="p-2 hover:bg-ink/5 rounded-full transition-colors"
-                title="Mostrar historial"
-              >
-                <PanelLeftOpen className="w-5 h-5" />
-              </button>
-            )}
             <div className="flex flex-col">
               <span className="text-[10px] uppercase tracking-wider text-ink/45">Módulo</span>
               <span className="text-sm font-semibold">Dashboard de riesgo</span>
