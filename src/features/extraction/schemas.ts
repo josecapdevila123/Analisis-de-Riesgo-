@@ -108,6 +108,10 @@ const VentaMensual = z.object({
   monto: num,
   monto_anio_anterior: nullableNum,
   moneda: z.enum(['ARS', 'USD']).optional().default('ARS'),
+  // Ventas físicas en la unidad de \`unidad_medida\` (toneladas, clientes, litros…).
+  // Opcionales: los casos viejos no las tienen.
+  cantidad: lenientNum.optional(),
+  cantidad_anio_anterior: lenientNum.optional(),
 });
 
 const DeudaPostBalance = z.object({
@@ -126,6 +130,8 @@ periodo_analizado: PeriodoAnalizado.optional().nullable(),
   detalle_ventas_mensuales: z.array(VentaMensual).default([]),
   total_ventas_post_cierre: lenientNum,
   notas_relevantes: z.string().optional().nullable(),
+  // Unidad física en que la empresa mide sus ventas, si el documento la informa.
+  unidad_medida: z.string().nullable().catch(null).optional(),
   deuda_bancaria_post_balance_detalle: z.array(DeudaPostBalance).default([]),
 }).nullable();
 
