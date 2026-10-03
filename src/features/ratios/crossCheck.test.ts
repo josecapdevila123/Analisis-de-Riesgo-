@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { runCrossCheck } from './crossCheck';
 import { buildExtraction, extractionWith } from './__fixtures__/extraction';
+import { SIGNAL_PARAMS } from '../risk/policy';
 
 const conDeudas = (balanceCorriente: number, balanceNoCorriente: number, nosis: number | null) =>
   extractionWith(x => {
@@ -67,5 +68,29 @@ describe('runCrossCheck — deuda balance vs Nosis (umbral 10%)', () => {
     const r = runCrossCheck(conDeudas(0, 0, 0));
     expect(r.difference_abs).toBe(0);
     expect(r.match).toBe(true);
+  });
+});
+
+describe('runCrossCheck — la tolerancia sale de la política', () => {
+  const cruce = SIGNAL_PARAMS.cruceNosis as { toleranciaPct: number };
+  const original = cruce.toleranciaPct;
+  afterEach(() => { cruce.toleranciaPct = original; });
+
+  it('la política vigente es 10%', () => {
+    expect(original).toBe(10);
+  });
+
+  it('con tolerancia 20%, una diferencia de 15% es consistente (balance 2300 vs Nosis 2000)', () => {
+    cruce.toleranciaPct = 20;
+    const r = runCrossCheck(conDeudas(1150, 1150, 2000));
+    expect(r.difference_pct).toBeCloseTo(15, 6);
+    expect(r.match).toBe(true);
+  });
+
+  it('con tolerancia 5%, una diferencia de 8% es discrepancia (balance 2160 vs Nosis 2000)', () => {
+    cruce.toleranciaPct = 5;
+    const r = runCrossCheck(conDeudas(1080, 1080, 2000));
+    expect(r.difference_pct).toBeCloseTo(8, 6);
+    expect(r.match).toBe(false);
   });
 });
