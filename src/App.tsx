@@ -62,6 +62,8 @@ import { CompanyHistoryView } from './components/CompanyHistoryView';
 import { NosisDebtBars } from './components/NosisDebtBars';
 import { ExecutiveSummaryView } from './components/ExecutiveSummaryView';
 import { BalanceRatiosView } from './components/BalanceRatiosView';
+import { ProyeccionesView } from './components/ProyeccionesView';
+import { ProyeccionesGuardadas } from './features/projections/types';
 import { RATIO_BLOCKS as SHARED_RATIO_BLOCKS } from './features/ratios/blocks';
 import { RiskOpinionView } from './components/RiskOpinionView';
 import { RiskPolicyView } from './components/RiskPolicyView';
@@ -189,6 +191,9 @@ export default function App() {
   const [companyHistoryBusyId, setCompanyHistoryBusyId] = useState<string | null>(null);
   const [riskBusyId, setRiskBusyId] = useState<string | null>(null);
   const [showPolicy, setShowPolicy] = useState(false);
+  // Proyecciones: se actualizan en vivo y se guardan en el caso con un retardo
+  // corto (no se escribe en Firestore por cada tecla).
+  const proyeccionesTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [currentFiles, setCurrentFiles] = useState<{ file: File; preview: string }[]>([]);
   const { user, isAuthReady, handleLogin, handleLogout } = useAuth(() => {
     setActiveResultId(null);
@@ -202,6 +207,7 @@ export default function App() {
     saveCaseMarketAnalysis,
     saveCaseCompanyHistory,
     saveCaseRiskAssessment,
+    saveCaseProyecciones,
     saveCaseEdits,
     saveCaseError,
     removeCase,
@@ -357,6 +363,7 @@ export default function App() {
       marketAnalysis: null,
       companyHistory: null,
       riskAssessment: null,
+      proyecciones: null,
     };
 
     setResults(prev => [newResult, ...prev]);
@@ -465,6 +472,12 @@ export default function App() {
     } finally {
       setRiskBusyId(curr => (curr === result.id ? null : curr));
     }
+  };
+
+  const updateProyecciones = (id: string, next: ProyeccionesGuardadas) => {
+    setResults(prev => prev.map(r => (r.id === id ? { ...r, proyecciones: next } : r)));
+    if (proyeccionesTimer.current) clearTimeout(proyeccionesTimer.current);
+    proyeccionesTimer.current = setTimeout(() => { saveCaseProyecciones(id, next); }, 800);
   };
 
   const removeResult = async (id: string) => {
@@ -1324,36 +1337,13 @@ export default function App() {
                   )}
 
                   {activeTab === 'Proyecciones' && (
-                      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        {/* Sales Analysis */}
-                    <div className="lg:col-span-2 bg-white border border-ink/15 p-6">
-                      <div className="flex items-center gap-2 mb-6 border-b border-ink/10 pb-4">
-                        <TrendingUp className="w-5 h-5" />
-                        <h3 className="font-sans font-bold text-lg">Análisis de Ventas & Proyección</h3>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div>
-                          <h4 className="text-xs font-bold uppercase mb-3 flex items-center gap-2">
-                            <div className="w-2 h-2 bg-ink rounded-full" />
-                            Evolución Histórica
-                          </h4>
-                          <p className="text-sm leading-relaxed opacity-80">
-                            {'No disponible en esta versión.'}
-                          </p>
-                        </div>
-                        <div className="bg-canvas p-4 border border-ink/10">
-                          <h4 className="text-xs font-bold uppercase mb-3 flex items-center gap-2 text-emerald-700">
-                            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                            Proyección IA
-                          </h4>
-                          <p className="text-sm leading-relaxed opacity-80 italic">
-                            {'No disponible en esta versión.'}
-                          </p>
-                        </div>
-                      </div>
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                      <ProyeccionesView
+                        result={activeResult}
+                        guardadas={activeResult.proyecciones ?? null}
+                        onChange={next => updateProyecciones(activeResult.id, next)}
+                      />
                     </div>
-                  </div>
                   )}
 
                   {activeTab === 'Sistema Financiero (Nosis)' && (
@@ -2229,37 +2219,7 @@ export default function App() {
                   <div className="mb-12 print:break-inside-avoid">
                     <h2 className="text-2xl font-bold mb-6 border-b border-gray-300 pb-2 print:break-after-avoid uppercase tracking-tight">Proyecciones</h2>
 
-                      <div className="space-y-8 ">
-                        {/* Sales Analysis */}
-                    <div className="lg:col-span-2 bg-white border border-ink/15 p-6">
-                      <div className="flex items-center gap-2 mb-6 border-b border-ink/10 pb-4">
-                        <TrendingUp className="w-5 h-5" />
-                        <h3 className="font-sans font-bold text-lg">Análisis de Ventas & Proyección</h3>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div>
-                          <h4 className="text-xs font-bold uppercase mb-3 flex items-center gap-2">
-                            <div className="w-2 h-2 bg-ink rounded-full" />
-                            Evolución Histórica
-                          </h4>
-                          <p className="text-sm leading-relaxed opacity-80">
-                            {'No disponible en esta versión.'}
-                          </p>
-                        </div>
-                        <div className="bg-canvas p-4 border border-ink/10">
-                          <h4 className="text-xs font-bold uppercase mb-3 flex items-center gap-2 text-emerald-700">
-                            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                            Proyección IA
-                          </h4>
-                          <p className="text-sm leading-relaxed opacity-80 italic">
-                            {'No disponible en esta versión.'}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
+                    <p className="text-sm text-gray-600">La proyección de capacidad de repago (supuestos, escenarios y DSCR) se incluye en el informe PDF para comité.</p>
                   </div>
 
                   {/* Opinión de riesgos */}

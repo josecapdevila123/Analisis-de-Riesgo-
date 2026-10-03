@@ -18,6 +18,7 @@ import { ComputedRatios, computeRatios } from '../ratios/calculations';
 import { Inconsistencia, runSanityChecks } from '../ratios/sanityChecks';
 import { CrossCheckResult, runCrossCheck } from '../ratios/crossCheck';
 import { RiskAssessment } from '../risk/assessment';
+import { ProyeccionesGuardadas } from '../projections/types';
 import { PipelineResult } from '../extraction/pipeline';
 
 const SCHEMA_VERSION = 2;
@@ -114,6 +115,7 @@ export function useCases(user: User | null, isAuthReady: boolean) {
               marketAnalysis: typeof data.marketAnalysis === 'string' ? data.marketAnalysis : null,
               companyHistory: parseJSON<CompanyHistory | null>(data.companyHistory, null),
               riskAssessment: parseJSON<RiskAssessment | null>(data.riskAssessment, null),
+              proyecciones: parseJSON<ProyeccionesGuardadas | null>(data.proyecciones, null),
               editedAt: typeof data.editedAt === 'string' ? data.editedAt : undefined,
               error: data.error,
             });
@@ -245,6 +247,19 @@ export function useCases(user: User | null, isAuthReady: boolean) {
     }
   };
 
+  const saveCaseProyecciones = async (id: string, proyecciones: ProyeccionesGuardadas) => {
+    if (!user) return;
+    try {
+      await setDoc(
+        doc(db, `users/${user.uid}/cases`, id),
+        { proyecciones: JSON.stringify(proyecciones) },
+        { merge: true }
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}/cases/${id}`);
+    }
+  };
+
   const saveCaseError = async (id: string, errorMessage: string) => {
     if (!user) return;
     try {
@@ -282,6 +297,7 @@ export function useCases(user: User | null, isAuthReady: boolean) {
     saveCaseMarketAnalysis,
     saveCaseCompanyHistory,
     saveCaseRiskAssessment,
+    saveCaseProyecciones,
     saveCaseEdits,
     saveCaseError,
     removeCase,
