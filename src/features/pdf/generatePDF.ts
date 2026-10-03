@@ -15,6 +15,7 @@ import { faltantes, margenDeudaNueva, proyectar, puntoDeQuiebre } from '../proje
 import { ESCENARIOS, ESCENARIO_LABEL, proyeccionesVacias } from '../projections/types';
 import { etiquetaPeriodo, mesesDeSerie, serieTotal, seriePorEntidad, variacion, variacionTotalPeriodo } from '../nosis/evolucion';
 import { armarArbol, NodoAccionista } from '../accionistas/estructura';
+import { hayUnidades, serieUnidades, totalesUnidades } from '../postBalance/unidades';
 
 // ============================================================================
 // Informe de riesgo para comité (jsPDF). Orden: portada con el dictamen →
@@ -1062,6 +1063,24 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
         }
       },
     });
+    const serieU = serieUnidades(ventas);
+    if (hayUnidades(serieU)) {
+      const u = (post?.unidad_medida ?? '').trim() || 'unidades';
+      const tU = totalesUnidades(serieU);
+      const cant = (v: number | null) => (v === null ? '-' : fmtNum(v, 2));
+      subheading(`Ventas en ${u}`);
+      table({
+        startY: y,
+        head: [['Mes', 'Año actual', 'Año anterior', 'Var. %']],
+        body: serieU.map(p => [p.mes, cant(p.cantidad), p.cantidadAnterior === null ? 'Sin información' : cant(p.cantidadAnterior), fmtVar(p.variacion)]),
+        foot: [['Total', cant(tU.total), tU.totalAnterior > 0 ? cant(tU.totalAnterior) : '-', fmtVar(tU.variacion)]],
+        footStyles: { fillColor: SOFT, textColor: INK, fontStyle: 'bold', fontSize: 8 },
+        columnStyles: { 0: { cellWidth: 50 }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right', fontStyle: 'bold' } },
+      });
+      if (tU.variacion !== null && tU.mesesComparables < serieU.length) {
+        paragraph('La variación total compara solo los meses con dato en los dos años.', 7.5, 'italic');
+      }
+    }
     if (post?.notas_relevantes) paragraph(`Nota: ${post.notas_relevantes}`, 8.5, 'italic');
   }
   const deudaPost = post?.deuda_bancaria_post_balance_detalle ?? [];

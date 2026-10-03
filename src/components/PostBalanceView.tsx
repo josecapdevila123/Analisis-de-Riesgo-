@@ -1,9 +1,10 @@
 import React from 'react';
-import { ArrowDownRight, ArrowUpRight, CalendarRange, Landmark, Minus, ShoppingCart } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Boxes, CalendarRange, Landmark, Minus, ShoppingCart } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { RawExtraction } from '../features/extraction/schemas';
 import { AddRowButton, EditableNumber, EditableSelect, EditableText, Path, RemoveRowButton, useEdit } from '../features/editing/editing';
 import { formatCurrencyThousands } from '../lib/utils';
+import { hayUnidades, serieUnidades, totalesUnidades } from '../features/postBalance/unidades';
 
 // Pestaña "Información post balance": ventas mensuales posteriores al cierre
 // comparadas con el año anterior (con opción de moneda constante) y deuda
@@ -84,6 +85,123 @@ const TooltipVentas = ({ active, payload, label }: { active?: boolean; payload?:
     </div>
   );
 };
+
+// ---------- ventas en unidades físicas ----------
+
+type Venta = PostCierre['detalle_ventas_mensuales'][number];
+
+function VentasUnidades({ ventas, unidad }: { ventas: Venta[]; unidad: string | null | undefined }) {
+  const { editing } = useEdit();
+  const serie = serieUnidades(ventas);
+  const t = totalesUnidades(serie);
+  const u = (unidad ?? '').trim() || 'unidades';
+  const cant = (v: number | null) => (v === null ? '—' : fmt(v, 2));
+
+  const TooltipUnidades = ({ active, payload, label }: { active?: boolean; payload?: Array<{ dataKey: string; value: number | null }>; label?: string }) => {
+    if (!active || !payload?.length) return null;
+    const act = payload.find(p => p.dataKey === 'cantidad')?.value ?? null;
+    const ant = payload.find(p => p.dataKey === 'cantidadAnterior')?.value ?? null;
+    const v = act !== null && ant ? ((act - ant) / ant) * 100 : null;
+    return (
+      <div className="bg-white border border-ink/15 shadow-lg rounded-lg px-3 py-2 text-xs space-y-1">
+        <p className="font-semibold text-ink">{label}</p>
+        <p className="flex items-center gap-1.5 tabular-nums"><span className="w-2 h-2 rounded-sm bg-ink" />Este año {cant(act)} {u}</p>
+        <p className="flex items-center gap-1.5 tabular-nums"><span className="w-2 h-2 rounded-sm bg-ink/25" />Año anterior {ant === null ? 'sin dato' : `${cant(ant)} ${u}`}</p>
+        {v !== null && <p className="text-ink/70"><Variacion v={v} /></p>}
+      </div>
+    );
+  };
+
+  return (
+    <Card
+      title={`Ventas en ${u}`}
+      subtitle="Volumen físico informado en la documentación · comparativo con el mismo mes del año anterior"
+      icon={<Boxes className="w-4 h-4" />}
+      right={
+        editing ? (
+          <label className="flex items-center gap-2 text-xs text-ink/60">
+            Unidad de medida
+            <EditableText path={['analisis_post_cierre', 'unidad_medida']} value={unidad ?? ''} inputClassName="w-36" />
+          </label>
+        ) : (
+          <div className="text-right">
+            <p className="text-lg font-semibold tabular-nums">{fmt(t.total, 2)} <span className="text-sm font-normal text-ink/55">{u}</span></p>
+            {t.variacion !== null && (
+              <p className="text-xs text-ink/55 inline-flex items-center gap-1">
+                <Variacion v={t.variacion} /> en {t.mesesComparables} {t.mesesComparables === 1 ? 'mes comparable' : 'meses comparables'}
+              </p>
+            )}
+          </div>
+        )
+      }
+    >
+      {serie.length > 1 && !editing && (
+        <div className="px-5 pt-5">
+          <div className="flex items-center gap-4 text-[11px] text-ink/60 mb-2">
+            <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-ink" />Este año</span>
+            {serie.some(p => p.cantidadAnterior !== null) && <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-ink/25" />Año anterior</span>}
+          </div>
+          <div className="h-48 -ml-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={serie} barGap={2} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                <CartesianGrid vertical={false} stroke="rgb(0 0 0 / 0.06)" />
+                <XAxis dataKey="mes" tickFormatter={mesCorto} tick={{ fontSize: 11, fill: 'rgb(0 0 0 / 0.5)' }} axisLine={{ stroke: 'rgb(0 0 0 / 0.15)' }} tickLine={false} interval="preserveStartEnd" />
+                <YAxis tickFormatter={v => compacto.format(v)} tick={{ fontSize: 11, fill: 'rgb(0 0 0 / 0.5)' }} axisLine={false} tickLine={false} width={52} />
+                <Tooltip content={<TooltipUnidades />} cursor={{ fill: 'rgb(0 0 0 / 0.04)' }} />
+                <Bar dataKey="cantidadAnterior" fill="rgb(0 0 0 / 0.22)" radius={[4, 4, 0, 0]} maxBarSize={22} isAnimationActive={false} />
+                <Bar dataKey="cantidad" fill="#000" radius={[4, 4, 0, 0]} maxBarSize={22} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+      <div className="overflow-x-auto mt-2">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[11px] uppercase tracking-wider text-ink/50">
+              <th className="text-left font-semibold px-5 py-2.5">Mes</th>
+              <th className="text-right font-semibold px-3 py-2.5">Este año</th>
+              <th className="text-right font-semibold px-3 py-2.5">Año anterior</th>
+              {!editing && <th className="text-right font-semibold px-5 py-2.5">Variación</th>}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-ink/5">
+            {editing
+              ? ventas.map((v, idx) => (
+                  <tr key={idx}>
+                    <td className="!text-left px-5 py-2">{v.mes || '—'}{v.moneda === 'USD' && <span className="ml-1 text-[10px] font-semibold text-ink/50">USD</span>}</td>
+                    <td className="px-3 py-2"><EditableNumber path={[...VENTAS, idx, 'cantidad']} value={v.cantidad} /></td>
+                    <td className="px-3 py-2"><EditableNumber path={[...VENTAS, idx, 'cantidad_anio_anterior']} value={v.cantidad_anio_anterior} /></td>
+                  </tr>
+                ))
+              : serie.map(p => (
+                  <tr key={p.mes} className="hover:bg-ink/[0.02]">
+                    <td className="!text-left px-5 py-2.5 font-medium">{p.mes}</td>
+                    <td className="px-3 py-2.5 tabular-nums">{cant(p.cantidad)}</td>
+                    <td className="px-3 py-2.5 tabular-nums text-ink/60">{p.cantidadAnterior === null ? <span className="text-xs text-ink/35">Sin dato</span> : cant(p.cantidadAnterior)}</td>
+                    <td className="px-5 py-2.5"><Variacion v={p.variacion} /></td>
+                  </tr>
+                ))}
+          </tbody>
+          {!editing && (
+            <tfoot>
+              <tr className="border-t border-ink/15 font-semibold">
+                <td className="!text-left px-5 py-3">Total</td>
+                <td className="px-3 py-3 tabular-nums">{fmt(t.total, 2)}</td>
+                <td className="px-3 py-3 tabular-nums text-ink/60">{t.totalAnterior > 0 ? fmt(t.totalAnterior, 2) : <span className="text-xs font-normal text-ink/35">Sin dato</span>}</td>
+                <td className="px-5 py-3"><Variacion v={t.variacion} fuerte /></td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+      {!editing && t.variacion !== null && t.mesesComparables < serie.length && (
+        <p className="px-5 pb-4 pt-1 text-[11px] text-ink/45">La variación total compara solo los meses que tienen dato en los dos años.</p>
+      )}
+      {editing && <p className="px-5 pb-4 pt-1 text-[11px] text-ink/45">Cargá las cantidades en la unidad indicada arriba. Si un mes tiene fila en pesos y en dólares, cargala en una sola.</p>}
+    </Card>
+  );
+}
 
 export function PostBalanceView({ datos, ajuste }: { datos: PostCierre | null; ajuste: AjusteInflacion }) {
   const { editing } = useEdit();
@@ -285,6 +403,11 @@ export function PostBalanceView({ datos, ajuste }: { datos: PostCierre | null; a
           </p>
         )}
       </Card>
+
+      {/* Ventas en unidades físicas: solo si el documento las informa (o para cargarlas a mano) */}
+      {(hayUnidades(serieUnidades(ventas)) || !!datos.unidad_medida || (editing && ventas.length > 0)) && (
+        <VentasUnidades ventas={ventas} unidad={datos.unidad_medida} />
+      )}
 
       {/* Deuda post balance */}
       {(deudas.length > 0 || editing) && (
