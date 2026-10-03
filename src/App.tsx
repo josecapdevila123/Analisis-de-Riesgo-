@@ -16,7 +16,7 @@ import {
   Download,
   Trash2,
   RefreshCw,
-  Search,
+  Sparkles,
   FileSpreadsheet,
   TrendingUp,
   TrendingDown,
@@ -947,10 +947,10 @@ export default function App() {
                 </div>
                 <button 
                   onClick={processFiles}
-                  className="px-8 py-3 bg-ink text-white text-xs font-bold uppercase hover:bg-[#222] flex items-center gap-2"
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-brand-green text-ink text-sm font-semibold hover:brightness-95 transition"
                 >
-                  <Search className="w-4 h-4" />
-                  Procesar Documentos
+                  <Sparkles className="w-4 h-4" />
+                  Analizar documentos
                 </button>
               </div>
             </div>
