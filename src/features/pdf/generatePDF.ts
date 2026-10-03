@@ -8,7 +8,10 @@ import { CATEGORY_LABEL, DIMENSIONS, RiskCategory, SEVERIDAD_LABEL, categoryOf }
 import { RiskDimension, SeveridadRiesgo } from '../extraction/schemas';
 import { stripRiskConclusion } from '../risk/summary';
 import { RATIO_ASSUMPTIONS } from '../risk/policy';
-import { RATIO_BLOCKS as SHARED_RATIO_BLOCKS, RatioKind as SharedRatioKind } from '../ratios/blocks';
+import { RATIO_BLOCKS as SHARED_RATIO_BLOCKS, RatioKind as SharedRatioKind, bloquesDelPerfil, SECTOR_KPI_SPECS } from '../ratios/blocks';
+import { avisoPerfil } from '../risk/avisoPerfil';
+import { perfilEfectivo, RATIO_LABEL_CORTO } from '../risk/policy';
+import { VERSION_PREVIA } from '../risk/porton';
 import { RATIO_THRESHOLDS, PROJECTION_PARAMS } from '../risk/policy';
 import { resolverProyeccion } from '../projections/defaults';
 import { faltantes, margenDeudaNueva, proyectar, puntoDeQuiebre } from '../projections/model';
@@ -148,6 +151,11 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
   const ratios = activeResult.ratios;
   const company = extraction.company_profile;
   const risk = activeResult.riskAssessment ?? null;
+  // Perfil con el que se evaluó: la foto guardada con la opinión (las opiniones
+  // anteriores al versionado son del genérico v1.0.0); sin opinión, el del rubro confirmado.
+  const perfil = risk?.perfil
+    ?? (risk ? { ...perfilEfectivo('generico'), version: risk.politicaVersion ?? VERSION_PREVIA } : perfilEfectivo(activeResult.sector?.confirmado ?? 'generico'));
+  const sectorEvaluado = risk?.sector ?? activeResult.sector ?? null;
   const fechaGeneracion = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
 
   let y = TOP;
@@ -470,6 +478,35 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
 
   sectionTitle('Resumen ejecutivo');
   {
+    // Recuadro del perfil de evaluación (generado por código desde la foto).
+    const a = avisoPerfil(perfil, sectorEvaluado);
+    const lineas = [
+      [a.confirmacion, a.cambio, sectorEvaluado?.nota ? `Nota del analista: ${sectorEvaluado.nota}` : null].filter(Boolean).join(' '),
+      a.esGenerico
+        ? 'Se aplican los criterios generales de la política, sin ajustes por rubro.'
+        : [
+            'Este análisis se realiza con criterios específicos del rubro.',
+            a.diferencias.length ? `Difiere del perfil genérico en: ${a.diferencias.join('; ')}.` : '',
+            a.ajustes.length ? `${a.ajustes.join('. ')}.` : '',
+            a.noAplican.length ? `No aplican: ${a.noAplican.join('; ')}.` : '',
+          ].filter(Boolean).join(' '),
+      `KPIs prioritarios del rubro: ${a.kpis.join(', ')}.`,
+      [a.politica, a.versionDesactualizada].filter(Boolean).join(' '),
+    ].filter(Boolean);
+    setText(8.5, 'normal');
+    const cuerpo = lineas.flatMap(l => doc.splitTextToSize(pdfSafe(l), CW - 10) as string[]);
+    const alto = 9 + cuerpo.length * 3.8 + 3;
+    ensure(alto + 4);
+    doc.setFillColor(...tint(INK, 0.04));
+    doc.rect(M, y, CW, alto, 'F');
+    doc.setFillColor(...INK);
+    doc.rect(M, y, 1.2, alto, 'F');
+    setText(9.5, 'bold');
+    text(pdfSafe(a.titulo), M + 5, y + 6);
+    setText(8.5, 'normal');
+    cuerpo.forEach((l, i) => text(l, M + 5, y + 11 + i * 3.8));
+    y += alto + 5;
+
     const history = activeResult.companyHistory;
     subheading('Qué hace la empresa');
     const core = history?.core_business || company.activity || 'Sin descripción de la actividad.';
@@ -501,23 +538,19 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
     ], 3, true);
 
     subheading('Indicadores clave');
-    const claves: Array<{ key: RatioKey; label: string; kind: RatioKind }> = [
-      { key: 'dscr', label: 'DSCR', kind: 'x' },
-      { key: 'deuda_neta_ebitda', label: 'Deuda neta / EBITDA', kind: 'x' },
-      { key: 'cobertura_intereses', label: 'Cobertura intereses', kind: 'x' },
-      { key: 'calidad_ganancia', label: 'Calidad ganancia', kind: 'pct' },
-      { key: 'liquidez_corriente', label: 'Liquidez corriente', kind: 'x' },
-      { key: 'liquidez_acida', label: 'Prueba ácida', kind: 'x' },
-      { key: 'solvencia', label: 'Solvencia', kind: 'x' },
-      { key: 'roe', label: 'ROE', kind: 'pct' },
-    ];
+    // KPIs prioritarios del perfil (en el genérico, los de siempre).
+    const specsPdf = [...RATIO_BLOCKS.flatMap(b => b.ratios), ...Object.values(SECTOR_KPI_SPECS)];
+    const claves = perfil.kpisPrioritarios.map(key => {
+      const spec = specsPdf.find(r => r?.key === key);
+      return { key, label: RATIO_LABEL_CORTO[key] ?? spec?.name ?? key, kind: (spec?.kind ?? 'x') as RatioKind };
+    });
     tiles(claves.map(({ key, label, kind }) => {
       const r = ratios[key];
-      const st = r?.status ?? null;
+      const st = perfil.noAplica[key] ? null : r?.status ?? null;
       return {
         label,
         value: fmtRatio(r?.actual ?? null, kind),
-        sub: `Ant. ${fmtRatio(r?.anterior ?? null, kind)}${st ? ` · ${RATIO_STATUS_LABEL[st]}` : ''}`,
+        sub: `Ant. ${fmtRatio(r?.anterior ?? null, kind)}${perfil.noAplica[key] ? ' · No aplica' : st ? ` · ${RATIO_STATUS_LABEL[st]}` : ''}`,
         accent: st ? RATIO_STATUS_RGB[st] : undefined,
       };
     }), 4, true);
@@ -767,7 +800,7 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
     });
   }
 
-  RATIO_BLOCKS.forEach(block => {
+  bloquesDelPerfil(perfil).forEach(block => {
     const rows = block.ratios.filter(spec => ratios[spec.key] && (ratios[spec.key].actual !== null || ratios[spec.key].anterior !== null));
     if (rows.length === 0) return;
     subheading(`Ratios · ${block.bloque}`);
@@ -781,7 +814,7 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
           fmtRatio(r.anterior, spec.kind),
           fmtRatio(r.actual, spec.kind),
           fmtRatioVariation(r.actual, r.anterior, r.variacion_pct, spec.kind),
-          r.status ? RATIO_STATUS_LABEL[r.status] : '',
+          spec.noAplica ? 'No aplica' : r.status ? RATIO_STATUS_LABEL[r.status] : '',
         ];
       }),
       columnStyles: {
@@ -793,7 +826,7 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
       },
       didParseCell: data => {
         if (data.section === 'body' && data.column.index === 4) {
-          const st = ratios[rows[data.row.index].key]?.status;
+          const st = rows[data.row.index].noAplica ? null : ratios[rows[data.row.index].key]?.status;
           if (st) data.cell.styles.fillColor = tint(RATIO_STATUS_RGB[st], 0.35);
         }
       },
@@ -820,7 +853,7 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
     const pctTxt = (v: number | null | undefined, dec = 1) => (v === null || v === undefined ? '-' : `${fmtNum(v * 100, dec)}%`);
     const xTxt = (v: number | null | undefined) => (v === null || v === undefined ? '-' : `${fmtNum(v, 2)}x`);
     const dscrRGB = (v: number | null) =>
-      v === null ? null : v > RATIO_THRESHOLDS.dscr.sano ? STATUS_RGB.good : v >= RATIO_THRESHOLDS.dscr.alerta ? STATUS_RGB.warning : STATUS_RGB.critical;
+      v === null ? null : v > perfil.umbrales.dscr.sano ? STATUS_RGB.good : v >= perfil.umbrales.dscr.alerta ? STATUS_RGB.warning : STATUS_RGB.critical;
     paragraph('Cálculo determinístico en código, sin IA. Miles de $ en moneda constante del cierre del balance. Los valores editados por el analista llevan un asterisco.', 8.5, 'italic');
 
     subheading('Año base');
