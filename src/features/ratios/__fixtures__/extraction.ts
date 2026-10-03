@@ -60,11 +60,15 @@ export const buildExtraction = (): RawExtraction => ({
       resultado_ordinario: 3000,
       gastos_financieros: -500,
       resultado_financiero_y_tenencia: -600,
+      recpam: null,
+      impuesto_ganancias: -540,
       resultado_neto: 1460,
     },
     flujo_efectivo: {
       depreciacion_bienes_de_uso: 400,
-      flujo_neto_operativo: 1800,
+      // 80% del EBITDA (3.400): calidad de la ganancia sana
+      flujo_neto_operativo: 2720,
+      pagos_bienes_de_uso: 600,
     },
   },
   ejercicio_anterior: {
@@ -109,11 +113,15 @@ export const buildExtraction = (): RawExtraction => ({
       resultado_ordinario: 1975,
       gastos_financieros: -400,
       resultado_financiero_y_tenencia: -500,
+      recpam: null,
+      impuesto_ganancias: -400,
       resultado_neto: 1000,
     },
     flujo_efectivo: {
       depreciacion_bienes_de_uso: 300,
-      flujo_neto_operativo: 900,
+      // 80% del EBITDA (2.275)
+      flujo_neto_operativo: 1820,
+      pagos_bienes_de_uso: 400,
     },
   },
   deuda_bancaria_actual: {
@@ -132,8 +140,22 @@ export const buildExtraction = (): RawExtraction => ({
     cheques_rechazados_monto: 0,
     deuda_financiera_total_nosis: 2000,
     detalle_entidades: [{ entidad: 'Banco Ejemplo', situacion: 1, monto: 2000 }],
+    peor_situacion_24_meses: 1,
+    cheques_rechazados_levantados: 0,
+    deuda_fiscal_previsional: 0,
+    planes_de_pago_arca: false,
+    juicios_cantidad: 0,
+    embargos_cantidad: 0,
+    pedidos_quiebra_cantidad: 0,
   },
   accionistas_y_directorio: null,
+  informacion_complementaria: {
+    balance_ajustado_por_inflacion: true,
+    opinion_auditor: 'favorable',
+    detalle_opinion_auditor: null,
+    deuda_financiera_moneda_extranjera: null,
+    porcentaje_ventas_exportacion: null,
+  },
 });
 
 type Mutator = (e: RawExtraction) => void;

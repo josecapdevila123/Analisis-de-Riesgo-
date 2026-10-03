@@ -1,4 +1,5 @@
 import { RawExtraction } from '../extraction/schemas';
+import { RATIO_THRESHOLDS, RatioWithThreshold } from '../risk/policy';
 
 export type RatioStatus = 'healthy' | 'alert' | 'critical';
 
@@ -32,7 +33,11 @@ export type RatioKey =
   | 'indice_inmovilizacion'
   | 'autofinanciamiento'
   | 'roe'
-  | 'roa';
+  | 'roa'
+  | 'deuda_neta_ebitda'
+  | 'dscr'
+  | 'calidad_ganancia'
+  | 'deuda_financiera_pn';
 
 export type ComputedRatios = Record<RatioKey, Ratio>;
 
@@ -128,32 +133,22 @@ const computeEBITDA = (year: Year): number => {
   );
 };
 
+// Semáforo según la política de riesgos (src/features/risk/policy.ts).
 const evaluateRatioStatus = (key: RatioKey, value: number | null): RatioStatus | null => {
   if (!isFiniteNumber(value)) return null;
-  switch (key) {
-    case 'liquidez_corriente':
-    case 'liquidez_acida':
-    case 'liquidez_inmediata':
-      if (value > 1.2) return 'healthy';
-      if (value >= 1) return 'alert';
-      return 'critical';
-    case 'solvencia':
-      if (value > 1.5) return 'healthy';
-      if (value >= 1) return 'alert';
-      return 'critical';
-    case 'deuda_ebitda':
-      // Negativo solo si el EBITDA es negativo: no hay capacidad de repago.
-      if (value < 0) return 'critical';
-      if (value < 2) return 'healthy';
-      if (value <= 3.5) return 'alert';
-      return 'critical';
-    case 'cobertura_intereses':
-      if (value > 3) return 'healthy';
-      if (value >= 1.5) return 'alert';
-      return 'critical';
-    default:
-      return null;
+  if (!(key in RATIO_THRESHOLDS)) return null;
+  const t = RATIO_THRESHOLDS[key as RatioWithThreshold];
+  if (t.mejorSi === 'mayor') {
+    if (value > t.sano) return 'healthy';
+    if (value >= t.alerta) return 'alert';
+    return 'critical';
   }
+  // Menor = mejor (múltiplos de deuda). Negativo en deuda bruta / EBITDA solo
+  // ocurre con EBITDA negativo: no hay capacidad de repago.
+  if (key === 'deuda_ebitda' && value < 0) return 'critical';
+  if (value <= t.sano) return 'healthy';
+  if (value <= t.alerta) return 'alert';
+  return 'critical';
 };
 
 type YearValues = Record<RatioKey, number | null>;
@@ -186,6 +181,16 @@ const computeYearValues = (year: Year, deudaCorriente: number, deudaNoCorriente:
 
   const ebitda = computeEBITDA(year);
   const deudaBancariaTotal = deudaCorriente + deudaNoCorriente;
+
+  // Capacidad de pago (supuestos documentados en RATIO_ASSUMPTIONS de la política):
+  // deuda neta = deuda − caja (sin rubros de caja, se usa la deuda total);
+  // capex de mantenimiento ≈ depreciación; amortización de capital ≈ deuda corriente.
+  const ebitdaPositivo = ebitda > 0 ? ebitda : null;
+  const deudaNeta = deudaBancariaTotal - (disponibilidades ?? 0);
+  const capexMantenimiento = Math.abs(ef.depreciacion_bienes_de_uso ?? 0);
+  const impuestos = Math.abs(er.impuesto_ganancias ?? 0);
+  const servicioDeuda = (gfin ?? 0) + deudaCorriente;
+  const dscr = safeDivide(ebitda - capexMantenimiento - impuestos, servicioDeuda);
 
   const liquidezAcida = bc === null ? null : safeDivide(ac - bc, pc);
   const ktno =
@@ -225,6 +230,10 @@ const computeYearValues = (year: Year, deudaCorriente: number, deudaNoCorriente:
     autofinanciamiento: safeDivide(ef.flujo_neto_operativo, deudaBancariaTotal),
     roe: safeDivide(rn, pnPositivo),
     roa: safeDivide(rn, totalActivo),
+    deuda_neta_ebitda: safeDivide(deudaNeta, ebitdaPositivo),
+    dscr,
+    calidad_ganancia: safeDivide(ef.flujo_neto_operativo, ebitdaPositivo),
+    deuda_financiera_pn: safeDivide(deudaBancariaTotal, pnPositivo),
   };
 };
 
@@ -252,6 +261,10 @@ const RATIO_KEYS: RatioKey[] = [
   'autofinanciamiento',
   'roe',
   'roa',
+  'deuda_neta_ebitda',
+  'dscr',
+  'calidad_ganancia',
+  'deuda_financiera_pn',
 ];
 
 export function computeRatios(extraction: RawExtraction): ComputedRatios {

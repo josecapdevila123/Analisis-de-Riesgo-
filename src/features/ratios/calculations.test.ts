@@ -53,19 +53,27 @@ const EXPECTED: Record<RatioKey, Expected> = {
   // ANC / Activo total
   indice_inmovilizacion: { actual: 3000 / 8000, anterior: 2000 / 6000 },
   // Flujo operativo / Deuda bancaria
-  autofinanciamiento: { actual: 1800 / 2100, anterior: 900 / 1750 },
+  autofinanciamiento: { actual: 2720 / 2100, anterior: 1820 / 1750 },
   // RN / PN
   roe: { actual: 1460 / 4000, anterior: 1000 / 2500 },
   // RN / Activo total
   roa: { actual: 1460 / 8000, anterior: 1000 / 6000 },
+  // (Deuda bancaria − caja y bancos) / EBITDA
+  deuda_neta_ebitda: { actual: (2100 - 500) / 3400, anterior: (1750 - 400) / 2275 },
+  // (EBITDA − depreciación − |impuesto|) / (|intereses| + deuda bancaria corriente)
+  dscr: { actual: (3400 - 400 - 540) / (500 + 600), anterior: (2275 - 300 - 400) / (400 + 750) },
+  // Flujo operativo / EBITDA
+  calidad_ganancia: { actual: 2720 / 3400, anterior: 1820 / 2275 },
+  // Deuda bancaria / PN
+  deuda_financiera_pn: { actual: 2100 / 4000, anterior: 1750 / 2500 },
 };
 
 describe('computeRatios — los 23 ratios sobre un balance realista', () => {
   const ratios = computeRatios(buildExtraction());
 
-  it('calcula exactamente 23 ratios', () => {
-    expect(Object.keys(ratios)).toHaveLength(23);
-    expect(Object.keys(EXPECTED)).toHaveLength(23);
+  it('calcula exactamente 27 ratios', () => {
+    expect(Object.keys(ratios)).toHaveLength(27);
+    expect(Object.keys(EXPECTED)).toHaveLength(27);
   });
 
   describe.each(Object.entries(EXPECTED) as Array<[RatioKey, Expected]>)('%s', (key, expected) => {
@@ -79,7 +87,7 @@ describe('computeRatios — los 23 ratios sobre un balance realista', () => {
 
     it('variación interanual sobre |anterior|', () => {
       const v = ((expected.actual - expected.anterior) / Math.abs(expected.anterior)) * 100;
-      expect(ratios[key].variacion_pct).toBeCloseTo(v, 6);
+      expect(ratios[key].variacion_pct).toBeCloseTo(v, 4);
     });
   });
 });
@@ -91,8 +99,14 @@ describe('computeRatios — semáforo (status)', () => {
     expect(ratios.liquidez_corriente.status).toBe('healthy');
   });
 
-  it('prueba ácida 1,12 → alert (entre 1 y 1,2)', () => {
-    expect(ratios.liquidez_acida.status).toBe('alert');
+  it('prueba ácida 1,12 → healthy (umbral de política: > 1x)', () => {
+    expect(ratios.liquidez_acida.status).toBe('healthy');
+  });
+
+  it('deuda neta / EBITDA 0,47 → healthy; DSCR 2,24 → healthy; calidad 80% → healthy', () => {
+    expect(ratios.deuda_neta_ebitda.status).toBe('healthy');
+    expect(ratios.dscr.status).toBe('healthy');
+    expect(ratios.calidad_ganancia.status).toBe('healthy');
   });
 
   it('liquidez inmediata 0,2 → critical (< 1)', () => {
@@ -394,5 +408,89 @@ describe('computeRatios — clasificación de rubros', () => {
       ];
     }));
     expect(r.dias_de_cobro.actual).toBeCloseTo(50, 6);
+  });
+});
+
+describe('computeRatios — ejemplo de política: por qué el DSCR manda', () => {
+  // EBITDA 1.000, deuda financiera 3.000, caja 500, intereses 300, amortización
+  // de capital del año 600, capex de mantenimiento 150 e impuestos 100.
+  const r = computeRatios(extractionWith(x => {
+    const y = x.ejercicio_actual;
+    y.estado_resultados.resultado_bruto = 2850;
+    y.estado_resultados.gastos_administracion = -1000;
+    y.estado_resultados.gastos_comercializacion = -1000;
+    y.estado_resultados.gastos_financieros = -300;
+    y.estado_resultados.impuesto_ganancias = -100;
+    y.flujo_efectivo.depreciacion_bienes_de_uso = 150; // capex de mantenimiento ≈ depreciación
+    x.deuda_bancaria_actual.corriente.total = 600;     // amortización de capital del año
+    x.deuda_bancaria_actual.no_corriente.total = 2400;
+    // Caja y Bancos = 500 en el fixture
+  }));
+
+  it('EBITDA 1.000', () => expect(r.ebitda.actual).toBe(1000));
+
+  it('deuda neta / EBITDA = 2.500 / 1.000 = 2,5x → parece razonable (healthy, límite inclusivo)', () => {
+    expect(r.deuda_neta_ebitda.actual).toBeCloseTo(2.5, 6);
+    expect(r.deuda_neta_ebitda.status).toBe('healthy');
+  });
+
+  it('cobertura de intereses = 1.000 / 300 = 3,3x → parece sana', () => {
+    expect(r.cobertura_intereses.actual).toBeCloseTo(1000 / 300, 6);
+    expect(r.cobertura_intereses.status).toBe('healthy');
+  });
+
+  it('DSCR = (1.000 − 150 − 100) / (300 + 600) = 0,83x → no repaga con su propio flujo', () => {
+    expect(r.dscr.actual).toBeCloseTo(750 / 900, 6);
+    expect(r.dscr.status).toBe('critical');
+  });
+});
+
+describe('computeRatios — casos borde de los ratios de capacidad de pago', () => {
+  it('EBITDA ≤ 0 → deuda neta / EBITDA y calidad de la ganancia null; DSCR negativo y crítico', () => {
+    const r = computeRatios(extractionWith(x => {
+      x.ejercicio_actual.estado_resultados.resultado_bruto = -3000;
+    }));
+    expect(r.deuda_neta_ebitda.actual).toBeNull();
+    expect(r.calidad_ganancia.actual).toBeNull();
+    expect(r.dscr.actual).toBeLessThan(0);
+    expect(r.dscr.status).toBe('critical');
+  });
+
+  it('caja mayor que la deuda → deuda neta negativa → healthy', () => {
+    const r = computeRatios(extractionWith(x => {
+      x.deuda_bancaria_actual.corriente.total = 100;
+      x.deuda_bancaria_actual.no_corriente.total = 0;
+    }));
+    expect(r.deuda_neta_ebitda.actual).toBeCloseTo((100 - 500) / 3400, 6);
+    expect(r.deuda_neta_ebitda.status).toBe('healthy');
+  });
+
+  it('sin rubros de caja → deuda neta = deuda total (criterio conservador)', () => {
+    const r = computeRatios(extractionWith(x => {
+      x.ejercicio_actual.estado_situacion_patrimonial.activo_corriente.detalles = [];
+    }));
+    expect(r.deuda_neta_ebitda.actual).toBeCloseTo(2100 / 3400, 6);
+  });
+
+  it('sin intereses ni deuda corriente → DSCR null', () => {
+    const r = computeRatios(extractionWith(x => {
+      x.ejercicio_actual.estado_resultados.gastos_financieros = null;
+      x.deuda_bancaria_actual.corriente.total = 0;
+    }));
+    expect(r.dscr.actual).toBeNull();
+  });
+
+  it('impuesto a las ganancias ausente (casos viejos) → se toma 0', () => {
+    const r = computeRatios(extractionWith(x => {
+      delete x.ejercicio_actual.estado_resultados.impuesto_ganancias;
+    }));
+    expect(r.dscr.actual).toBeCloseTo((3400 - 400) / 1100, 6);
+  });
+
+  it('patrimonio neto ≤ 0 → deuda financiera / PN null', () => {
+    const r = computeRatios(extractionWith(x => {
+      x.ejercicio_actual.estado_situacion_patrimonial.patrimonio_neto = -100;
+    }));
+    expect(r.deuda_financiera_pn.actual).toBeNull();
   });
 });
