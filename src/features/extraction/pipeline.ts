@@ -3,7 +3,7 @@ import {
   runExtraction,
   runVerification,
   runMarketAnalysis,
-} from './geminiClient';
+} from './aiFunctions';
 import { RawExtraction, VerificationResult } from './schemas';
 import { ComputedRatios, computeRatios } from '../ratios/calculations';
 import { Inconsistencia, runSanityChecks } from '../ratios/sanityChecks';

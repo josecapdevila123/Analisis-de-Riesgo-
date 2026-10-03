@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { initializeFirestore } from 'firebase/firestore';
+import { connectFunctionsEmulator, getFunctions } from 'firebase/functions';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
@@ -10,6 +11,13 @@ export const db = initializeFirestore(
   firebaseConfig.firestoreDatabaseId
 );
 export const auth = getAuth(app);
+
+// Tiene que coincidir con REGION en functions/src/config.ts.
+const FUNCTIONS_REGION = 'us-central1';
+export const functions = getFunctions(app, FUNCTIONS_REGION);
+if (import.meta.env.VITE_FUNCTIONS_EMULATOR === 'true') {
+  connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+}
 
 export enum OperationType {
   CREATE = 'create',

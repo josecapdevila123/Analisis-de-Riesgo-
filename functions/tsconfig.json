@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "outDir": "lib",
+    // rootDir ".." porque las funciones reusan los schemas Zod del front
+    // (src/features/extraction/schemas.ts), que se compilan dentro de lib/.
+    "rootDir": "..",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "noEmitOnError": true
+  },
+  "include": ["src"]
+}
