@@ -1,4 +1,5 @@
 import { RawExtraction } from '../extraction/schemas';
+import { SIGNAL_PARAMS } from '../risk/policy';
 
 export type CrossCheckResult = {
   balance_debt: number;
@@ -8,7 +9,6 @@ export type CrossCheckResult = {
   match: boolean | null;
 };
 
-const UMBRAL_PCT = 10;
 
 export function runCrossCheck(extraction: RawExtraction): CrossCheckResult {
   const balance_debt =
@@ -32,7 +32,7 @@ export function runCrossCheck(extraction: RawExtraction): CrossCheckResult {
   // Con Nosis en 0 no hay porcentaje: coincide solo si el balance tampoco informa deuda.
   const match = difference_pct === null
     ? balance_debt === 0
-    : Math.abs(difference_pct) <= UMBRAL_PCT;
+    : Math.abs(difference_pct) <= SIGNAL_PARAMS.cruceNosis.toleranciaPct;
 
   return { balance_debt, nosis_debt, difference_abs, difference_pct, match };
 }
