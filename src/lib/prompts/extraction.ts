@@ -32,6 +32,11 @@ Identificá los rubros que correspondan a deuda bancaria/financiera dentro del \
 No calcules ratios sobre esta deuda. Solo agrupala.
 
 ===========================================================
+ANEXO DE BIENES DE USO
+===========================================================
+Si el balance incluye el anexo de bienes de uso, devolvé \`anexo_bienes_de_uso\` con una entrada por rubro del anexo (terrenos, inmuebles, inmuebles rurales / campos, rodados, maquinarias, instalaciones, etc.) y su valor residual al cierre del ejercicio actual, en miles de pesos: \`{ rubro, valor_residual }\`. Copiá el nombre del rubro tal como figura. Si no hay anexo: \`null\`.
+
+===========================================================
 NOSIS (si hay informe adjunto)
 ===========================================================
 Si los documentos incluyen un informe Nosis o similar, completá \`extraccion_nosis\` solo con los números crudos del informe (score, situación BCRA peor estado, cheques rechazados, deuda financiera total reportada, detalle por entidad). NO compares con el balance: el cruce lo hace el código.
@@ -166,6 +171,10 @@ ESTRUCTURA JSON DE SALIDA (estricta)
       { "periodo": "2025-06", "entidad": "Banco ABC", "monto": 1000, "situacion": 1 }
     ]
   },
+  "anexo_bienes_de_uso": [
+    { "rubro": "Inmuebles rurales", "valor_residual": 2500 },
+    { "rubro": "Rodados", "valor_residual": 300 }
+  ],
   "accionistas_y_directorio": null,
   "informacion_complementaria": {
     "balance_ajustado_por_inflacion": true,

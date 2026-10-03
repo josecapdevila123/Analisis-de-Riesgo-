@@ -248,6 +248,12 @@ export const RawExtractionSchema = z.object({
   extraccion_nosis: ExtraccionNosis,
   // Opcional: los casos viejos y las empresas no financieras no lo tienen.
   extraccion_financiera: ExtraccionFinancieraSchema.optional(),
+  // Anexo de bienes de uso del ejercicio actual (terrenos, inmuebles, campos…).
+  // Opcional: los casos viejos no lo tienen. Sirve para cruzar campo propio declarado.
+  anexo_bienes_de_uso: z.preprocess(v => (Array.isArray(v) ? v : null), z.array(z.object({
+    rubro: z.string().catch(''),
+    valor_residual: lenientNum,
+  })).nullable()).optional(),
   accionistas_y_directorio: z.union([AccionistasYDirectorio, 
   z.array(z.any()).transform(() => null)]).nullable(),
   informacion_complementaria: InformacionComplementaria.optional(),
