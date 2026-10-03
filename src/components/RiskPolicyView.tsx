@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, ClipboardList, Cpu, Gauge, Hourglass, Scale, Sigma, X } from 'lucide-react';
+import { BookOpen, ClipboardList, Cpu, Factory, Gauge, History, Hourglass, Scale, Sigma, X } from 'lucide-react';
 import {
   DIMENSION_WEIGHTS,
   MODEL_CRITERIA,
@@ -11,6 +11,14 @@ import {
   RatioThreshold,
   SCORE_BANDS,
   SIGNAL_RULES,
+  perfilEfectivo,
+  POLICY_CHANGELOG,
+  POLICY_VERSION,
+  RATIO_LABEL_CORTO,
+  RatioWithThreshold,
+  RUBROS,
+  SECTOR_PROFILES,
+  SUGERENCIA_RUBRO,
 } from '../features/risk/policy';
 import { CATEGORY_LABEL, categoryOf, SEVERIDAD_LABEL } from '../features/risk/score';
 import { RiskDimension, SeveridadRiesgo } from '../features/extraction/schemas';
@@ -74,7 +82,7 @@ export function RiskPolicyView({ onClose }: { onClose: () => void }) {
               className="inline-flex items-center gap-2 px-3 py-1 text-xs font-bold uppercase tracking-wider text-ink border"
               style={{ borderColor: STATUS.warning, backgroundColor: tint(STATUS.warning, 0.15) }}
             >
-              <Hourglass className="w-3.5 h-3.5" /> {POLICY_STATUS}
+              <Hourglass className="w-3.5 h-3.5" /> v{POLICY_VERSION} · {POLICY_STATUS}
             </span>
           </div>
         </div>
@@ -240,8 +248,28 @@ export function RiskPolicyView({ onClose }: { onClose: () => void }) {
         </ul>
       </Section>
 
+      {/* 8. Criterios por rubro */}
+      <CriteriosPorRubro />
+
+      {/* 9. Versión */}
+      <Section n={9} title="Versión y cambios" icon={History}>
+        <p className="text-sm text-ink mb-4">
+          Versión vigente <strong>v{POLICY_VERSION}</strong> · {POLICY_STATUS}. Los casos evaluados guardan la versión y el perfil con los que se evaluaron.
+        </p>
+        <ul className="space-y-3">
+          {POLICY_CHANGELOG.map(c => (
+            <li key={c.version} className="border-l-2 border-ink/15 pl-4">
+              <p className="text-sm font-semibold text-ink">v{c.version} <span className="font-normal text-ink/50">· {c.fecha}</span></p>
+              <ul className="list-disc pl-5 text-xs text-ink/70 space-y-0.5 mt-1">
+                {c.cambios.map(x => <li key={x}>{x}</li>)}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      </Section>
+
       {/* 7. Pendientes */}
-      <Section n={7} title="Pendientes: requieren datos que hoy no entran a la app" icon={Hourglass}>
+      <Section n={10} title="Pendientes: requieren datos que hoy no entran a la app" icon={Hourglass}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {PENDING_ITEMS.map(p => (
             <div key={p.tema} className="border border-dashed border-ink/30 p-4">
@@ -252,5 +280,148 @@ export function RiskPolicyView({ onClose }: { onClose: () => void }) {
         </div>
       </Section>
     </div>
+  );
+}
+
+// ---------- Criterios por rubro ----------
+
+const PERFILES = RUBROS.map(r => perfilEfectivo(r));
+const GENERICO = PERFILES[0];
+const resaltado = 'bg-brand-blue/10 font-semibold';
+
+function CriteriosPorRubro() {
+  const ratios = Object.keys(RATIO_THRESHOLDS) as RatioWithThreshold[];
+  const senales: Array<{ label: string; valor: (p: typeof GENERICO) => string }> = [
+    { label: 'Deuda que vence en 12 meses (señal si supera)', valor: p => `${fmtNum(p.senales.deuda.cortoPlazoShare * 100)}%` },
+    { label: 'Pasivo / PN (media / alta)', valor: p => `${fmtNum(p.senales.deuda.pasivoPnMedia)}x / ${fmtNum(p.senales.deuda.pasivoPnAlta)}x${p.ajustes.excluirAnticiposClientes ? ' sin anticipos' : ''}` },
+    { label: 'Aumento del ciclo de caja (días)', valor: p => `${p.senales.liquidez.ciclosDiasAumento}` },
+  ];
+  return (
+    <Section n={8} title="Criterios por rubro" icon={Factory}>
+      <p className="text-sm text-ink/70 mb-5 leading-relaxed">
+        El analista confirma el rubro de cada caso; el sistema solo lo sugiere. Cada perfil es el genérico más estos ajustes.
+        En celeste, lo que difiere del genérico. Propuesta pendiente de validación por Riesgos.
+      </p>
+
+      <h4 className="text-xs font-bold uppercase tracking-wider text-ink/60 mb-2">Semáforo de ratios (sano / alerta)</h4>
+      <div className="overflow-x-auto mb-6">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr>
+              <th className={`${th} text-left`}>Ratio</th>
+              {PERFILES.map(p => <th key={p.rubro} className={`${th} text-center`}>{p.label}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {ratios.map(k => (
+              <tr key={k}>
+                <td className={`${td} font-medium`}>{RATIO_LABEL_CORTO[k] ?? RATIO_THRESHOLDS[k].label}</td>
+                {PERFILES.map(p => {
+                  const t = p.umbrales[k];
+                  const g = GENERICO.umbrales[k];
+                  const noAplica = p.noAplica[k];
+                  const difiere = !noAplica && (t.sano !== g.sano || t.alerta !== g.alerta);
+                  const nota = k === 'liquidez_corriente' && p.ajustes.excluirAnticiposClientes ? 'sin anticipos'
+                    : k === 'margen_ebitda' && p.ajustes.margenEbitdaPromedio ? 'promedio 2 ejercicios' : null;
+                  return (
+                    <td key={p.rubro} className={`${td} text-center tabular-nums ${difiere || nota ? resaltado : ''}`} title={noAplica ?? undefined}>
+                      {noAplica ? <span className="text-ink/50 italic">No aplica</span> : `${fmtThreshold(t.sano, t.unidad)} / ${fmtThreshold(t.alerta, t.unidad)}`}
+                      {nota && <span className="block text-[10px] font-normal text-ink/60">{nota}</span>}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <h4 className="text-xs font-bold uppercase tracking-wider text-ink/60 mb-2">Señales ajustadas y pesos</h4>
+      <div className="overflow-x-auto mb-6">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr>
+              <th className={`${th} text-left`}>Parámetro</th>
+              {PERFILES.map(p => <th key={p.rubro} className={`${th} text-center`}>{p.label}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {senales.map(sg => (
+              <tr key={sg.label}>
+                <td className={`${td} font-medium`}>{sg.label}</td>
+                {PERFILES.map(p => (
+                  <td key={p.rubro} className={`${td} text-center tabular-nums ${sg.valor(p) !== sg.valor(GENERICO) ? resaltado : ''}`}>{sg.valor(p)}</td>
+                ))}
+              </tr>
+            ))}
+            <tr>
+              <td className={`${td} font-medium`}>Señales desactivadas</td>
+              {PERFILES.map(p => (
+                <td key={p.rubro} className={`${td} text-center ${p.senalesDesactivadas.length ? resaltado : ''}`}>
+                  {p.senalesDesactivadas.length ? p.senalesDesactivadas.map(d => <span key={d.id} className="block font-normal" title={d.motivo}>{d.motivo.split(':')[0]}</span>) : '—'}
+                </td>
+              ))}
+            </tr>
+            {(Object.keys(DIMENSION_WEIGHTS) as RiskDimension[]).map(d => (
+              <tr key={d}>
+                <td className={`${td} font-medium`}>Peso: {DIMENSION_WEIGHTS[d].label}</td>
+                {PERFILES.map(p => (
+                  <td key={p.rubro} className={`${td} text-center tabular-nums ${p.pesos[d] !== GENERICO.pesos[d] ? resaltado : ''}`}>{p.pesos[d]}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <h4 className="text-xs font-bold uppercase tracking-wider text-ink/60 mb-2">Qué mira la opinión en cada rubro</h4>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        {RUBROS.map(r => {
+          const p = SECTOR_PROFILES[r];
+          return (
+            <div key={r} className="border border-ink/15 p-4 text-xs leading-relaxed print:break-inside-avoid">
+              <p className="text-sm font-bold text-ink">{p.label}</p>
+              <p className="text-ink/70 mt-1">{p.descripcion}</p>
+              <p className="mt-2"><span className="font-semibold">Variable crítica:</span> {p.variableCritica}</p>
+              <p className="mt-1"><span className="font-semibold">KPIs prioritarios:</span> {p.kpisPrioritarios.map(k => RATIO_LABEL_CORTO[k] ?? k).join(' → ')}</p>
+              <p className="mt-1 font-semibold">Preguntas clave:</p>
+              <ul className="list-disc pl-5 text-ink/80">{p.preguntasClave.map(q => <li key={q}>{q}</li>)}</ul>
+              {p.noAplica && Object.keys(p.noAplica).length > 0 && (
+                <p className="mt-1"><span className="font-semibold">No aplican:</span> {Object.entries(p.noAplica).map(([k, m]) => `${RATIO_LABEL_CORTO[k as keyof typeof RATIO_LABEL_CORTO] ?? k} (${m})`).join('; ')}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <h4 className="text-xs font-bold uppercase tracking-wider text-ink/60 mb-2">Sugerencia automática de rubro (palabras clave sobre la actividad)</h4>
+      <p className="text-xs text-ink/60 mb-2">
+        Prioridad si hay varias coincidencias: {SUGERENCIA_RUBRO.prioridad.map(r => SECTOR_PROFILES[r].label).join(' > ')}.
+        Las palabras débiles solo cuentan si no hubo ninguna fuerte. Sin coincidencias: "Sin sugerencia: elegí el rubro".
+      </p>
+      <table className="w-full text-xs border-collapse">
+        <thead>
+          <tr>
+            <th className={`${th} text-left`}>Rubro</th>
+            <th className={`${th} text-left`}>Palabras</th>
+            <th className={`${th} text-left`}>Débiles</th>
+            <th className={`${th} text-left`}>No cuentan</th>
+          </tr>
+        </thead>
+        <tbody>
+          {SUGERENCIA_RUBRO.prioridad.map(r => {
+            const regla = SUGERENCIA_RUBRO.reglas[r];
+            return (
+              <tr key={r}>
+                <td className={`${td} font-medium`}>{SECTOR_PROFILES[r].label}</td>
+                <td className={td}>{regla.fuertes.join(', ') || '—'}</td>
+                <td className={td}>{regla.debiles?.join(', ') || '—'}</td>
+                <td className={td}>{regla.excluir?.join(', ') || '—'}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </Section>
   );
 }

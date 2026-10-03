@@ -3,7 +3,7 @@ import { ComputedRatios } from '../ratios/calculations';
 import { Inconsistencia } from '../ratios/sanityChecks';
 import { CrossCheckResult } from '../ratios/crossCheck';
 import { pceProxy } from './score';
-import { RATIO_THRESHOLDS, SIGNAL_PARAMS as P } from './policy';
+import { PerfilEfectivo, perfilEfectivo } from './policy';
 
 // Señales de riesgo objetivas, calculadas con reglas fijas (sin IA). Se le pasan
 // al modelo como evidencia y algunas fijan un PISO al puntaje final, para que una
@@ -25,6 +25,8 @@ export type SignalsInput = {
   inconsistencias: Inconsistencia[];
   crossCheck: CrossCheckResult | null;
   companyHistory?: CompanyHistory | null;
+  // Perfil del rubro confirmado (por defecto, el genérico).
+  perfil?: PerfilEfectivo;
 };
 
 const fmtPct = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(0)}%`;
@@ -36,8 +38,14 @@ const variation = (actual: number | null | undefined, anterior: number | null | 
   return ((actual - anterior) / Math.abs(anterior)) * 100;
 };
 
-export function detectSignals({ extraction, ratios, inconsistencias, crossCheck, companyHistory }: SignalsInput): RiskSignal[] {
+export function detectSignals({ extraction, ratios, inconsistencias, crossCheck, companyHistory, perfil = perfilEfectivo('generico') }: SignalsInput): RiskSignal[] {
   const out: RiskSignal[] = [];
+  // Parámetros y umbrales del perfil efectivo (genérico + overrides del rubro).
+  const P = perfil.senales;
+  const RATIO_THRESHOLDS = perfil.umbrales;
+  const sinAnticipos = perfil.ajustes.excluirAnticiposClientes === true;
+  const anticipos = ratios.anticipos_clientes?.actual ?? null;
+  const notaAnticipos = sinAnticipos && anticipos !== null ? ` (sin anticipos de clientes: ${fmtMiles(anticipos)} excluidos)` : '';
   const add = (s: RiskSignal) => out.push(s);
 
   const er = extraction.ejercicio_actual.estado_resultados;
@@ -234,12 +242,12 @@ export function detectSignals({ extraction, ratios, inconsistencias, crossCheck,
     });
   }
 
-  const endeud = ratios.endeudamiento.actual;
+  const endeud = sinAnticipos ? ratios.endeudamiento_sin_anticipos.actual : ratios.endeudamiento.actual;
   if (endeud !== null && endeud > P.deuda.pasivoPnMedia) {
     add({
       id: 'apalancamiento_alto', dimension: 'endeudamiento', severidad: endeud > P.deuda.pasivoPnAlta ? 'alta' : 'media', piso: null,
       titulo: 'Apalancamiento elevado',
-      detalle: `Pasivo / patrimonio neto ${fmtX(endeud)}.`,
+      detalle: `Pasivo / patrimonio neto ${fmtX(endeud)}${notaAnticipos}.`,
     });
   }
 
@@ -264,13 +272,13 @@ export function detectSignals({ extraction, ratios, inconsistencias, crossCheck,
     });
   }
 
-  const lc = ratios.liquidez_corriente.actual;
+  const lc = sinAnticipos ? ratios.liquidez_corriente_sin_anticipos.actual : ratios.liquidez_corriente.actual;
   const lcBaja = lc !== null && lc < RATIO_THRESHOLDS.liquidez_corriente.alerta;
   if (lcBaja) {
     add({
       id: 'liquidez_corriente_baja', dimension: 'liquidez_solvencia', severidad: 'alta', piso: null,
       titulo: 'Liquidez corriente menor a 1',
-      detalle: `Liquidez corriente ${fmtX(lc!)}: el pasivo de corto plazo supera al activo corriente (capital de trabajo ${fmtMiles(ratios.capital_de_trabajo.actual ?? 0)}).`,
+      detalle: `Liquidez corriente ${fmtX(lc!)}${notaAnticipos}: el pasivo de corto plazo supera al activo corriente (capital de trabajo ${fmtMiles(ratios.capital_de_trabajo.actual ?? 0)}).`,
     });
   }
   const acida = ratios.liquidez_acida.actual;
@@ -422,6 +430,8 @@ export function detectSignals({ extraction, ratios, inconsistencias, crossCheck,
     });
   }
 
+  // Señales desactivadas por el rubro (o de ratios que no aplican): no suman.
+  const desactivadas = new Set(perfil.senalesDesactivadas.map(d => d.id));
   const orden: Record<SeveridadRiesgo, number> = { critica: 0, alta: 1, media: 2, baja: 3 };
-  return out.sort((a, b) => orden[a.severidad] - orden[b.severidad]);
+  return out.filter(s => !desactivadas.has(s.id)).sort((a, b) => orden[a.severidad] - orden[b.severidad]);
 }

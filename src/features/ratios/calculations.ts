@@ -1,5 +1,5 @@
 import { RawExtraction } from '../extraction/schemas';
-import { RATIO_THRESHOLDS, RatioWithThreshold } from '../risk/policy';
+import { PerfilEfectivo, perfilEfectivo, RATIO_THRESHOLDS, RatioWithThreshold } from '../risk/policy';
 
 export type RatioStatus = 'healthy' | 'alert' | 'critical';
 
@@ -37,7 +37,20 @@ export type RatioKey =
   | 'deuda_neta_ebitda'
   | 'dscr'
   | 'calidad_ganancia'
-  | 'deuda_financiera_pn';
+  | 'deuda_financiera_pn'
+  // KPIs sectoriales (perfiles por rubro)
+  | 'bienes_cambio_deuda_cp'
+  | 'deuda_bancaria_ventas'
+  | 'deuda_cp_share'
+  | 'margen_ebitda_promedio'
+  | 'deuda_comercial_bancaria'
+  | 'capex_depreciacion'
+  | 'deuda_me_share'
+  | 'anticipos_clientes'
+  | 'anticipos_ventas'
+  | 'liquidez_corriente_sin_anticipos'
+  | 'endeudamiento_sin_anticipos'
+  | 'pn_activo';
 
 export type ComputedRatios = Record<RatioKey, Ratio>;
 
@@ -91,6 +104,19 @@ const EXCL_DEUDAS_COMERCIALES = [
   'prestamo', 'bancari', 'financier', 'otro', 'otra',
 ];
 
+// Anticipos de clientes en el pasivo (construcción se financia con ellos).
+// "Anticipos" en el pasivo casi siempre son de clientes; se excluyen los que
+// claramente no lo son. Los anticipos a proveedores son activo: no aparecen acá.
+const KW_ANTICIPOS_CLIENTES = ['anticipo', 'adelanto'];
+const EXCL_ANTICIPOS_CLIENTES = ['proveedor', 'impuest', 'fiscal', 'ganancia', 'remuneraci', 'sueldo', 'personal', 'honorario'];
+
+const getAnticiposClientes = (year: Year) => {
+  const esp = year.estado_situacion_patrimonial;
+  const corriente = sumDetallesByKeywords(esp.pasivo_corriente.detalles, KW_ANTICIPOS_CLIENTES, EXCL_ANTICIPOS_CLIENTES);
+  const noCorriente = sumDetallesByKeywords(esp.pasivo_no_corriente.detalles, KW_ANTICIPOS_CLIENTES, EXCL_ANTICIPOS_CLIENTES);
+  return { corriente: corriente ?? 0, total: (corriente ?? 0) + (noCorriente ?? 0), encontrado: corriente !== null || noCorriente !== null };
+};
+
 const getDisponibilidades = (year: Year) =>
   sumDetallesByKeywords(
     year.estado_situacion_patrimonial.activo_corriente.detalles,
@@ -133,11 +159,13 @@ const computeEBITDA = (year: Year): number => {
   );
 };
 
-// Semáforo según la política de riesgos (src/features/risk/policy.ts).
-const evaluateRatioStatus = (key: RatioKey, value: number | null): RatioStatus | null => {
+// Semáforo según la política de riesgos (src/features/risk/policy.ts), con los
+// umbrales del perfil efectivo del rubro. Un ratio que "no aplica" no tiene semáforo.
+const evaluateRatioStatus = (key: RatioKey, value: number | null, perfil: PerfilEfectivo): RatioStatus | null => {
   if (!isFiniteNumber(value)) return null;
   if (!(key in RATIO_THRESHOLDS)) return null;
-  const t = RATIO_THRESHOLDS[key as RatioWithThreshold];
+  if (perfil.noAplica[key]) return null;
+  const t = perfil.umbrales[key as RatioWithThreshold];
   if (t.mejorSi === 'mayor') {
     if (value > t.sano) return 'healthy';
     if (value >= t.alerta) return 'alert';
@@ -181,6 +209,7 @@ const computeYearValues = (year: Year, deudaCorriente: number, deudaNoCorriente:
 
   const ebitda = computeEBITDA(year);
   const deudaBancariaTotal = deudaCorriente + deudaNoCorriente;
+  const anticipos = getAnticiposClientes(year);
 
   // Capacidad de pago (supuestos documentados en RATIO_ASSUMPTIONS de la política):
   // deuda neta = deuda − caja (sin rubros de caja, se usa la deuda total);
@@ -234,6 +263,22 @@ const computeYearValues = (year: Year, deudaCorriente: number, deudaNoCorriente:
     dscr,
     calidad_ganancia: safeDivide(ef.flujo_neto_operativo, ebitdaPositivo),
     deuda_financiera_pn: safeDivide(deudaBancariaTotal, pnPositivo),
+    // KPIs sectoriales
+    bienes_cambio_deuda_cp: safeDivide(bc, deudaCorriente),
+    deuda_bancaria_ventas: safeDivide(deudaBancariaTotal, ventas),
+    deuda_cp_share: safeDivide(deudaCorriente, deudaBancariaTotal),
+    margen_ebitda_promedio: null, // se calcula con los dos ejercicios en computeRatios
+    deuda_comercial_bancaria: safeDivide(deudasComerciales, deudaBancariaTotal),
+    capex_depreciacion: safeDivide(
+      ef.pagos_bienes_de_uso === null || ef.pagos_bienes_de_uso === undefined ? null : Math.abs(ef.pagos_bienes_de_uso),
+      ef.depreciacion_bienes_de_uso === null ? null : Math.abs(ef.depreciacion_bienes_de_uso),
+    ),
+    deuda_me_share: null, // solo el ejercicio actual, desde la información complementaria
+    anticipos_clientes: anticipos.encontrado ? anticipos.total : null,
+    anticipos_ventas: anticipos.encontrado ? safeDivide(anticipos.total, ventas) : null,
+    liquidez_corriente_sin_anticipos: safeDivide(ac, pc - anticipos.corriente),
+    endeudamiento_sin_anticipos: safeDivide(totalPasivo - anticipos.total, pnPositivo),
+    pn_activo: safeDivide(pn, totalActivo),
   };
 };
 
@@ -265,9 +310,30 @@ const RATIO_KEYS: RatioKey[] = [
   'dscr',
   'calidad_ganancia',
   'deuda_financiera_pn',
+  'bienes_cambio_deuda_cp',
+  'deuda_bancaria_ventas',
+  'deuda_cp_share',
+  'margen_ebitda_promedio',
+  'deuda_comercial_bancaria',
+  'capex_depreciacion',
+  'deuda_me_share',
+  'anticipos_clientes',
+  'anticipos_ventas',
+  'liquidez_corriente_sin_anticipos',
+  'endeudamiento_sin_anticipos',
+  'pn_activo',
 ];
 
-export function computeRatios(extraction: RawExtraction): ComputedRatios {
+// Ratio cuyo valor se usa para el semáforo de otro, según el perfil:
+// agro mide el margen EBITDA con el promedio de 2 ejercicios; construcción, la
+// liquidez corriente sin anticipos de clientes.
+const valorParaSemaforo = (key: RatioKey, perfil: PerfilEfectivo): RatioKey => {
+  if (key === 'margen_ebitda' && perfil.ajustes.margenEbitdaPromedio) return 'margen_ebitda_promedio';
+  if (key === 'liquidez_corriente' && perfil.ajustes.excluirAnticiposClientes) return 'liquidez_corriente_sin_anticipos';
+  return key;
+};
+
+export function computeRatios(extraction: RawExtraction, perfil: PerfilEfectivo = perfilEfectivo('generico')): ComputedRatios {
   const actualValues = computeYearValues(
     extraction.ejercicio_actual,
     extraction.deuda_bancaria_actual.corriente.total,
@@ -283,6 +349,15 @@ export function computeRatios(extraction: RawExtraction): ComputedRatios {
         )
       : null;
 
+  // Margen EBITDA promedio de los dos ejercicios (sin anterior: el del actual).
+  const mAct = actualValues.margen_ebitda;
+  const mAnt = anteriorValues?.margen_ebitda ?? null;
+  actualValues.margen_ebitda_promedio = mAct === null ? null : mAnt === null ? mAct : (mAct + mAnt) / 2;
+
+  // Deuda en moneda extranjera sobre la deuda bancaria (descalce de moneda).
+  const deudaME = extraction.informacion_complementaria?.deuda_financiera_moneda_extranjera ?? null;
+  actualValues.deuda_me_share = deudaME === null ? null : safeDivide(deudaME, actualValues.deuda_bancaria_total);
+
   const result = {} as ComputedRatios;
   for (const key of RATIO_KEYS) {
     const actual = actualValues[key];
@@ -291,9 +366,8 @@ export function computeRatios(extraction: RawExtraction): ComputedRatios {
       actual,
       anterior,
       variacion_pct: computeVariation(actual, anterior),
-      status: evaluateRatioStatus(key, actual),
+      status: evaluateRatioStatus(key, actualValues[valorParaSemaforo(key, perfil)], perfil),
     };
   }
   return result;
 }
-

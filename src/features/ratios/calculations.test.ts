@@ -11,7 +11,12 @@ import { buildExtraction, extractionWith } from './__fixtures__/extraction';
 //   Créditos por ventas = solo "Créditos por Ventas" (no "Otros Créditos").
 type Expected = { actual: number; anterior: number };
 
-const EXPECTED: Record<RatioKey, Expected> = {
+type KpiSectorial =
+  | 'bienes_cambio_deuda_cp' | 'deuda_bancaria_ventas' | 'deuda_cp_share' | 'margen_ebitda_promedio'
+  | 'deuda_comercial_bancaria' | 'capex_depreciacion' | 'deuda_me_share' | 'anticipos_clientes'
+  | 'anticipos_ventas' | 'liquidez_corriente_sin_anticipos' | 'endeudamiento_sin_anticipos' | 'pn_activo';
+
+const EXPECTED: Record<Exclude<RatioKey, KpiSectorial>, Expected> = {
   // actual: 7300 − 2000 − 2300 + 400 | anterior: 5475 − 1500 − 2000 + 300
   ebitda: { actual: 3400, anterior: 2275 },
   // AC / PC
@@ -71,8 +76,8 @@ const EXPECTED: Record<RatioKey, Expected> = {
 describe('computeRatios — los 23 ratios sobre un balance realista', () => {
   const ratios = computeRatios(buildExtraction());
 
-  it('calcula exactamente 27 ratios', () => {
-    expect(Object.keys(ratios)).toHaveLength(27);
+  it('calcula 27 ratios clásicos + 12 KPIs sectoriales', () => {
+    expect(Object.keys(ratios)).toHaveLength(39);
     expect(Object.keys(EXPECTED)).toHaveLength(27);
   });
 
@@ -492,5 +497,69 @@ describe('computeRatios — casos borde de los ratios de capacidad de pago', () 
       x.ejercicio_actual.estado_situacion_patrimonial.patrimonio_neto = -100;
     }));
     expect(r.deuda_financiera_pn.actual).toBeNull();
+  });
+});
+
+// KPIs de los perfiles por rubro, a mano sobre el fixture.
+describe('computeRatios — KPIs sectoriales', () => {
+  const r = computeRatios(buildExtraction());
+
+  it.each([
+    // BdC / deuda bancaria corriente
+    ['bienes_cambio_deuda_cp', 2200 / 600, 2000 / 750],
+    // Deuda bancaria / ventas
+    ['deuda_bancaria_ventas', 2100 / 14600, 1750 / 10950],
+    // Deuda bancaria corriente / total
+    ['deuda_cp_share', 600 / 2100, 750 / 1750],
+    // Deudas comerciales / deuda bancaria
+    ['deuda_comercial_bancaria', 1500 / 2100, 1250 / 1750],
+    // |pagos de bienes de uso| / |depreciación|
+    ['capex_depreciacion', 600 / 400, 400 / 300],
+    // Sin anticipos en el fixture: AC / PC y pasivo / PN quedan iguales
+    ['liquidez_corriente_sin_anticipos', 5000 / 2500, 4000 / 2500],
+    ['endeudamiento_sin_anticipos', 4000 / 4000, 3500 / 2500],
+    // PN / activo
+    ['pn_activo', 4000 / 8000, 2500 / 6000],
+  ] as Array<[RatioKey, number, number]>)('%s', (key, actual, anterior) => {
+    expect(r[key].actual).toBeCloseTo(actual, 6);
+    expect(r[key].anterior).toBeCloseTo(anterior, 6);
+  });
+
+  it('margen EBITDA promedio de 2 ejercicios: (3400/14600 + 2275/10950) / 2; sin anterior, el del actual', () => {
+    expect(r.margen_ebitda_promedio.actual).toBeCloseTo((3400 / 14600 + 2275 / 10950) / 2, 6);
+    expect(r.margen_ebitda_promedio.anterior).toBeNull();
+    const sinAnt = computeRatios(extractionWith(x => { x.ejercicio_anterior = null; x.deuda_bancaria_anterior = null; }));
+    expect(sinAnt.margen_ebitda_promedio.actual).toBeCloseTo(3400 / 14600, 6);
+  });
+
+  it('deuda en moneda extranjera / deuda bancaria: 700 / 2100; sin dato → null', () => {
+    expect(r.deuda_me_share.actual).toBeNull();
+    const conME = computeRatios(extractionWith(x => { x.informacion_complementaria!.deuda_financiera_moneda_extranjera = 700; }));
+    expect(conME.deuda_me_share.actual).toBeCloseTo(700 / 2100, 6);
+  });
+
+  it('anticipos de clientes: suma corriente y no corriente; no cuenta "a proveedores"', () => {
+    const c = computeRatios(extractionWith(x => {
+      const esp = x.ejercicio_actual.estado_situacion_patrimonial;
+      esp.pasivo_corriente.detalles.push({ rubro: 'Anticipos de clientes', monto: 1000 });
+      esp.pasivo_corriente.detalles.push({ rubro: 'Anticipo a proveedores', monto: 999 });
+      esp.pasivo_corriente.total = 3500;
+      esp.pasivo_no_corriente.detalles.push({ rubro: 'Adelantos de clientes por obra', monto: 500 });
+      esp.pasivo_no_corriente.total = 2000;
+      esp.total_pasivo = 5500;
+    }));
+    expect(c.anticipos_clientes.actual).toBe(1500);
+    expect(c.anticipos_ventas.actual).toBeCloseTo(1500 / 14600, 6);
+    // AC / (PC − anticipos corrientes) = 5000 / (3500 − 1000)
+    expect(c.liquidez_corriente_sin_anticipos.actual).toBeCloseTo(5000 / 2500, 6);
+    // (pasivo − anticipos totales) / PN = (5500 − 1500) / 4000
+    expect(c.endeudamiento_sin_anticipos.actual).toBeCloseTo(4000 / 4000, 6);
+    // Sin anticipos detectados → null (no 0): no se informa lo que no está.
+    expect(r.anticipos_clientes.actual).toBeNull();
+  });
+
+  it('los KPIs sectoriales no tienen semáforo propio', () => {
+    expect(r.deuda_cp_share.status).toBeNull();
+    expect(r.pn_activo.status).toBeNull();
   });
 });

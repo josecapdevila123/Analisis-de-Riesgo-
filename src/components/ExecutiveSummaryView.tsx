@@ -7,6 +7,10 @@ import { CATEGORY_LABEL, SEVERIDAD_LABEL } from '../features/risk/score';
 import { stripRiskConclusion } from '../features/risk/summary';
 import { formatCurrencyThousands } from '../lib/utils';
 import { CATEGORY_STATUS, SEVERIDAD_STATUS, STATUS, Status, StatusBadge } from './riskColors';
+import { PerfilAviso } from './PerfilAviso';
+import { PerfilEfectivo, RATIO_LABEL_CORTO } from '../features/risk/policy';
+import { EstadoPorton } from '../features/risk/porton';
+import { RATIO_BLOCKS, RatioKind, SECTOR_KPI_SPECS } from '../features/ratios/blocks';
 
 // Resumen ejecutivo como "una carilla": lo más importante de todo el análisis
 // en una sola vista, con enlaces a cada pestaña para el detalle.
@@ -16,6 +20,9 @@ type Props = {
   riskBusy: boolean;
   onOpenTab: (tab: string) => void;
   onGeneratePdf: () => void;
+  // Perfil con el que se muestra el caso y estado del portón del rubro.
+  perfil: PerfilEfectivo;
+  porton: EstadoPorton;
 };
 
 const POSTURA = {
@@ -81,11 +88,12 @@ const Figure = ({ label, value, sub }: { label: string; value: string; sub: Reac
 
 // ---------- Vista ----------
 
-export function ExecutiveSummaryView({ result, riskBusy, onOpenTab, onGeneratePdf }: Props) {
+export function ExecutiveSummaryView({ result, riskBusy, onOpenTab, onGeneratePdf, perfil, porton }: Props) {
   const [showSynthesis, setShowSynthesis] = useState(false);
   const extraction = result.extraction!;
   const ratios = result.ratios!;
-  const risk = result.riskAssessment;
+  // Sin rubro confirmado no se muestra puntaje (portón).
+  const risk = porton.rubroConfirmado ? result.riskAssessment : null;
   const history = result.companyHistory;
   const nosis = extraction.extraccion_nosis;
   const er = extraction.ejercicio_actual.estado_resultados;
@@ -100,18 +108,18 @@ export function ExecutiveSummaryView({ result, riskBusy, onOpenTab, onGeneratePd
     : null;
   const ventasPostTotal = extraction.analisis_post_cierre?.total_ventas_post_cierre ?? null;
 
-  const indicadores: Array<{ key: RatioKey; label: string; kind: 'x' | 'pct' }> = [
-    { key: 'dscr', label: 'DSCR', kind: 'x' },
-    { key: 'deuda_neta_ebitda', label: 'Deuda neta / EBITDA', kind: 'x' },
-    { key: 'cobertura_intereses', label: 'Cobertura de intereses', kind: 'x' },
-    { key: 'calidad_ganancia', label: 'Calidad de la ganancia', kind: 'pct' },
-    { key: 'liquidez_corriente', label: 'Liquidez corriente', kind: 'x' },
-    { key: 'liquidez_acida', label: 'Prueba ácida', kind: 'x' },
-    { key: 'solvencia', label: 'Solvencia', kind: 'x' },
-    { key: 'roe', label: 'ROE', kind: 'pct' },
-  ];
-  const fmtRatio = (v: number | null | undefined, kind: 'x' | 'pct') =>
-    v === null || v === undefined || !Number.isFinite(v) ? '—' : kind === 'pct' ? `${fmtNum(v * 100, 1)}%` : `${fmtNum(v, 2)}x`;
+  // Indicadores clave = KPIs prioritarios del perfil (en el genérico, los de siempre).
+  const specs = [...RATIO_BLOCKS.flatMap(b => b.ratios), ...Object.values(SECTOR_KPI_SPECS)];
+  const indicadores = perfil.kpisPrioritarios.map(key => {
+    const spec = specs.find(r => r?.key === key);
+    return { key, label: RATIO_LABEL_CORTO[key] ?? spec?.name ?? key, kind: (spec?.kind ?? 'x') as RatioKind };
+  });
+  const fmtRatio = (v: number | null | undefined, kind: RatioKind) =>
+    v === null || v === undefined || !Number.isFinite(v) ? '—'
+      : kind === 'pct' ? `${fmtNum(v * 100, 1)}%`
+      : kind === 'dias' ? `${fmtNum(v, 0)} d`
+      : kind === 'monto' ? fmtNum(v, 0)
+      : `${fmtNum(v, 2)}x`;
 
   const peor = nosis?.situacion_bcra_peor_estado ?? null;
   const peor24 = nosis?.peor_situacion_24_meses ?? null;
@@ -120,11 +128,18 @@ export function ExecutiveSummaryView({ result, riskBusy, onOpenTab, onGeneratePd
 
   return (
     <div className="@container space-y-5 font-sans">
+      {porton.rubroConfirmado && <PerfilAviso perfil={perfil} sector={porton.opinion === 'vigente' && result.riskAssessment?.sector ? result.riskAssessment.sector : result.sector} />}
+      {porton.opinion === 'desactualizada' && (
+        <p className="text-xs font-medium text-ink bg-brand-blue/10 px-3 py-2">{porton.motivo}</p>
+      )}
+
       {/* 1. Dictamen de riesgo */}
       <section className="bg-ink text-white p-6 relative overflow-hidden">
         <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-brand-green" />
-        {risk ? (
-          <div className="grid grid-cols-1 @2xl:grid-cols-[auto_1fr] gap-6 items-center">
+        {!porton.rubroConfirmado ? (
+          <p className="text-sm text-white/70">Pendiente de rubro: confirmá el rubro arriba para habilitar el puntaje, las señales, la opinión y el informe.</p>
+        ) : risk ? (
+          <div className={`grid grid-cols-1 @2xl:grid-cols-[auto_1fr] gap-6 items-center ${porton.opinion === 'desactualizada' ? 'opacity-50' : ''}`}>
             <div className="flex items-center gap-4">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-white/50">Riesgo</p>
@@ -153,10 +168,7 @@ export function ExecutiveSummaryView({ result, riskBusy, onOpenTab, onGeneratePd
           </div>
         ) : (
           <p className="text-sm text-white/70 inline-flex items-center gap-2">
-            {riskBusy ? <><Loader2 className="w-4 h-4 animate-spin" /> Generando la opinión de riesgo...</> : 'Este caso todavía no tiene opinión de riesgo.'}
-            {!riskBusy && (
-              <button onClick={() => onOpenTab('Opinión de riesgos')} className="text-brand-green hover:underline">Generarla</button>
-            )}
+            {riskBusy ? <><Loader2 className="w-4 h-4 animate-spin" /> Generando la opinión de riesgo...</> : 'Todavía no hay opinión de riesgo: generala con el botón de arriba cuando termines de revisar el caso.'}
           </p>
         )}
       </section>
@@ -201,7 +213,8 @@ export function ExecutiveSummaryView({ result, riskBusy, onOpenTab, onGeneratePd
         <div className="grid grid-cols-2 @3xl:grid-cols-4 gap-3">
           {indicadores.map(({ key, label, kind }) => {
             const r = ratios[key];
-            const st = r?.status ? RATIO_STATUS[r.status] : null;
+            const noAplica = perfil.noAplica[key];
+            const st = porton.puedeVerSemaforos && !noAplica && r?.status ? RATIO_STATUS[r.status] : null;
             return (
               <div key={key} className="p-3 border border-ink/10" style={st ? { borderLeft: `3px solid ${STATUS[st.status]}` } : undefined}>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-ink/50 mb-1">{label}</p>
@@ -209,6 +222,8 @@ export function ExecutiveSummaryView({ result, riskBusy, onOpenTab, onGeneratePd
                 <div className="mt-1 flex items-center justify-between gap-2">
                   <span className="text-[11px] text-ink/45 tabular-nums">Ant. {fmtRatio(r?.anterior, kind)}</span>
                   {st && <StatusBadge status={st.status} label={st.label} />}
+                  {noAplica && <span className="text-[10px] font-semibold uppercase tracking-wider text-ink/45" title={noAplica}>No aplica</span>}
+                  {!noAplica && !porton.puedeVerSemaforos && r?.status && <span className="text-[10px] font-semibold uppercase tracking-wider text-ink/35 bg-ink/[0.05] px-1.5 py-0.5 rounded-sm">Pendiente de rubro</span>}
                 </div>
               </div>
             );
@@ -319,12 +334,14 @@ export function ExecutiveSummaryView({ result, riskBusy, onOpenTab, onGeneratePd
       <div className="flex flex-col items-center justify-center pt-4">
         <button
           onClick={onGeneratePdf}
-          className="bg-brand-green text-ink px-8 py-4 rounded-full text-sm font-semibold hover:brightness-95 transition flex items-center gap-3 shadow-sm"
+          disabled={!porton.puedeExportarPdf}
+          title={porton.motivo ?? undefined}
+          className="bg-brand-green text-ink px-8 py-4 rounded-full text-sm font-semibold hover:brightness-95 transition flex items-center gap-3 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <FileSpreadsheet className="w-5 h-5" />
           Generar informe para comité
         </button>
-        <p className="text-xs text-ink/50 mt-3">Portada con el dictamen, este resumen y el detalle de cada sección</p>
+        <p className="text-xs text-ink/50 mt-3">{porton.puedeExportarPdf ? 'Portada con el dictamen, este resumen y el detalle de cada sección' : porton.motivo}</p>
       </div>
     </div>
   );

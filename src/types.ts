@@ -4,6 +4,7 @@ import type { Inconsistencia } from './features/ratios/sanityChecks';
 import type { CrossCheckResult } from './features/ratios/crossCheck';
 import type { RiskAssessment } from './features/risk/assessment';
 import type { ProyeccionesGuardadas } from './features/projections/types';
+import type { SectorCaso } from './features/risk/porton';
 
 export interface Shareholder {
   nombre: string;
@@ -36,6 +37,9 @@ export interface ExtractionResult {
   riskAssessment: RiskAssessment | null;
   // Supuestos editados de la pestaña Proyecciones (no tocan la extracción).
   proyecciones: ProyeccionesGuardadas | null;
+  // Rubro sugerido y confirmado por el analista (portón de la evaluación).
+  // Casos viejos: se sugiere al cargar y queda sin confirmar.
+  sector?: SectorCaso | null;
   // Fecha ISO de la última edición manual de valores en el dashboard.
   editedAt?: string;
   error?: string;

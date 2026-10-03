@@ -101,9 +101,11 @@ export async function runVerification(
   extraction: RawExtraction,
   ratios: ComputedRatios,
   inconsistencias: Inconsistencia[],
-  crossCheck: CrossCheckResult
+  crossCheck: CrossCheckResult,
+  // Rubro como contexto (durante el análisis es solo la sugerencia, sin confirmar).
+  rubro: { rubro: string; confirmado: boolean } | null = null
 ): Promise<VerificationResult> {
-  const context = JSON.stringify({ extraction, ratios, inconsistencias, crossCheck }, null, 2);
+  const context = JSON.stringify({ extraction, ratios, inconsistencias, crossCheck, rubro }, null, 2);
   const text = await callGemini('verification', [
     { text: VERIFICATION_PROMPT },
     { text: `\n\nDATOS A VERIFICAR:\n${context}` },

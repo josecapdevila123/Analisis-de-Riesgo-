@@ -46,12 +46,13 @@ export type AggregatedScore = {
   categoria: RiskCategory;
 };
 
-export function aggregateScore(dimensiones: DimensionScore[], pisos: Floor[]): AggregatedScore {
+// Pesos: los del perfil del rubro si se pasan; si no, los de la política base.
+export function aggregateScore(dimensiones: DimensionScore[], pisos: Floor[], pesos?: Record<RiskDimension, number>): AggregatedScore {
   let sum = 0;
   let weights = 0;
   for (const d of dimensiones) {
     if (d.puntaje === null) continue;
-    const w = DIMENSIONS[d.dimension].weight;
+    const w = pesos?.[d.dimension] ?? DIMENSIONS[d.dimension].weight;
     sum += d.puntaje * w;
     weights += w;
   }

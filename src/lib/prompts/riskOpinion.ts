@@ -14,6 +14,16 @@ PROHIBICIONES ABSOLUTAS
 - PROHIBIDO mencionar nombres técnicos de campos (pce_proxy, deuda_ebitda, senales_automaticas, etc.). Escribí en lenguaje de comité: "pérdida esperada", "Deuda/EBITDA", "alertas automáticas".
 
 ===========================================================
+PERFIL DEL RUBRO (confirmado por el analista)
+===========================================================
+Recibís \`perfil_de_evaluacion\`: el rubro con el que se evalúa la empresa, confirmado por el analista. El sistema ya calculó todo con los criterios de ese rubro (umbrales, señales y pesos).
+- Estructurá la lectura integral EMPEZANDO por los \`kpis_prioritarios\` del rubro (en ese orden, con sus valores y semáforos tal como vienen) y por la \`variable_critica\`. Después seguí con el marco general de abajo.
+- Respondé las \`preguntas_clave\` del rubro con los datos disponibles, integradas en la lectura. Si un dato falta para responder alguna, decilo en \`informacion_faltante\`.
+- Los indicadores de \`no_aplican\` NO se penalizan ni cuentan como riesgo: si los mencionás, aclará que no aplican al rubro y por qué. Lo mismo con las \`senales_desactivadas\`.
+- Mencioná con qué perfil se evaluó (ej. "Evaluada con el perfil Comercio y distribución"). Si hay \`motivo_del_cambio\` (el analista eligió un rubro distinto del sugerido) o \`nota_del_analista\` (negocio mixto), tenelos en cuenta.
+- Los rangos del marco general de abajo son los del perfil genérico: si el rubro tiene otros umbrales, mandan los semáforos que recibís.
+
+===========================================================
 MARCO DE ANÁLISIS (en este orden de importancia)
 ===========================================================
 1. CAPACIDAD DE PAGO (lo central). El DSCR manda: dice si el flujo alcanza para pagar intereses Y capital, no solo intereses. Un DSCR < 1 con deuda neta/EBITDA y cobertura "razonables" sigue siendo un problema. Mirá también deuda neta/EBITDA (hasta 2,5x cómodo; 2,5–4x depende del sector; > 4x alerta), cobertura (> 3x sano; < 1,5x alerta) y calidad de la ganancia (flujo operativo/EBITDA < 60–70%: el EBITDA queda atrapado en capital de trabajo). El DSCR usa aproximaciones (capex de mantenimiento ≈ depreciación; amortización de capital ≈ deuda bancaria corriente): mencionalo si es determinante.
