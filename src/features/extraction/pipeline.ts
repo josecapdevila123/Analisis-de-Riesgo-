@@ -8,8 +8,9 @@ import {
 import { CompanyHistory, RawExtraction, VerificationResult } from './schemas';
 import { ComputedRatios, computeRatios } from '../ratios/calculations';
 import { Inconsistencia, runSanityChecks } from '../ratios/sanityChecks';
+import { sugerirRubro } from '../risk/sector';
+import { SECTOR_PROFILES } from '../risk/policy';
 import { CrossCheckResult, runCrossCheck } from '../ratios/crossCheck';
-import { RiskAssessment, runRiskAssessment } from '../risk/assessment';
 
 export type CaseState =
   | 'processing'
@@ -39,7 +40,6 @@ export type PipelineCallbacks = {
   onStateChange?: (state: CaseState) => void;
   onMarketAnalysis?: (text: string | null, error?: Error) => void;
   onCompanyHistory?: (history: CompanyHistory | null, error?: Error) => void;
-  onRiskAssessment?: (assessment: RiskAssessment | null, error?: Error) => void;
 };
 
 const emptyFailure = (state: 'error', failure: PipelineFailure): PipelineResult => ({
@@ -93,20 +93,18 @@ export async function runPipeline(
   let verification: VerificationResult | null = null;
   let finalState: CaseState = 'completed';
   try {
-    verification = await runVerification(files, extraction, ratios, inconsistencias, crossCheck);
+    // Todavía no hay rubro confirmado: se pasa el sugerido, marcado como tal.
+    const sugerido = sugerirRubro(extraction).rubro;
+    verification = await runVerification(files, extraction, ratios, inconsistencias, crossCheck,
+      sugerido ? { rubro: SECTOR_PROFILES[sugerido].label, confirmado: false } : null);
   } catch {
     finalState = 'completed_partial';
   }
   callbacks?.onStateChange?.(finalState);
 
-  // Etapa 5 — opinión de riesgo: lectura integral de todo lo anterior. Espera a
-  // mercado e historia, pero no bloquea: el caso ya se puede ver mientras tanto.
-  void Promise.all([marketPromise, historyPromise])
-    .then(([marketAnalysis, companyHistory]) => runRiskAssessment({
-      extraction, ratios, inconsistencias, crossCheck, verification, marketAnalysis, companyHistory,
-    }))
-    .then(assessment => callbacks?.onRiskAssessment?.(assessment))
-    .catch(err => callbacks?.onRiskAssessment?.(null, toError(err)));
+  // Etapa 5 — la opinión de riesgos ya NO se lanza sola: es el último paso,
+  // con el rubro confirmado y a pedido del analista (botón en el caso).
+  void Promise.all([marketPromise, historyPromise]);
 
   return {
     state: finalState,

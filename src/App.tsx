@@ -72,6 +72,9 @@ import { PostBalanceView } from './components/PostBalanceView';
 import { AnalysisFlow } from './components/AnalysisFlow';
 import { RiskPolicyView } from './components/RiskPolicyView';
 import { runRiskAssessment } from './features/risk/assessment';
+import { confirmarRubro, estadoPorton, perfilDelCaso, sectorInicial } from './features/risk/porton';
+import { RubroDisponible } from './features/risk/policy';
+import { SectorBanner } from './components/SectorBanner';
 import { stripRiskConclusion } from './features/risk/summary';
 import { CATEGORY_LABEL } from './features/risk/score';
 
@@ -219,6 +222,7 @@ export default function App() {
     saveCaseCompanyHistory,
     saveCaseRiskAssessment,
     saveCaseProyecciones,
+    saveCaseSector,
     saveCaseEdits,
     saveCaseError,
     removeCase,
@@ -239,21 +243,36 @@ export default function App() {
     setShowPolicy(false);
   }, [activeResultId]);
 
+  // Rubro del caso (portón) y perfil con el que se muestra: la foto de la
+  // opinión vigente, el del rubro confirmado o, sin confirmar, el genérico.
+  const sectorActivo = useMemo(
+    () => storedResult?.sector ?? (storedResult?.extraction ? sectorInicial(storedResult.extraction) : null),
+    [storedResult?.sector, storedResult?.extraction],
+  );
+  const perfilVista = useMemo(
+    () => perfilDelCaso(sectorActivo, storedResult?.riskAssessment),
+    [sectorActivo, storedResult?.riskAssessment],
+  );
+  const porton = estadoPorton(sectorActivo, storedResult?.riskAssessment);
+
   const activeResult = useMemo<ExtractionResult | undefined>(() => {
-    if (!storedResult || !isEditing || !draft) return storedResult;
+    if (!storedResult) return storedResult;
+    const extraction = isEditing && draft ? draft.extraction : storedResult.extraction;
+    if (!extraction) return storedResult;
     try {
       return {
         ...storedResult,
-        extraction: draft.extraction,
-        ratios: computeRatios(draft.extraction),
-        inconsistencias: runSanityChecks(draft.extraction),
-        crossCheck: runCrossCheck(draft.extraction),
+        extraction,
+        sector: sectorActivo,
+        ratios: computeRatios(extraction, perfilVista),
+        inconsistencias: runSanityChecks(extraction),
+        crossCheck: runCrossCheck(extraction),
       };
     } catch (err) {
-      console.error('Recálculo con valores editados falló:', err);
-      return { ...storedResult, extraction: draft.extraction };
+      console.error('Recálculo de ratios falló:', err);
+      return { ...storedResult, extraction };
     }
-  }, [storedResult, isEditing, draft]);
+  }, [storedResult, isEditing, draft, perfilVista, sectorActivo]);
 
   const startEditing = () => {
     if (!storedResult?.extraction) return;
@@ -381,11 +400,9 @@ export default function App() {
     setActiveResultId(newId);
     setMarketAnalysisBusyId(newId);
     setCompanyHistoryBusyId(newId);
-    setRiskBusyId(newId);
     const clearBusy = () => {
       setMarketAnalysisBusyId(curr => (curr === newId ? null : curr));
       setCompanyHistoryBusyId(curr => (curr === newId ? null : curr));
-      setRiskBusyId(curr => (curr === newId ? null : curr));
     };
 
     try {
@@ -411,15 +428,6 @@ export default function App() {
           setResults(prev => prev.map(r => r.id === newId ? { ...r, companyHistory: history } : r));
           saveCaseCompanyHistory(newId, history);
         },
-        onRiskAssessment: (assessment, err) => {
-          setRiskBusyId(curr => (curr === newId ? null : curr));
-          if (err) {
-            console.error('Risk assessment failed:', err);
-            return;
-          }
-          setResults(prev => prev.map(r => r.id === newId ? { ...r, riskAssessment: assessment } : r));
-          saveCaseRiskAssessment(newId, assessment);
-        },
       });
 
       if (pipelineResult.state === 'error') {
@@ -443,6 +451,8 @@ export default function App() {
           inconsistencias: pipelineResult.inconsistencias,
           crossCheck: pipelineResult.crossCheck,
           verification: pipelineResult.verification,
+          // Rubro sugerido; queda sin confirmar hasta que el analista lo confirme.
+          sector: pipelineResult.extraction ? sectorInicial(pipelineResult.extraction) : null,
         } : r
       ));
 
@@ -460,20 +470,21 @@ export default function App() {
     }
   };
 
-  // Genera o regenera la opinión de riesgo con los datos ya guardados del caso
-  // (no necesita los archivos). Sirve para casos viejos y después de editar valores.
+  // Último paso, a pedido del analista: genera o regenera la opinión de riesgo
+  // con los datos ya guardados del caso y el rubro confirmado (no necesita los archivos).
   const generateRiskAssessment = async (result: ExtractionResult) => {
-    if (!result.extraction || !result.ratios) return;
+    const sector = result.sector ?? (result.extraction ? sectorInicial(result.extraction) : null);
+    if (!result.extraction || !sector?.confirmado) return;
     setRiskBusyId(result.id);
     try {
       const assessment = await runRiskAssessment({
         extraction: result.extraction,
-        ratios: result.ratios,
         inconsistencias: result.inconsistencias,
         crossCheck: result.crossCheck,
         verification: result.verification,
         marketAnalysis: result.marketAnalysis,
         companyHistory: result.companyHistory,
+        sector,
       });
       setResults(prev => prev.map(r => r.id === result.id ? { ...r, riskAssessment: assessment } : r));
       await saveCaseRiskAssessment(result.id, assessment);
@@ -482,6 +493,19 @@ export default function App() {
       alert(`No se pudo generar la opinión de riesgo: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setRiskBusyId(curr => (curr === result.id ? null : curr));
+    }
+  };
+
+  // Portón: el analista confirma (o cambia) el rubro del caso.
+  const confirmSector = (result: ExtractionResult, rubro: RubroDisponible, motivo: string, nota: string) => {
+    const base = result.sector ?? (result.extraction ? sectorInicial(result.extraction) : null);
+    if (!base) return;
+    try {
+      const sector = confirmarRubro(base, rubro, motivo, nota, user?.email ?? null);
+      setResults(prev => prev.map(r => (r.id === result.id ? { ...r, sector } : r)));
+      saveCaseSector(result.id, sector);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -1039,6 +1063,16 @@ export default function App() {
                       Generando la opinión de riesgo integral (último paso)...
                     </div>
                   )}
+                  {sectorActivo && storedResult?.extraction && (
+                    <SectorBanner
+                      sector={sectorActivo}
+                      porton={porton}
+                      generando={riskBusyId === activeResult.id}
+                      bloqueadoPorEdicion={isEditing}
+                      onConfirmar={(rubro, motivo, nota) => storedResult && confirmSector(storedResult, rubro, motivo, nota)}
+                      onGenerarOpinion={() => storedResult && generateRiskAssessment(storedResult)}
+                    />
+                  )}
                 <div className="flex flex-col md:flex-row gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                   {/* Sidebar */}
                   <div className="w-full md:w-64 shrink-0">
@@ -1096,14 +1130,16 @@ export default function App() {
                           result={activeResult}
                           riskBusy={riskBusyId === activeResult.id}
                           onOpenTab={setActiveTab}
-                          onGeneratePdf={() => generatePDF(activeResult)}
+                          onGeneratePdf={() => porton.puedeExportarPdf && generatePDF(activeResult)}
+                          perfil={perfilVista}
+                          porton={porton}
                         />
                       </div>
                     )}
 
                     {activeTab === 'Balance y Ratios' && (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        {activeResult.ratios && <BalanceRatiosView extraction={activeResult.extraction} ratios={activeResult.ratios} />}
+                        {activeResult.ratios && <BalanceRatiosView extraction={activeResult.extraction} ratios={activeResult.ratios} perfil={perfilVista} pendienteRubro={!porton.rubroConfirmado} />}
                         {isEditing && activeResult.extraction && <SourceDataEditor extraction={activeResult.extraction} />}
                       </div>
                     )}
@@ -1174,9 +1210,11 @@ export default function App() {
                       <RiskOpinionView
                         assessment={activeResult.riskAssessment ?? null}
                         isGenerating={riskBusyId === activeResult.id}
-                        canGenerate={!!storedResult?.extraction && !!storedResult?.ratios && !isEditing}
+                        canGenerate={!!storedResult?.extraction && !isEditing}
                         onGenerate={() => storedResult && generateRiskAssessment(storedResult)}
                         editedAt={activeResult.editedAt}
+                        porton={porton}
+                        sector={sectorActivo}
                       />
                     </div>
                   )}

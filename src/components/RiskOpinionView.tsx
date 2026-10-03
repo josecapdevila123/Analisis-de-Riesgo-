@@ -13,6 +13,9 @@ import {
   Cpu,
 } from 'lucide-react';
 import { RiskAssessment } from '../features/risk/assessment';
+import { EstadoPorton, SectorCaso, VERSION_PREVIA } from '../features/risk/porton';
+import { perfilEfectivo } from '../features/risk/policy';
+import { PerfilAviso } from './PerfilAviso';
 import { CATEGORY_LABEL, DIMENSIONS, RiskCategory, SEVERIDAD_LABEL, categoryOf } from '../features/risk/score';
 import { RiskDimension, SeveridadRiesgo } from '../features/extraction/schemas';
 import { cn } from '../lib/utils';
@@ -121,19 +124,33 @@ interface RiskOpinionViewProps {
   canGenerate: boolean;
   onGenerate: () => void;
   editedAt?: string;
+  porton: EstadoPorton;
+  sector?: SectorCaso | null;
 }
 
-export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGenerate, editedAt }: RiskOpinionViewProps) {
+export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGenerate, editedAt, porton, sector }: RiskOpinionViewProps) {
   const generateButton = (label: string) => (
     <button
       onClick={onGenerate}
-      disabled={!canGenerate || isGenerating}
+      disabled={!canGenerate || !porton.puedeGenerarOpinion || isGenerating}
+      title={porton.motivo ?? undefined}
       className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-ink/20 text-xs font-semibold text-ink hover:border-ink transition-all disabled:opacity-40 disabled:pointer-events-none"
     >
       {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
       {label}
     </button>
   );
+
+  // Portón: sin rubro confirmado no hay opinión (aunque el caso viejo tenga una).
+  if (!porton.rubroConfirmado) {
+    return (
+      <div className="bg-white border border-ink/15 p-12 text-center font-sans space-y-3">
+        <ShieldQuestion className="w-10 h-10 mx-auto opacity-30" />
+        <p className="text-sm font-semibold text-ink">Pendiente de rubro</p>
+        <p className="text-sm text-ink/60">Confirmá el rubro arriba para habilitar las señales, el puntaje y la opinión de riesgos.</p>
+      </div>
+    );
+  }
 
   if (!assessment) {
     return (
@@ -146,8 +163,8 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
         ) : (
           <>
             <ShieldQuestion className="w-10 h-10 mx-auto opacity-30" />
-            <p className="text-sm text-ink/70">Este caso todavía no tiene opinión de riesgo.</p>
-            {generateButton('Generar opinión de riesgo')}
+            <p className="text-sm text-ink/70">Este caso todavía no tiene opinión de riesgo. Es el último paso: generala cuando termines de revisar el caso.</p>
+            {generateButton('Revisé todo: generar opinión de riesgos')}
           </>
         )}
       </div>
@@ -171,6 +188,16 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
   return (
     // Container queries: el ancho real depende de las barras laterales, no de la ventana.
     <div className="@container space-y-8 font-sans">
+      <PerfilAviso
+        perfil={assessment.perfil ?? { ...perfilEfectivo('generico'), version: assessment.politicaVersion ?? VERSION_PREVIA }}
+        sector={assessment.sector ?? sector}
+      />
+      {porton.opinion === 'desactualizada' && (
+        <div className="border-l-4 border-brand-blue bg-brand-blue/5 p-3 text-sm text-ink flex items-center justify-between gap-4">
+          <span>{porton.motivo}</span>
+          {generateButton('Regenerar')}
+        </div>
+      )}
       {desactualizada && (
         <div className="border-l-4 border-amber-500 bg-amber-50 p-3 text-sm text-amber-900 flex items-center justify-between gap-4">
           <span>Los valores se editaron después de generar esta opinión. Regenerala para que tome los datos nuevos.</span>

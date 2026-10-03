@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { ArrowDownRight, ArrowUpRight, Calculator, Minus } from 'lucide-react';
 import { RawExtraction } from '../features/extraction/schemas';
 import { ComputedRatios, RatioStatus } from '../features/ratios/calculations';
-import { RATIO_BLOCKS, RatioKind } from '../features/ratios/blocks';
+import { bloquesDelPerfil, RatioKind } from '../features/ratios/blocks';
+import { PerfilEfectivo, perfilEfectivo } from '../features/risk/policy';
 import { EditableNumber, Path, useEdit } from '../features/editing/editing';
 import { STATUS, Status, StatusBadge } from './riskColors';
 
@@ -212,7 +213,13 @@ function Statement({ title, sections, extraction, ratios, base, baseLabel, verti
 
 // ---------- Vista ----------
 
-export function BalanceRatiosView({ extraction, ratios }: { extraction: RawExtraction; ratios: ComputedRatios }) {
+export function BalanceRatiosView({ extraction, ratios, perfil = perfilEfectivo('generico'), pendienteRubro = false }: {
+  extraction: RawExtraction;
+  ratios: ComputedRatios;
+  // Perfil del rubro (umbrales, "no aplica" y KPIs prioritarios) y portón.
+  perfil?: PerfilEfectivo;
+  pendienteRubro?: boolean;
+}) {
   const { editing } = useEdit();
   const [verticalSelected, setVertical] = useState(false);
   const vertical = verticalSelected && !editing; // en edición se editan valores absolutos
@@ -288,10 +295,10 @@ export function BalanceRatiosView({ extraction, ratios }: { extraction: RawExtra
 
       {/* Columnas tipo mampostería: cada columna apila sus tarjetas sin huecos */}
       <div className="columns-1 @5xl:columns-2 gap-x-6">
-        {RATIO_BLOCKS.map(block => {
+        {bloquesDelPerfil(perfil).map(block => {
           const rows = block.ratios.filter(spec => ratios[spec.key]);
-          const conteo = (['critical', 'alert', 'healthy'] as RatioStatus[])
-            .map(st => ({ st, n: rows.filter(r => ratios[r.key].status === st).length }))
+          const conteo = pendienteRubro ? [] : (['critical', 'alert', 'healthy'] as RatioStatus[])
+            .map(st => ({ st, n: rows.filter(r => !r.noAplica && ratios[r.key].status === st).length }))
             .filter(c => c.n > 0);
           return (
             <section key={block.bloque} className="bg-white border border-ink/15 mb-6 break-inside-avoid">
@@ -320,7 +327,7 @@ export function BalanceRatiosView({ extraction, ratios }: { extraction: RawExtra
                 <tbody className="divide-y divide-ink/5">
                   {rows.map(spec => {
                     const r = ratios[spec.key];
-                    const st = r.status ? RATIO_STATUS[r.status] : null;
+                    const st = !pendienteRubro && !spec.noAplica && r.status ? RATIO_STATUS[r.status] : null;
                     const varValue = spec.kind === 'pct'
                       ? (r.actual !== null && r.anterior !== null ? (r.actual - r.anterior) * 100 : null)
                       : r.variacion_pct;
@@ -333,7 +340,16 @@ export function BalanceRatiosView({ extraction, ratios }: { extraction: RawExtra
                         <td className="px-2 py-2.5 tabular-nums text-ink/60 whitespace-nowrap">{fmtRatio(r.anterior, spec.kind)}</td>
                         <td className="px-2 py-2.5 tabular-nums font-semibold whitespace-nowrap">{fmtRatio(r.actual, spec.kind)}</td>
                         <td className="px-2 py-2.5 text-xs whitespace-nowrap"><Variation value={varValue} unit={spec.kind === 'pct' ? 'p.p.' : '%'} /></td>
-                        <td className="px-5 py-2.5">{st ? <StatusBadge status={st.status} label={st.label} /> : <span className="text-ink/25">—</span>}</td>
+                        <td className="px-5 py-2.5">
+                          {spec.noAplica ? (
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-ink/50 whitespace-nowrap" title={spec.noAplica}>No aplica</span>
+                          ) : st ? (
+                            <StatusBadge status={st.status} label={st.label} />
+                          ) : pendienteRubro && r.status ? (
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-ink/35 bg-ink/[0.05] px-1.5 py-0.5 rounded-sm whitespace-nowrap" title="Confirmá el rubro para ver el semáforo">Pendiente de rubro</span>
+                          ) : <span className="text-ink/25">—</span>}
+                          {spec.noAplica && <span className="block text-[10px] text-ink/40 leading-snug max-w-[220px] ml-auto">{spec.noAplica}</span>}
+                        </td>
                       </tr>
                     );
                   })}
