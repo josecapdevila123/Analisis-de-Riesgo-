@@ -1,3 +1,5 @@
+import { FINANCIAL_BLOCK_PROMPT, SECTOR_DOC_PROMPTS } from '../../lib/prompts/sectorDocs';
+import { ExtraccionDocumento, SCHEMAS_DOCUMENTOS, TipoDocumentoSectorial } from '../sectorDocs/tipos';
 import { GoogleGenAI } from "@google/genai";
 import {
   GEMINI_MODELS,
@@ -14,6 +16,8 @@ import { RISK_OPINION_PROMPT } from '../../lib/prompts/riskOpinion';
 import {
   RawExtraction,
   RawExtractionSchema,
+  ExtraccionFinancieraSchema,
+  ExtraccionFinanciera,
   VerificationResult,
   VerificationResultSchema,
   MarketAnalysisResultSchema,
@@ -155,4 +159,18 @@ export async function runRiskOpinion(contextJson: string): Promise<RiskOpinion> 
     { text: `\n\nINFORMACIÓN DEL ANÁLISIS:\n${contextJson}` },
   ]);
   return RiskOpinionSchema.parse(JSON.parse(text));
+}
+
+// Bloque financiero de los EECC (financieras): a demanda, con el balance.
+export async function runFinancialBlockExtraction(files: UploadedFile[]): Promise<ExtraccionFinanciera> {
+  const text = await callGemini('financialBlock', [{ text: FINANCIAL_BLOCK_PROMPT }, ...filesToParts(files)]);
+  const parsed = ExtraccionFinancieraSchema.parse(JSON.parse(text));
+  if (!parsed) throw new Error('No se pudo leer el bloque financiero del balance.');
+  return parsed;
+}
+
+// Documento sectorial (reporte de mora, etc.): schema y prompt según el tipo.
+export async function runSectorDocExtraction(tipo: TipoDocumentoSectorial, files: UploadedFile[]): Promise<ExtraccionDocumento> {
+  const text = await callGemini('sectorDoc', [{ text: SECTOR_DOC_PROMPTS[tipo] }, ...filesToParts(files)]);
+  return SCHEMAS_DOCUMENTOS[tipo].parse(JSON.parse(text)) as ExtraccionDocumento;
 }
