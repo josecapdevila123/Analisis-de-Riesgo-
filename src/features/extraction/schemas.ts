@@ -135,6 +135,15 @@ const NosisEntidad = z.object({
   monto: lenientNum,
 });
 
+// Evolución mensual de la deuda en el sistema financiero (Central de Deudores,
+// típicamente 24 meses): una fila por entidad y por mes.
+const NosisEvolucion = z.object({
+  periodo: lenientStringNA,   // "AAAA-MM"
+  entidad: lenientStringNA,
+  monto: lenientNum,          // miles de pesos corrientes de ese mes
+  situacion: lenientNum,
+});
+
 const ExtraccionNosis = z.object({
   score_crediticio: lenientNum,
   situacion_bcra_peor_estado: lenientNum,
@@ -150,6 +159,7 @@ const ExtraccionNosis = z.object({
   juicios_cantidad: lenientNum.optional(),
   embargos_cantidad: lenientNum.optional(),
   pedidos_quiebra_cantidad: lenientNum.optional(),
+  evolucion_deuda: z.preprocess(v => v ?? [], z.array(NosisEvolucion)).optional(),
 }).nullable();
 
 const InformacionComplementaria = z.object({
