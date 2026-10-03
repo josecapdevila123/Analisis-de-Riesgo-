@@ -1,6 +1,6 @@
 import React from 'react';
 import { RawExtraction } from '../extraction/schemas';
-import { AddRowButton, EditableNumber, EditableText, Path, RemoveRowButton } from './editing';
+import { AddRowButton, EditableBoolean, EditableNumber, EditableSelect, EditableText, Path, RemoveRowButton } from './editing';
 
 // Datos extraídos que alimentan los ratios pero no se muestran en otras vistas.
 // Solo se renderiza en modo edición.
@@ -22,10 +22,13 @@ const BALANCE_FIELDS: Array<{ group: string; fields: FieldSpec[] }> = [
     { label: 'Gastos de Comercialización', path: [...ER, 'gastos_comercializacion'], required: true },
     { label: 'Resultado Inversiones Permanentes', path: [...ER, 'resultado_inversiones_permanentes'] },
     { label: 'Gastos Financieros', path: [...ER, 'gastos_financieros'] },
+    { label: 'RECPAM', path: [...ER, 'recpam'] },
+    { label: 'Impuesto a las Ganancias', path: [...ER, 'impuesto_ganancias'] },
   ]},
   { group: 'Flujo de efectivo', fields: [
     { label: 'Depreciación Bienes de Uso', path: [...EF, 'depreciacion_bienes_de_uso'] },
     { label: 'Flujo Neto Operativo', path: [...EF, 'flujo_neto_operativo'] },
+    { label: 'Pagos por Bienes de Uso (capex)', path: [...EF, 'pagos_bienes_de_uso'] },
   ]},
 ];
 
@@ -126,6 +129,35 @@ export function SourceDataEditor({ extraction }: { extraction: RawExtraction }) 
             ))}
           </tbody>
         </table>
+      </Card>
+
+      <Card title="Información complementaria">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-sans">
+          <label className="flex items-center justify-between gap-3">
+            <span className="font-semibold">Balance en moneda homogénea (RT 6)</span>
+            <EditableBoolean path={['informacion_complementaria', 'balance_ajustado_por_inflacion']} value={extraction.informacion_complementaria?.balance_ajustado_por_inflacion} />
+          </label>
+          <label className="flex items-center justify-between gap-3">
+            <span className="font-semibold">Opinión del auditor</span>
+            <EditableSelect
+              path={['informacion_complementaria', 'opinion_auditor']}
+              value={extraction.informacion_complementaria?.opinion_auditor ?? 'favorable'}
+              options={['favorable', 'con_salvedades', 'adversa', 'abstencion']}
+            />
+          </label>
+          <label className="flex flex-col gap-1 md:col-span-2">
+            <span className="font-semibold">Detalle de la opinión del auditor</span>
+            <EditableText path={['informacion_complementaria', 'detalle_opinion_auditor']} value={extraction.informacion_complementaria?.detalle_opinion_auditor} />
+          </label>
+          <label className="flex items-center justify-between gap-3">
+            <span className="font-semibold">Deuda financiera en moneda extranjera (miles $)</span>
+            <EditableNumber path={['informacion_complementaria', 'deuda_financiera_moneda_extranjera']} value={extraction.informacion_complementaria?.deuda_financiera_moneda_extranjera} />
+          </label>
+          <label className="flex items-center justify-between gap-3">
+            <span className="font-semibold">% de ventas de exportación</span>
+            <EditableNumber path={['informacion_complementaria', 'porcentaje_ventas_exportacion']} value={extraction.informacion_complementaria?.porcentaje_ventas_exportacion} />
+          </label>
+        </div>
       </Card>
 
       <Card title="Deuda bancaria">

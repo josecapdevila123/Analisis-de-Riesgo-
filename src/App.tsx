@@ -51,6 +51,7 @@ import {
   EditableNumber,
   EditableText,
   EditableSelect,
+  EditableBoolean,
   AddRowButton,
   RemoveRowButton,
   Path,
@@ -61,7 +62,10 @@ import { SourceDataEditor } from './features/editing/SourceDataEditor';
 import { BiBankLogo } from './components/BiBankLogo';
 import { CompanyHistoryView } from './components/CompanyHistoryView';
 import { RiskOpinionView } from './components/RiskOpinionView';
+import { RiskPolicyView } from './components/RiskPolicyView';
 import { runRiskAssessment } from './features/risk/assessment';
+import { stripRiskConclusion } from './features/risk/summary';
+import { CATEGORY_LABEL } from './features/risk/score';
 
 const ShareholderTable = ({ accionistas, level = 1, parentName = '', basePath }: { accionistas: Shareholder[], level?: number, parentName?: string, basePath?: Path }) => {
   const { editing } = useEdit();
@@ -182,6 +186,7 @@ export default function App() {
   const [marketAnalysisBusyId, setMarketAnalysisBusyId] = useState<string | null>(null);
   const [companyHistoryBusyId, setCompanyHistoryBusyId] = useState<string | null>(null);
   const [riskBusyId, setRiskBusyId] = useState<string | null>(null);
+  const [showPolicy, setShowPolicy] = useState(false);
   const [currentFiles, setCurrentFiles] = useState<{ file: File; preview: string }[]>([]);
   const { user, isAuthReady, handleLogin, handleLogout } = useAuth(() => {
     setActiveResultId(null);
@@ -212,6 +217,7 @@ export default function App() {
   useEffect(() => {
     setDraft(null);
     setEditError(null);
+    setShowPolicy(false);
   }, [activeResultId]);
 
   const activeResult = useMemo<ExtractionResult | undefined>(() => {
@@ -245,6 +251,20 @@ export default function App() {
     setDraft(prev => {
       if (!prev) return prev;
       let next = setIn(prev.extraction, path, value);
+      // Si no había información complementaria (casos viejos), nace con todos los campos.
+      if (path[0] === 'informacion_complementaria') {
+        next = {
+          ...next,
+          informacion_complementaria: {
+            balance_ajustado_por_inflacion: null,
+            opinion_auditor: null,
+            detalle_opinion_auditor: null,
+            deuda_financiera_moneda_extranjera: null,
+            porcentaje_ventas_exportacion: null,
+            ...(next.informacion_complementaria ?? {}),
+          },
+        };
+      }
       // Si no había accionistas/directorio extraídos, el objeto nace con ambas listas.
       if (path[0] === 'accionistas_y_directorio') {
         next = {
@@ -484,6 +504,12 @@ export default function App() {
   type RatioFormat = 'pct' | 'num';
   type RatioSpec = { key: RatioKey; name: string; format: RatioFormat };
   const RATIO_BLOCKS: Array<{ bloque: string; ratios: RatioSpec[] }> = [
+    { bloque: 'Capacidad de Pago', ratios: [
+      { key: 'dscr', name: 'DSCR (servicio de deuda)', format: 'num' },
+      { key: 'deuda_neta_ebitda', name: 'Deuda Neta / EBITDA', format: 'num' },
+      { key: 'cobertura_intereses', name: 'Cobertura Intereses', format: 'num' },
+      { key: 'calidad_ganancia', name: 'Calidad de la Ganancia (FCO / EBITDA)', format: 'pct' },
+    ]},
     { bloque: 'Liquidez', ratios: [
       { key: 'liquidez_corriente', name: 'Liquidez Corriente', format: 'num' },
       { key: 'liquidez_acida', name: 'Prueba Ácida', format: 'num' },
@@ -504,7 +530,7 @@ export default function App() {
       { key: 'deuda_ebitda', name: 'Deuda / EBITDA', format: 'num' },
       { key: 'deuda_bancaria_total', name: 'Deuda Bancaria Total', format: 'num' },
       { key: 'deuda_dias_ventas', name: 'Deuda en Días de Venta', format: 'num' },
-      { key: 'cobertura_intereses', name: 'Cobertura Intereses', format: 'num' },
+      { key: 'deuda_financiera_pn', name: 'Deuda Financiera / PN', format: 'num' },
       { key: 'autofinanciamiento', name: 'Autofinanciamiento', format: 'pct' },
     ]},
     { bloque: 'Eficiencia Operativa', ratios: [
@@ -663,6 +689,19 @@ export default function App() {
           )}
         </div>
 
+        <div className="px-6 pt-4">
+          <button
+            onClick={() => setShowPolicy(v => !v)}
+            className={cn(
+              "w-full flex items-center gap-2 px-3 py-2 border border-[#141414] text-xs font-bold uppercase transition-all",
+              showPolicy ? "bg-[#141414] text-[#E4E3E0]" : "hover:bg-[#141414]/5"
+            )}
+          >
+            <Scale className="w-4 h-4" />
+            Política de riesgos
+          </button>
+        </div>
+
         <div className="flex-1 overflow-y-auto">
           <div className="px-6 py-4">
             <h2 className="text-[11px] font-sans font-semibold uppercase opacity-50 mb-4 tracking-wider flex items-center gap-2">
@@ -715,7 +754,13 @@ export default function App() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-[#F0EFED] print:hidden">
+      <main className="relative flex-1 flex flex-col overflow-hidden bg-[#F0EFED] print:hidden">
+        {/* Página de política de riesgos, por encima del contenido */}
+        {showPolicy && (
+          <div className="absolute inset-x-0 top-16 bottom-0 z-30 overflow-y-auto bg-[#F0EFED] p-8">
+            <RiskPolicyView onClose={() => setShowPolicy(false)} />
+          </div>
+        )}
         {/* Header */}
         <header className="h-16 border-b border-[#141414] flex items-center justify-between px-8 bg-[#E4E3E0]">
           <div className="flex items-center gap-4">
@@ -776,7 +821,7 @@ export default function App() {
               </button>
             )}
             <button 
-              onClick={() => { setCurrentFiles([]); setActiveResultId(null); }}
+              onClick={() => { setCurrentFiles([]); setActiveResultId(null); setShowPolicy(false); }}
               className="flex items-center gap-2 px-4 py-2 border border-[#141414] text-xs font-bold uppercase hover:bg-[#141414] hover:text-[#E4E3E0] transition-all"
             >
               <RefreshCw className="w-4 h-4" />
@@ -1053,19 +1098,37 @@ export default function App() {
                           <h3 className="text-lg font-bold mb-4 uppercase text-[#141414]">Resumen</h3>
                           {activeResult.verification?.executive_summary ? (
                             <div className="text-justify text-[#141414] prose prose-sm max-w-none prose-p:mb-4 last:prose-p:mb-0">
-                              <ReactMarkdown>{activeResult.verification?.executive_summary}</ReactMarkdown>
+                              <ReactMarkdown>{stripRiskConclusion(activeResult.verification.executive_summary)}</ReactMarkdown>
                             </div>
                           ) : (
-                            <>
-                              <p className="text-justify mb-4 text-[#141414]">
-                                Tras el análisis profundo realizado por High Thinking AI, se han cruzado los datos de la memoria con el balance, evaluando la evolución patrimonial, el desempeño operativo y la estructura de financiamiento. Se observa una correlación consistente entre las proyecciones declaradas y los resultados obtenidos en el último ejercicio, destacando la capacidad de adaptación ante las fluctuaciones del mercado.
-                              </p>
-                              <p className="text-justify text-[#141414]">
-                                <span className="font-bold">Conclusion:</span> Basado en los datos analizados, el perfil de riesgo preliminar se mantiene Adecuado.
-                              </p>
-                            </>
+                            <p className="text-sm text-[#141414]/60 italic">
+                              El resumen ejecutivo no se pudo generar para este caso.
+                            </p>
                           )}
                         </div>
+
+                        {/* Opinión de riesgos: única fuente del dictamen */}
+                        <button
+                          onClick={() => setActiveTab('Opinión de riesgos')}
+                          className="w-full text-left bg-white border border-[#141414] p-5 mb-8 flex items-center justify-between gap-6 hover:bg-[#141414]/5 transition-colors"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#141414]/60 mb-1">Opinión de riesgos</p>
+                            {activeResult.riskAssessment ? (
+                              <>
+                                <p className="text-xl font-bold text-[#141414]">
+                                  {activeResult.riskAssessment.puntaje.final}/100 · {CATEGORY_LABEL[activeResult.riskAssessment.puntaje.categoria]}
+                                </p>
+                                <p className="text-sm text-[#141414]/70 mt-1 line-clamp-2">{activeResult.riskAssessment.opinion.dictamen}</p>
+                              </>
+                            ) : (
+                              <p className="text-sm text-[#141414]/60">
+                                {riskBusyId === activeResult.id ? 'Generando la opinión de riesgo...' : 'Este caso todavía no tiene opinión de riesgo.'}
+                              </p>
+                            )}
+                          </div>
+                          <ChevronRight className="w-5 h-5 shrink-0 opacity-50" />
+                        </button>
 
                         {/* Patrimonial Summary Table (Quick View) */}
                         <div className="bg-[#F0EFED] p-6 border border-[#141414] mb-8">
@@ -1257,7 +1320,7 @@ export default function App() {
                       GENERAR REPORTE PARA COMITÉ
                     </button>
                     <p className="text-[10px] font-mono opacity-50 mt-3 uppercase tracking-wider">
-                      Incluye Ratios, Análisis de Ventas y Conclusiones de Riesgo
+                      Incluye Opinión de Riesgos, Ratios, Historia, Mercado y Nosis
                     </p>
                   </div>
                   
@@ -1624,7 +1687,36 @@ export default function App() {
                             </div>
                           </div>
 
-                          {false && null}
+                          {/* Antecedentes: alimentan las señales automáticas de la Opinión de riesgos */}
+                          <h4 className="text-xs font-bold uppercase mb-4 opacity-70 border-b border-[#141414]/10 pb-2">Antecedentes</h4>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 mb-8 text-sm">
+                            {([
+                              ['Peor situación 24 meses', 'peor_situacion_24_meses'],
+                              ['Cheques levantados', 'cheques_rechazados_levantados'],
+                              ['Deuda ARCA (miles $)', 'deuda_fiscal_previsional'],
+                              ['Juicios', 'juicios_cantidad'],
+                              ['Embargos', 'embargos_cantidad'],
+                              ['Pedidos de quiebra', 'pedidos_quiebra_cantidad'],
+                            ] as const).map(([label, field]) => (
+                              <div key={field}>
+                                <p className="text-[11px] font-bold uppercase opacity-50 mb-1">{label}</p>
+                                <p className="font-mono font-bold">
+                                  <EditableNumber
+                                    path={['extraccion_nosis', field]}
+                                    value={activeResult.extraction?.extraccion_nosis?.[field]}
+                                    display={activeResult.extraction?.extraccion_nosis?.[field] ?? '—'}
+                                    inputClassName="w-24"
+                                  />
+                                </p>
+                              </div>
+                            ))}
+                            <div>
+                              <p className="text-[11px] font-bold uppercase opacity-50 mb-1">Planes de pago ARCA</p>
+                              <p className="font-mono font-bold">
+                                <EditableBoolean path={['extraccion_nosis', 'planes_de_pago_arca']} value={activeResult.extraction?.extraccion_nosis?.planes_de_pago_arca} />
+                              </p>
+                            </div>
+                          </div>
 
                           <h4 className="text-xs font-bold uppercase mb-4 opacity-70 border-b border-[#141414]/10 pb-2">Detalle de Entidades</h4>
                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
@@ -1950,17 +2042,12 @@ export default function App() {
                           <h3 className="text-lg font-bold mb-4 uppercase text-[#141414]">Resumen</h3>
                           {activeResult.verification?.executive_summary ? (
                             <div className="text-justify text-[#141414] prose prose-sm max-w-none prose-p:mb-4 last:prose-p:mb-0">
-                              <ReactMarkdown>{activeResult.verification?.executive_summary}</ReactMarkdown>
+                              <ReactMarkdown>{stripRiskConclusion(activeResult.verification.executive_summary)}</ReactMarkdown>
                             </div>
                           ) : (
-                            <>
-                              <p className="text-justify mb-4 text-[#141414]">
-                                Tras el análisis profundo realizado por High Thinking AI, se han cruzado los datos de la memoria con el balance, evaluando la evolución patrimonial, el desempeño operativo y la estructura de financiamiento. Se observa una correlación consistente entre las proyecciones declaradas y los resultados obtenidos en el último ejercicio, destacando la capacidad de adaptación ante las fluctuaciones del mercado.
-                              </p>
-                              <p className="text-justify text-[#141414]">
-                                <span className="font-bold">Conclusion:</span> Basado en los datos analizados, el perfil de riesgo preliminar se mantiene Adecuado.
-                              </p>
-                            </>
+                            <p className="text-sm text-[#141414]/60 italic">
+                              El resumen ejecutivo no se pudo generar para este caso.
+                            </p>
                           )}
                         </div>
 

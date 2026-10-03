@@ -6,6 +6,7 @@ import { formatCurrencyThousands } from '../../lib/utils';
 import { ComputedRatios, RatioKey, RatioStatus } from '../ratios/calculations';
 import { CATEGORY_LABEL, DIMENSIONS, RiskCategory, SEVERIDAD_LABEL, categoryOf } from '../risk/score';
 import { RiskDimension, SeveridadRiesgo } from '../extraction/schemas';
+import { stripRiskConclusion } from '../risk/summary';
 
 type Status = RatioStatus | null;
 
@@ -36,6 +37,12 @@ type RatioBlockFormat = 'pct' | 'num';
 type RatioBlockSpec = { key: RatioKey; name: string; format: RatioBlockFormat };
 
 const RATIO_BLOCKS: Array<{ bloque: string; ratios: RatioBlockSpec[] }> = [
+  { bloque: 'Capacidad de Pago', ratios: [
+    { key: 'dscr', name: 'DSCR (servicio de deuda)', format: 'num' },
+    { key: 'deuda_neta_ebitda', name: 'Deuda Neta / EBITDA', format: 'num' },
+    { key: 'cobertura_intereses', name: 'Cobertura Intereses', format: 'num' },
+    { key: 'calidad_ganancia', name: 'Calidad de la Ganancia (FCO / EBITDA)', format: 'pct' },
+  ]},
   { bloque: 'Liquidez', ratios: [
     { key: 'liquidez_corriente', name: 'Liquidez Corriente', format: 'num' },
     { key: 'liquidez_acida', name: 'Prueba Ácida', format: 'num' },
@@ -56,7 +63,7 @@ const RATIO_BLOCKS: Array<{ bloque: string; ratios: RatioBlockSpec[] }> = [
     { key: 'deuda_ebitda', name: 'Deuda / EBITDA', format: 'num' },
     { key: 'deuda_bancaria_total', name: 'Deuda Bancaria Total', format: 'num' },
     { key: 'deuda_dias_ventas', name: 'Deuda en Días de Venta', format: 'num' },
-    { key: 'cobertura_intereses', name: 'Cobertura Intereses', format: 'num' },
+    { key: 'deuda_financiera_pn', name: 'Deuda Financiera / PN', format: 'num' },
     { key: 'autofinanciamiento', name: 'Autofinanciamiento', format: 'pct' },
   ]},
   { bloque: 'Eficiencia Operativa', ratios: [
@@ -212,7 +219,7 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
     doc.text('Resumen Ejecutivo', 14, 60);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    addLongText(verification.executive_summary, 65);
+    addLongText(stripRiskConclusion(verification.executive_summary), 65);
   }
 
   let currentY = addSectionTitle('Opinión de riesgos');

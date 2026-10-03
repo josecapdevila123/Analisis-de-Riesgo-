@@ -190,3 +190,21 @@ export function RemoveRowButton({ path, list, index }: { path: Path; list: unkno
     </button>
   );
 }
+
+// Booleano con "sin dato" (null): Sí / No / —.
+export function EditableBoolean({ path, value }: { path: Path; value: boolean | null | undefined }) {
+  const { editing, update } = useEdit();
+  const label = value === true ? 'Sí' : value === false ? 'No' : '—';
+  if (!editing) return <>{label}</>;
+  return (
+    <select
+      value={value === true ? 'si' : value === false ? 'no' : ''}
+      onChange={e => update(path, e.target.value === 'si' ? true : e.target.value === 'no' ? false : null)}
+      className={cn(inputClass, 'font-sans')}
+    >
+      <option value="">Sin dato</option>
+      <option value="si">Sí</option>
+      <option value="no">No</option>
+    </select>
+  );
+}

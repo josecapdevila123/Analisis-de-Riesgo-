@@ -1,8 +1,6 @@
 import React from 'react';
 import {
-  AlertOctagon,
   AlertTriangle,
-  AlertCircle,
   CheckCircle2,
   Info,
   Loader2,
@@ -18,46 +16,12 @@ import { RiskAssessment } from '../features/risk/assessment';
 import { CATEGORY_LABEL, DIMENSIONS, RiskCategory, SEVERIDAD_LABEL, categoryOf } from '../features/risk/score';
 import { RiskDimension, SeveridadRiesgo } from '../features/extraction/schemas';
 import { cn } from '../lib/utils';
-
-// Paleta de estados (fija, reservada para estado): bueno / advertencia / serio / crítico.
-// Siempre va acompañada de ícono + etiqueta; el texto queda en tinta, nunca en el color.
-const STATUS = {
-  good: '#0ca30c',
-  warning: '#fab219',
-  serious: '#ec835a',
-  critical: '#d03b3b',
-} as const;
-type Status = keyof typeof STATUS;
-
-const CATEGORY_STATUS: Record<RiskCategory, Status> = {
-  bajo: 'good', moderado: 'warning', alto: 'serious', critico: 'critical',
-};
-const SEVERIDAD_STATUS: Record<SeveridadRiesgo, Status> = {
-  baja: 'good', media: 'warning', alta: 'serious', critica: 'critical',
-};
-const STATUS_ICON: Record<Status, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
-  good: CheckCircle2, warning: AlertCircle, serious: AlertTriangle, critical: AlertOctagon,
-};
+import { CATEGORY_STATUS, SEVERIDAD_STATUS, STATUS, Status, StatusBadge, tint } from './riskColors';
 
 const POSTURA = {
   favorable: { label: 'Favorable', icon: ShieldCheck, status: 'good' as Status },
   favorable_con_condiciones: { label: 'Favorable con condiciones', icon: ShieldAlert, status: 'warning' as Status },
   desfavorable: { label: 'Desfavorable', icon: ShieldAlert, status: 'critical' as Status },
-};
-
-const tint = (hex: string, alpha: number) => `${hex}${Math.round(alpha * 255).toString(16).padStart(2, '0')}`;
-
-const StatusBadge = ({ status, label }: { status: Status; label: string }) => {
-  const Icon = STATUS_ICON[status];
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm text-xs font-bold uppercase tracking-wider text-[#141414]"
-      style={{ backgroundColor: tint(STATUS[status], 0.18) }}
-    >
-      <Icon className="w-3.5 h-3.5" style={{ color: STATUS[status] }} />
-      {label}
-    </span>
-  );
 };
 
 // ---------- Velocímetro 1–100 ----------
