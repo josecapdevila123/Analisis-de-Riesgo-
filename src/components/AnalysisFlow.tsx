@@ -161,7 +161,7 @@ export function AnalysisFlow({ stage, fileNames }: { stage: CaseState | null; fi
 
       {/* Qué está haciendo */}
       <div className="mt-8 text-center">
-        <p className="font-display text-lg font-medium text-ink">{PASOS[paso]}</p>
+        <p key={paso} className="agua-late font-display text-lg font-medium text-ink">{PASOS[paso]}</p>
         <p key={`${paso}-${iMensaje}`} className="agua-aparece mt-1.5 h-5 text-sm text-ink/45">
           {mensajes[iMensaje]}
         </p>

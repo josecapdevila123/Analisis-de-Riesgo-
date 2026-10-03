@@ -95,6 +95,10 @@
   0% { transform: scale(0.7); opacity: 0.5; }
   100% { transform: scale(1.7); opacity: 0; }
 }
+@keyframes agua-late {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.985); }
+}
 @keyframes agua-aparece {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
@@ -105,7 +109,9 @@
 .agua-gota { animation: agua-gota 12s ease-in-out infinite; }
 .agua-onda { animation: agua-onda 6s ease-out infinite; }
 .agua-aparece { animation: agua-aparece 1.2s ease-out both; }
+/* Latido lento del título de la etapa: como una respiración tranquila. */
+.agua-late { animation: agua-late 3.6s ease-in-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
-  .agua-corre, .agua-lee, .agua-gota, .agua-onda, .agua-aparece { animation: none; }
+  .agua-corre, .agua-lee, .agua-gota, .agua-onda, .agua-aparece, .agua-late { animation: none; }
 }
