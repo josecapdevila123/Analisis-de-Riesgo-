@@ -808,29 +808,69 @@ export default function App() {
                 </p>
               </div>
 
-              <div 
-                {...getRootProps()} 
+              {/* Zona de carga: tarjeta sólida (sin punteado); al arrastrar se marca en verde */}
+              <div
+                {...getRootProps()}
                 className={cn(
-                  "border-2 border-dashed border-ink/20 rounded-lg p-16 flex flex-col items-center justify-center transition-all bg-white",
-                  !user ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:border-brand-green",
-                  isDragActive && user ? "border-brand-green bg-brand-green/5 scale-[0.99]" : ""
+                  "relative rounded-2xl bg-white border p-8 md:p-10 transition-all shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.12)]",
+                  !user ? "border-ink/10 cursor-default" : "border-ink/10 cursor-pointer hover:border-ink/25 hover:shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-12px_rgba(0,0,0,0.18)]",
+                  isDragActive && user ? "border-brand-green ring-4 ring-brand-green/25 bg-brand-green/[0.04]" : ""
                 )}
               >
                 <input {...getInputProps()} disabled={!user} />
-                <div className="w-14 h-14 rounded-full bg-ink text-brand-green flex items-center justify-center mb-5">
-                  <Upload className="w-6 h-6" />
+                <div className="flex flex-col md:flex-row md:items-center gap-6">
+                  <div className={cn(
+                    "w-16 h-16 shrink-0 rounded-2xl flex items-center justify-center transition-colors",
+                    isDragActive && user ? "bg-brand-green text-ink" : "bg-ink text-brand-green"
+                  )}>
+                    <Upload className="w-7 h-7" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {!user ? (
+                      <>
+                        <p className="font-display text-lg font-semibold">Iniciá sesión para analizar</p>
+                        <p className="text-sm text-ink/55 mt-0.5">El historial de casos se guarda en tu cuenta.</p>
+                      </>
+                    ) : isDragActive ? (
+                      <>
+                        <p className="font-display text-lg font-semibold">Soltá los archivos para empezar</p>
+                        <p className="text-sm text-ink/55 mt-0.5">PDF o imágenes, uno o varios a la vez.</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-display text-lg font-semibold">Cargá la documentación del cliente</p>
+                        <p className="text-sm text-ink/55 mt-0.5">Arrastrá los archivos a esta tarjeta o elegilos desde tu computadora. PDF o imágenes.</p>
+                      </>
+                    )}
+                  </div>
+                  {user ? (
+                    <span className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-brand-green text-ink text-sm font-semibold shrink-0 hover:brightness-95 transition">
+                      <Upload className="w-4 h-4" /> Elegir archivos
+                    </span>
+                  ) : (
+                    <button
+                      onClick={e => { e.stopPropagation(); handleLogin(); }}
+                      className="inline-flex items-center justify-center px-6 py-3 rounded-full bg-brand-green text-ink text-sm font-semibold shrink-0 hover:brightness-95 transition"
+                    >
+                      Iniciar sesión con Google
+                    </button>
+                  )}
                 </div>
-                {user ? (
-                  <>
-                    <p className="text-base font-semibold mb-1">Arrastrá los archivos acá o hacé clic para elegirlos</p>
-                    <p className="text-xs text-ink/50">Balance, Memoria, informe Nosis y ventas post balance · PDF o imágenes</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-base font-semibold mb-1">Iniciá sesión para analizar</p>
-                    <p className="text-xs text-ink/50">El historial de casos se guarda en tu cuenta</p>
-                  </>
-                )}
+                <div className="mt-6 pt-5 border-t border-ink/10 flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-ink/45 mr-1">Qué cargar</span>
+                  {[
+                    { label: 'Balance y estados contables', req: true },
+                    { label: 'Memoria del Directorio', req: false },
+                    { label: 'Informe Nosis', req: false },
+                    { label: 'Ventas post balance', req: false },
+                  ].map(d => (
+                    <span key={d.label} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-canvas text-xs text-ink/75">
+                      <FileText className="w-3.5 h-3.5 text-ink/45" />
+                      {d.label}
+                      {d.req && <span className="text-[10px] font-semibold text-ink/45">· obligatorio</span>}
+                    </span>
+                  ))}
+                </div>
               </div>
 
               <div className="mt-12 grid grid-cols-3 gap-8">
@@ -873,7 +913,7 @@ export default function App() {
               <div className="flex justify-end gap-4">
                  <div 
                   {...getRootProps()} 
-                  className="px-6 py-3 border border-ink/15 text-xs font-bold uppercase hover:bg-white cursor-pointer flex items-center gap-2"
+                  className="px-5 py-2.5 rounded-full border border-ink/20 bg-white text-sm font-semibold hover:border-ink cursor-pointer flex items-center gap-2 transition"
                 >
                   <input {...getInputProps()} />
                   <Upload className="w-4 h-4" />
