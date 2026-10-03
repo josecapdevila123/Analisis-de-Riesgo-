@@ -35,7 +35,29 @@ No calcules ratios sobre esta deuda. Solo agrupala.
 NOSIS (si hay informe adjunto)
 ===========================================================
 Si los documentos incluyen un informe Nosis o similar, completá \`extraccion_nosis\` solo con los números crudos del informe (score, situación BCRA peor estado, cheques rechazados, deuda financiera total reportada, detalle por entidad). NO compares con el balance: el cruce lo hace el código.
+Además, si el informe lo trae:
+- \`peor_situacion_24_meses\`: la peor situación BCRA registrada en cualquier entidad en los últimos 24 meses.
+- \`cheques_rechazados_levantados\`: cantidad de cheques rechazados que figuran como pagados/levantados.
+- \`deuda_fiscal_previsional\`: deuda informada con ARCA/AFIP (fiscal y de seguridad social), en miles de pesos.
+- \`planes_de_pago_arca\`: true si informa planes de pago vigentes con ARCA/AFIP.
+- \`juicios_cantidad\`, \`embargos_cantidad\`, \`pedidos_quiebra_cantidad\`: cantidades informadas (0 si el informe dice que no hay; null si no lo informa).
 Si no hay informe Nosis: devolvé \`extraccion_nosis: null\`.
+
+===========================================================
+RESULTADOS: RECPAM E IMPUESTO A LAS GANANCIAS
+===========================================================
+- \`recpam\`: Resultado por Exposición a los Cambios en el Poder Adquisitivo de la Moneda, si se informa por separado (suele estar dentro de resultados financieros y por tenencia). Con su signo.
+- \`impuesto_ganancias\`: cargo por impuesto a las ganancias del ejercicio, con su signo.
+- \`flujo_efectivo.pagos_bienes_de_uso\`: pagos por compras/adquisiciones de bienes de uso del estado de flujo de efectivo (capex), en valor positivo.
+
+===========================================================
+INFORMACIÓN COMPLEMENTARIA
+===========================================================
+- \`balance_ajustado_por_inflacion\`: true si los estados están expresados en moneda homogénea (RT 6 / ajuste por inflación; suele decirlo la Nota 1 o 2 y el informe del auditor); false si dice expresamente que no; null si no surge.
+- \`opinion_auditor\`: según el informe del auditor independiente: "favorable" (sin salvedades), "con_salvedades", "adversa" o "abstencion". \`detalle_opinion_auditor\`: el motivo de la salvedad o abstención en una oración; null si es favorable.
+- \`deuda_financiera_moneda_extranjera\`: deuda bancaria/financiera en moneda extranjera al cierre, en miles de pesos (según notas o anexo de activos y pasivos en moneda extranjera).
+- \`porcentaje_ventas_exportacion\`: porcentaje de las ventas que son exportaciones, si se informa.
+Si no hay nada de esto, devolvé \`informacion_complementaria: null\`.
 
 ===========================================================
 POST CIERRE (si hay información posterior al balance)
@@ -84,12 +106,15 @@ ESTRUCTURA JSON DE SALIDA (estricta)
       "resultado_ordinario": 0,
       "gastos_financieros": null,
       "resultado_financiero_y_tenencia": null,
+      "recpam": null,
+      "impuesto_ganancias": null,
       "resultado_neto": 0
     },
     "flujo_efectivo": {
       "depreciacion_bienes_de_uso": null,
       "amortizacion_intangibles": null,
-      "flujo_neto_operativo": null
+      "flujo_neto_operativo": null,
+      "pagos_bienes_de_uso": null
     }
   },
   "ejercicio_anterior": null,
@@ -120,10 +145,24 @@ ESTRUCTURA JSON DE SALIDA (estricta)
     "detalle_entidades": [
       { "entidad": "Banco XYZ", "situacion": 1, "monto": 500 },
       { "entidad": "Banco ABC", "situacion": 1, "monto": 1000 }
-    ]
+    ],
+    "peor_situacion_24_meses": 1,
+    "cheques_rechazados_levantados": 0,
+    "deuda_fiscal_previsional": null,
+    "planes_de_pago_arca": null,
+    "juicios_cantidad": 0,
+    "embargos_cantidad": 0,
+    "pedidos_quiebra_cantidad": 0
   },
-  "accionistas_y_directorio": null
+  "accionistas_y_directorio": null,
+  "informacion_complementaria": {
+    "balance_ajustado_por_inflacion": true,
+    "opinion_auditor": "favorable",
+    "detalle_opinion_auditor": null,
+    "deuda_financiera_moneda_extranjera": null,
+    "porcentaje_ventas_exportacion": null
+  }
 }
 
-Recordá: el JSON debe respetar EXACTAMENTE estas claves. \`ejercicio_anterior\`, \`deuda_bancaria_anterior\`, \`analisis_post_cierre\`, \`extraccion_nosis\` y \`accionistas_y_directorio\` pueden ser \`null\` si no hay datos; el resto es obligatorio. Sin claves extra, sin ratios, sin status, sin texto narrativo.
+Recordá: el JSON debe respetar EXACTAMENTE estas claves. \`ejercicio_anterior\`, \`deuda_bancaria_anterior\`, \`analisis_post_cierre\`, \`extraccion_nosis\`, \`accionistas_y_directorio\` e \`informacion_complementaria\` pueden ser \`null\` si no hay datos; el resto es obligatorio. Sin claves extra, sin ratios, sin status, sin texto narrativo.
 `;

@@ -61,12 +61,17 @@ const EstadoResultadosEjercicio = z.object({
   resultado_ordinario: num,
   gastos_financieros: nullableNum,
   resultado_financiero_y_tenencia: nullableNum,
+  // Opcionales (agregados después): los casos viejos no los tienen.
+  recpam: nullableNum.optional(),
+  impuesto_ganancias: nullableNum.optional(),
   resultado_neto: num,
 });
 
 const FlujoEfectivoEjercicio = z.object({
   depreciacion_bienes_de_uso: nullableNum,
   flujo_neto_operativo: nullableNum,
+  // Pagos por compras de bienes de uso (capex total). Opcional.
+  pagos_bienes_de_uso: nullableNum.optional(),
 });
 
 const EstadosContablesEjercicio = z.object({
@@ -137,6 +142,24 @@ const ExtraccionNosis = z.object({
   cheques_rechazados_monto: lenientNum,
   deuda_financiera_total_nosis: lenientNum,
   detalle_entidades: z.array(NosisEntidad).default([]),
+  // Opcionales (agregados después): los casos viejos no los tienen.
+  peor_situacion_24_meses: lenientNum.optional(),
+  cheques_rechazados_levantados: lenientNum.optional(),
+  deuda_fiscal_previsional: lenientNum.optional(),
+  planes_de_pago_arca: z.boolean().nullable().catch(null).optional(),
+  juicios_cantidad: lenientNum.optional(),
+  embargos_cantidad: lenientNum.optional(),
+  pedidos_quiebra_cantidad: lenientNum.optional(),
+}).nullable();
+
+const InformacionComplementaria = z.object({
+  // RT 6: estados en moneda homogénea. Si es true, el comparativo está reexpresado.
+  balance_ajustado_por_inflacion: z.boolean().nullable().catch(null),
+  opinion_auditor: z.enum(['favorable', 'con_salvedades', 'adversa', 'abstencion']).nullable().catch(null),
+  detalle_opinion_auditor: z.string().nullable().catch(null),
+  // En miles de pesos al tipo de cambio de cierre.
+  deuda_financiera_moneda_extranjera: lenientNum,
+  porcentaje_ventas_exportacion: lenientNum,
 }).nullable();
 
 export type Accionista = {
@@ -175,6 +198,7 @@ export const RawExtractionSchema = z.object({
   extraccion_nosis: ExtraccionNosis,
   accionistas_y_directorio: z.union([AccionistasYDirectorio, 
   z.array(z.any()).transform(() => null)]).nullable(),
+  informacion_complementaria: InformacionComplementaria.optional(),
 });
 
 export type RawExtraction = z.infer<typeof RawExtractionSchema>;
