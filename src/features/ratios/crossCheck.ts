@@ -29,7 +29,10 @@ export function runCrossCheck(extraction: RawExtraction): CrossCheckResult {
 
   const difference_abs = balance_debt - nosis_debt;
   const difference_pct = nosis_debt !== 0 ? (difference_abs / Math.abs(nosis_debt)) * 100 : null;
-  const match = difference_pct !== null && Math.abs(difference_pct) <= UMBRAL_PCT;
+  // Con Nosis en 0 no hay porcentaje: coincide solo si el balance tampoco informa deuda.
+  const match = difference_pct === null
+    ? balance_debt === 0
+    : Math.abs(difference_pct) <= UMBRAL_PCT;
 
   return { balance_debt, nosis_debt, difference_abs, difference_pct, match };
 }

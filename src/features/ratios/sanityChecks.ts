@@ -70,6 +70,20 @@ const checkSubtotales = (label: string, year: Ejercicio, out: Inconsistencia[]) 
   }
 };
 
+const checkPatrimonioNegativo = (label: string, year: Ejercicio, out: Inconsistencia[]) => {
+  const pn = year.estado_situacion_patrimonial.patrimonio_neto;
+  if (pn < 0) {
+    out.push({
+      campo: `${label}.patrimonio_neto`,
+      esperado: null,
+      observado: pn,
+      diferencia_pct: null,
+      severidad: 'error',
+      mensaje: 'Patrimonio neto negativo (quiebra técnica): endeudamiento y ROE no son calculables',
+    });
+  }
+};
+
 const checkVariacionesExtremas = (actual: Ejercicio, anterior: Ejercicio, out: Inconsistencia[]) => {
   const compare = (campo: string, actualVal: number, anteriorVal: number) => {
     const variacion = pctDiff(actualVal, anteriorVal);
@@ -97,10 +111,12 @@ export function runSanityChecks(extraction: RawExtraction): Inconsistencia[] {
   const out: Inconsistencia[] = [];
   checkEcuacionContable('ejercicio_actual', extraction.ejercicio_actual, out);
   checkSubtotales('ejercicio_actual', extraction.ejercicio_actual, out);
+  checkPatrimonioNegativo('ejercicio_actual', extraction.ejercicio_actual, out);
 
   if (extraction.ejercicio_anterior) {
     checkEcuacionContable('ejercicio_anterior', extraction.ejercicio_anterior, out);
     checkSubtotales('ejercicio_anterior', extraction.ejercicio_anterior, out);
+    checkPatrimonioNegativo('ejercicio_anterior', extraction.ejercicio_anterior, out);
     checkVariacionesExtremas(extraction.ejercicio_actual, extraction.ejercicio_anterior, out);
   }
 
