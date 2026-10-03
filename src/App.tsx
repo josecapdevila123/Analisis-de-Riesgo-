@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { ComparativeView, Table, getComparativeTablesData, formatValue, getVariationText } from './components/ComparativeView';
 import { useDropzone } from 'react-dropzone';
 import { 
@@ -36,13 +36,13 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import ReactMarkdown from 'react-markdown';
 import { cn, formatCurrencyThousands } from './lib/utils';
 import { generatePDF } from './features/pdf/generatePDF';
-import { ACCEPT_PLANILLAS, esPlanilla, planillaATexto } from './lib/planillas';
+import { ACCEPT_PLANILLAS, esPlanilla, leerArchivo, planillaATexto } from './lib/planillas';
 import type { UploadedFile } from './features/extraction/geminiClient';
 import { runPipeline, CaseState } from './features/extraction/pipeline';
 import { useAuth } from './features/auth/useAuth';
 import { useCases } from './features/cases/useCases';
 import { ExtractionResult, Shareholder } from './types';
-import { RatioKey, RatioStatus, computeRatios } from './features/ratios/calculations';
+import { RatioKey, RatioStatus, computeRatios, disponibilidadesActuales } from './features/ratios/calculations';
 import { runSanityChecks } from './features/ratios/sanityChecks';
 import { runCrossCheck } from './features/ratios/crossCheck';
 import { RawExtraction } from './features/extraction/schemas';
@@ -75,7 +75,12 @@ import { AnalysisFlow } from './components/AnalysisFlow';
 import { RiskPolicyView } from './components/RiskPolicyView';
 import { runRiskAssessment } from './features/risk/assessment';
 import { confirmarRubro, estadoPorton, perfilDelCaso, sectorInicial } from './features/risk/porton';
-import { RubroDisponible } from './features/risk/policy';
+import { RubroDisponible, SubSegmento, TipoDocumento } from './features/risk/policy';
+import { PreChequeo } from './components/PreChequeo';
+import { armarPrechequeo } from './features/risk/prechequeo';
+import { indicadoresFinancieros } from './features/ratios/financieras';
+import { DocumentoSectorial, ExtraccionDocumento, MAX_DOCUMENTOS_POR_CASO, normalizarFecha } from './features/sectorDocs/tipos';
+import { runFinancialBlockExtraction, runSectorDocExtraction } from './features/extraction/geminiClient';
 import { SectorBanner } from './components/SectorBanner';
 import { stripRiskConclusion } from './features/risk/summary';
 import { CATEGORY_LABEL } from './features/risk/score';
@@ -225,6 +230,7 @@ export default function App() {
     saveCaseRiskAssessment,
     saveCaseProyecciones,
     saveCaseSector,
+    saveCaseDocumentos,
     saveCaseEdits,
     saveCaseError,
     removeCase,
@@ -255,7 +261,8 @@ export default function App() {
     () => perfilDelCaso(sectorActivo, storedResult?.riskAssessment),
     [sectorActivo, storedResult?.riskAssessment],
   );
-  const porton = estadoPorton(sectorActivo, storedResult?.riskAssessment);
+  const documentosActivos = useMemo(() => storedResult?.documentosSectoriales ?? [], [storedResult?.documentosSectoriales]);
+  const porton = estadoPorton(sectorActivo, storedResult?.riskAssessment, documentosActivos);
 
   const activeResult = useMemo<ExtractionResult | undefined>(() => {
     if (!storedResult) return storedResult;
@@ -266,7 +273,7 @@ export default function App() {
         ...storedResult,
         extraction,
         sector: sectorActivo,
-        ratios: computeRatios(extraction, perfilVista),
+        ratios: computeRatios(extraction, perfilVista, documentosActivos.filter(d => d.estado === 'ok')),
         inconsistencias: runSanityChecks(extraction),
         crossCheck: runCrossCheck(extraction),
       };
@@ -274,7 +281,7 @@ export default function App() {
       console.error('Recálculo de ratios falló:', err);
       return { ...storedResult, extraction };
     }
-  }, [storedResult, isEditing, draft, perfilVista, sectorActivo]);
+  }, [storedResult, isEditing, draft, perfilVista, sectorActivo, documentosActivos]);
 
   const startEditing = () => {
     if (!storedResult?.extraction) return;
@@ -495,6 +502,7 @@ export default function App() {
         marketAnalysis: result.marketAnalysis,
         companyHistory: result.companyHistory,
         sector,
+        documentos: result.documentosSectoriales ?? [],
       });
       setResults(prev => prev.map(r => r.id === result.id ? { ...r, riskAssessment: assessment } : r));
       await saveCaseRiskAssessment(result.id, assessment);
@@ -507,15 +515,82 @@ export default function App() {
   };
 
   // Portón: el analista confirma (o cambia) el rubro del caso.
-  const confirmSector = (result: ExtractionResult, rubro: RubroDisponible, motivo: string, nota: string) => {
+  const confirmSector = (result: ExtractionResult, rubro: RubroDisponible, motivo: string, nota: string, subsegmento: SubSegmento | null) => {
     const base = result.sector ?? (result.extraction ? sectorInicial(result.extraction) : null);
     if (!base) return;
     try {
-      const sector = confirmarRubro(base, rubro, motivo, nota, user?.email ?? null);
+      const sector = confirmarRubro(base, rubro, motivo, nota, user?.email ?? null, new Date(), subsegmento);
       setResults(prev => prev.map(r => (r.id === result.id ? { ...r, sector } : r)));
       saveCaseSector(result.id, sector);
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  // ---------- Documentos sectoriales (declarados por el cliente) ----------
+  const [extrayendoBloqueId, setExtrayendoBloqueId] = useState<string | null>(null);
+
+  // Lista vigente de documentos por caso, fuera del ciclo de render: así la
+  // lista que se guarda es siempre la misma que se muestra (nunca una vacía).
+  const documentosRef = useRef(new Map<string, DocumentoSectorial[]>());
+  const guardarDocumentos = (id: string, actualizar: (docs: DocumentoSectorial[]) => DocumentoSectorial[]) => {
+    const actuales = documentosRef.current.get(id) ?? results.find(r => r.id === id)?.documentosSectoriales ?? [];
+    const nuevos = actualizar(actuales);
+    documentosRef.current.set(id, nuevos);
+    setResults(prev => prev.map(r => (r.id === id ? { ...r, documentosSectoriales: nuevos } : r)));
+    // Lo que queda "procesando" no se guarda: si se cierra la app, no queda colgado.
+    saveCaseDocumentos(id, nuevos.filter(d => d.estado !== 'procesando'));
+  };
+
+  const cargarDocumento = async (result: ExtractionResult, tipo: TipoDocumento, file: File) => {
+    if ((result.documentosSectoriales ?? []).length >= MAX_DOCUMENTOS_POR_CASO) {
+      alert(`Máximo ${MAX_DOCUMENTOS_POR_CASO} documentos por caso.`);
+      return;
+    }
+    const ahora = new Date().toISOString();
+    const doc: DocumentoSectorial = {
+      id: crypto.randomUUID(), tipo, nombreArchivo: file.name, fechaDocumento: null, cargadoPor: user?.email ?? null,
+      cargadoEn: ahora, actualizadoEn: ahora, extraccion: null, estado: 'procesando', editado: false,
+    };
+    guardarDocumentos(result.id, docs => [...docs, doc]);
+    try {
+      const extraccion = await runSectorDocExtraction(tipo, [await leerArchivo(file)]);
+      const fecha = normalizarFecha((extraccion as { fecha_corte?: string | null }).fecha_corte ?? null);
+      guardarDocumentos(result.id, docs => docs.map(d => d.id === doc.id ? { ...d, extraccion, fechaDocumento: fecha, estado: 'ok', actualizadoEn: new Date().toISOString() } : d));
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      guardarDocumentos(result.id, docs => docs.map(d => d.id === doc.id ? { ...d, estado: 'error', error } : d));
+    }
+  };
+
+  const editarDocumento = (result: ExtractionResult, docId: string, extraccion: ExtraccionDocumento) => {
+    guardarDocumentos(result.id, docs => docs.map(d => d.id === docId ? {
+      ...d, extraccion, editado: true, actualizadoEn: new Date().toISOString(),
+      fechaDocumento: normalizarFecha((extraccion as { fecha_corte?: string | null }).fecha_corte ?? null) ?? d.fechaDocumento,
+    } : d));
+  };
+
+  const borrarDocumento = (result: ExtractionResult, docId: string) => {
+    if (!confirm('¿Borrar el documento? Si ya hay opinión, queda desactualizada.')) return;
+    guardarDocumentos(result.id, docs => docs.filter(d => d.id !== docId));
+  };
+
+  // Bloque financiero de los EECC a demanda: la app no guarda los archivos, así
+  // que se vuelve a subir el balance y se lee solo ese bloque.
+  const extraerBloqueFinanciero = async (result: ExtractionResult, files: File[]) => {
+    if (!result.extraction) return;
+    setExtrayendoBloqueId(result.id);
+    try {
+      const bloque = await runFinancialBlockExtraction(await Promise.all(files.map(leerArchivo)));
+      const extraction = { ...result.extraction, extraccion_financiera: bloque };
+      const editedAt = new Date().toISOString();
+      const edits = { extraction, ratios: computeRatios(extraction), inconsistencias: runSanityChecks(extraction), crossCheck: runCrossCheck(extraction) };
+      await saveCaseEdits(result.id, edits, editedAt);
+      setResults(prev => prev.map(r => r.id === result.id ? { ...r, ...edits, editedAt } : r));
+    } catch (err) {
+      alert(`No se pudo extraer el bloque financiero: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setExtrayendoBloqueId(curr => (curr === result.id ? null : curr));
     }
   };
 
@@ -1079,9 +1154,26 @@ export default function App() {
                       porton={porton}
                       generando={riskBusyId === activeResult.id}
                       bloqueadoPorEdicion={isEditing}
-                      onConfirmar={(rubro, motivo, nota) => storedResult && confirmSector(storedResult, rubro, motivo, nota)}
+                      onConfirmar={(rubro, motivo, nota, sub) => storedResult && confirmSector(storedResult, rubro, motivo, nota, sub)}
                       onGenerarOpinion={() => storedResult && generateRiskAssessment(storedResult)}
                     />
+                  )}
+                  {porton.rubroConfirmado && storedResult?.extraction && activeResult.ratios && (
+                    <div className="@container">
+                      <PreChequeo
+                        prechequeo={armarPrechequeo({
+                          extraction: activeResult.extraction, ratios: activeResult.ratios, crossCheck: activeResult.crossCheck,
+                          inconsistencias: activeResult.inconsistencias, documentos: documentosActivos, fechaCaso: activeResult.timestamp, perfil: perfilVista,
+                        })}
+                        documentos={documentosActivos}
+                        fechaCaso={activeResult.timestamp}
+                        extrayendoBloque={extrayendoBloqueId === activeResult.id}
+                        onCargarDocumento={(tipo, file) => storedResult && cargarDocumento(storedResult, tipo, file)}
+                        onEditarDocumento={(id, ext) => storedResult && editarDocumento(storedResult, id, ext)}
+                        onBorrarDocumento={id => storedResult && borrarDocumento(storedResult, id)}
+                        onExtraerBloque={files => storedResult && extraerBloqueFinanciero(storedResult, files)}
+                      />
+                    </div>
                   )}
                 <div className="flex flex-col md:flex-row gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                   {/* Sidebar */}
@@ -1149,7 +1241,7 @@ export default function App() {
 
                     {activeTab === 'Balance y Ratios' && (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        {activeResult.ratios && <BalanceRatiosView extraction={activeResult.extraction} ratios={activeResult.ratios} perfil={perfilVista} pendienteRubro={!porton.rubroConfirmado} />}
+                        {activeResult.ratios && <BalanceRatiosView extraction={activeResult.extraction} ratios={activeResult.ratios} perfil={perfilVista} pendienteRubro={!porton.rubroConfirmado} documentos={documentosActivos.filter(d => d.estado === 'ok')} />}
                         {isEditing && activeResult.extraction && <SourceDataEditor extraction={activeResult.extraction} />}
                       </div>
                     )}
@@ -1166,6 +1258,12 @@ export default function App() {
                     )}
 
                   {activeTab === 'Proyecciones' && (
+                    perfilVista.modelo === 'financiera' ? (
+                      <div className="bg-white border border-ink/15 px-6 py-10 text-center">
+                        <p className="font-display text-base font-semibold">No aplica a financieras</p>
+                        <p className="text-sm text-ink/55 mt-1 max-w-xl mx-auto">El modelo de capacidad de repago (EBITDA y DSCR) es de empresa productiva. En una financiera, los intereses son su costo de fondeo y la deuda se renueva con la cartera: se analizan la mora, el capital y el fondeo.</p>
+                      </div>
+                    ) :
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                       <ProyeccionesView
                         result={activeResult}
@@ -1225,6 +1323,10 @@ export default function App() {
                         editedAt={activeResult.editedAt}
                         porton={porton}
                         sector={sectorActivo}
+                        mora={perfilVista.modelo === 'financiera' && activeResult.extraction
+                          ? indicadoresFinancieros(activeResult.extraction, documentosActivos.filter(d => d.estado === 'ok'), { disponibilidades: disponibilidadesActuales(activeResult.extraction) }).mora
+                          : null}
+                        documentos={documentosActivos}
                       />
                     </div>
                   )}

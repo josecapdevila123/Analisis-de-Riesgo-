@@ -19,6 +19,9 @@ import {
   RUBROS,
   SECTOR_PROFILES,
   SUGERENCIA_RUBRO,
+  SUBSEGMENTOS,
+  SIGNAL_PARAMS_FINANCIERA,
+  DOCUMENTOS_SECTORIALES,
 } from '../features/risk/policy';
 import { CATEGORY_LABEL, categoryOf, SEVERIDAD_LABEL } from '../features/risk/score';
 import { RiskDimension, SeveridadRiesgo } from '../features/extraction/schemas';
@@ -129,9 +132,9 @@ export function RiskPolicyView({ onClose }: { onClose: () => void }) {
           </div>
 
           <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-ink/60 mb-3">Peso de cada dimensión</h4>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-ink/60 mb-3">Peso de cada dimensión (perfil genérico; los rubros pueden cambiarlos)</h4>
             <div className="space-y-2.5">
-              {(Object.keys(DIMENSION_WEIGHTS) as RiskDimension[]).map(dim => {
+              {(Object.keys(DIMENSION_WEIGHTS) as RiskDimension[]).filter(dim => DIMENSION_WEIGHTS[dim].weight > 0).map(dim => {
                 const { label, weight } = DIMENSION_WEIGHTS[dim];
                 return (
                   <div key={dim} className="grid grid-cols-[1fr_auto] gap-x-3 items-center">
@@ -374,6 +377,8 @@ function CriteriosPorRubro() {
         </table>
       </div>
 
+      <CriteriosFinanciera />
+
       <h4 className="text-xs font-bold uppercase tracking-wider text-ink/60 mb-2">Qué mira la opinión en cada rubro</h4>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         {RUBROS.map(r => {
@@ -423,5 +428,81 @@ function CriteriosPorRubro() {
         </tbody>
       </table>
     </Section>
+  );
+}
+
+// ---------- Financiera: modelo propio ----------
+
+const FIN = perfilEfectivo('financiera');
+const pctF = (v: number) => `${fmtNum(v * 100)}%`;
+const umbralF = (t: RatioThreshold) => {
+  const f = (v: number) => (t.unidad === 'x' ? `${fmtNum(v)}x` : t.unidad === 'pp' ? `${fmtNum(v * 100)} p.p.` : pctF(v));
+  const s = t.mejorSi === 'mayor' ? '≥' : '≤';
+  return { sano: `${s} ${f(t.sano)}`, alerta: `${s} ${f(t.alerta)}` };
+};
+
+function CriteriosFinanciera() {
+  const propios = Object.entries(SECTOR_PROFILES.financiera.umbralesPropios ?? {}).filter(([k]) => k !== 'mora');
+  const F = SIGNAL_PARAMS_FINANCIERA;
+  const senales = [
+    ['Mora por encima de la alerta del sub-segmento', 'Alta', '—'],
+    [`Cobertura de la mora < ${pctF(F.coberturaMinima)}`, 'Alta', '—'],
+    [`PN ajustado < ${pctF(F.pnAjustadoMinimoSobrePn)} del PN`, 'Alta', '—'],
+    ['PN ajustado ≤ 0', 'Crítica', String(F.pnAjustadoNegativoPiso)],
+    [`Cargo por incobrabilidad / resultado antes de previsiones > ${pctF(F.cargoSobreResultadoMaximo)}`, 'Alta', '—'],
+    [`Liquidez a 90 días < ${fmtNum(F.liquidez90Minima)}x`, 'Alta', '—'],
+    [`Concentración de fondeo > ${pctF(F.concentracionFondeoMaxima)}`, 'Media', '—'],
+    ['ROA negativo (alta si es negativo en los 2 ejercicios)', 'Media / alta', '—'],
+    [`Cartera crece más de ${fmtNum(F.brechaCarteraPnMaxima * 100)} p.p. por encima del PN`, 'Media', '—'],
+    ['Sin reporte de mora y sin bloque financiero del balance (calidad de la información)', 'Alta', '—'],
+  ];
+  return (
+    <div className="border border-ink/15 p-5 mb-6 print:break-inside-avoid">
+      <h4 className="text-sm font-bold text-ink mb-1">Financiera (no bancaria): modelo propio</h4>
+      <p className="text-xs text-ink/60 mb-4 leading-relaxed">
+        Los ratios de empresa productiva no aplican: el pasivo alto es su negocio, y el EBITDA y el DSCR no tienen sentido. Se mide con los EECC y el reporte de mora.
+        Umbrales inclusivos (el valor exacto cae en el tramo mejor). Los documentos son información declarada por el cliente, no auditada: nunca bajan un piso.
+      </p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 text-xs">
+        <div>
+          <p className="font-semibold mb-1">Mora (cartera &gt; 90 días / cartera) por sub-segmento</p>
+          <table className="w-full border-collapse">
+            <thead><tr><th className={`${th} text-left`}>Sub-segmento</th><th className={`${th} text-center`}>Sano</th><th className={`${th} text-center`}>Alerta</th></tr></thead>
+            <tbody>{SUBSEGMENTOS.map(x => (
+              <tr key={x.id}><td className={td}>{x.label}</td><td className={`${td} text-center tabular-nums`}>≤ {pctF(x.mora.sano)}</td><td className={`${td} text-center tabular-nums`}>≤ {pctF(x.mora.alerta)}</td></tr>
+            ))}</tbody>
+          </table>
+          <p className="font-semibold mt-4 mb-1">Ratios propios</p>
+          <table className="w-full border-collapse">
+            <thead><tr><th className={`${th} text-left`}>Ratio</th><th className={`${th} text-center`}>Sano</th><th className={`${th} text-center`}>Alerta</th></tr></thead>
+            <tbody>{propios.map(([k, t]) => {
+              const u = umbralF(t as RatioThreshold);
+              return <tr key={k}><td className={td}>{(t as RatioThreshold).label}</td><td className={`${td} text-center tabular-nums`}>{u.sano}</td><td className={`${td} text-center tabular-nums`}>{u.alerta}</td></tr>;
+            })}</tbody>
+          </table>
+        </div>
+        <div>
+          <p className="font-semibold mb-1">Señales propias</p>
+          <table className="w-full border-collapse">
+            <thead><tr><th className={`${th} text-left`}>Regla</th><th className={`${th} text-center`}>Severidad</th><th className={`${th} text-center`}>Piso</th></tr></thead>
+            <tbody>{senales.map(([r, sev, piso]) => (
+              <tr key={r}><td className={td}>{r}</td><td className={`${td} text-center`}>{sev}</td><td className={`${td} text-center tabular-nums`}>{piso}</td></tr>
+            ))}</tbody>
+          </table>
+          <p className="mt-2 text-ink/60">Se mantienen las señales de Nosis / BCRA, ARCA, judiciales y auditor.</p>
+          <p className="font-semibold mt-4 mb-1">Pesos y nombre de cada dimensión</p>
+          <ul className="space-y-0.5">
+            {(Object.keys(FIN.pesos) as RiskDimension[]).filter(d => FIN.pesos[d] > 0).map(d => (
+              <li key={d} className="flex justify-between"><span>{FIN.etiquetasDimensiones[d]}</span><span className="font-mono font-bold">{FIN.pesos[d]}%</span></li>
+            ))}
+          </ul>
+          <p className="font-semibold mt-4 mb-1">Documentación recomendada</p>
+          <ul className="list-disc pl-5">
+            {FIN.documentos.map(d => <li key={d.tipo}>{DOCUMENTOS_SECTORIALES[d.tipo].label}{d.recomendado ? ' (recomendado)' : ''}: {DOCUMENTOS_SECTORIALES[d.tipo].descripcion}</li>)}
+            <li>Bloque financiero del balance (cartera por tramo, previsiones, fondeo), extraído a demanda.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
   );
 }

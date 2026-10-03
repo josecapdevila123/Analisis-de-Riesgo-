@@ -5,6 +5,7 @@ import type { CrossCheckResult } from './features/ratios/crossCheck';
 import type { RiskAssessment } from './features/risk/assessment';
 import type { ProyeccionesGuardadas } from './features/projections/types';
 import type { SectorCaso } from './features/risk/porton';
+import type { DocumentoSectorial } from './features/sectorDocs/tipos';
 
 export interface Shareholder {
   nombre: string;
@@ -40,6 +41,9 @@ export interface ExtractionResult {
   // Rubro sugerido y confirmado por el analista (portón de la evaluación).
   // Casos viejos: se sugiere al cargar y queda sin confirmar.
   sector?: SectorCaso | null;
+  // Documentos propios del rubro (ej. reporte de mora): declarados, no auditados.
+  // Se guarda lo extraído y los datos del archivo, no el archivo.
+  documentosSectoriales?: DocumentoSectorial[];
   // Fecha ISO de la última edición manual de valores en el dashboard.
   editedAt?: string;
   error?: string;

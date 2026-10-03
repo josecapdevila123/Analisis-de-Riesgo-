@@ -10,6 +10,8 @@ import { stripRiskConclusion } from '../risk/summary';
 import { RATIO_ASSUMPTIONS } from '../risk/policy';
 import { RATIO_BLOCKS as SHARED_RATIO_BLOCKS, RatioKind as SharedRatioKind, bloquesDelPerfil, SECTOR_KPI_SPECS } from '../ratios/blocks';
 import { avisoPerfil } from '../risk/avisoPerfil';
+import { indicadoresFinancieros } from '../ratios/financieras';
+import { disponibilidadesActuales } from '../ratios/calculations';
 import { perfilEfectivo, RATIO_LABEL_CORTO } from '../risk/policy';
 import { VERSION_PREVIA } from '../risk/porton';
 import { RATIO_THRESHOLDS, PROJECTION_PARAMS } from '../risk/policy';
@@ -479,9 +481,11 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
   sectionTitle('Resumen ejecutivo');
   {
     // Recuadro del perfil de evaluación (generado por código desde la foto).
-    const a = avisoPerfil(perfil, sectorEvaluado);
+    const docsPdf = (activeResult.documentosSectoriales ?? []).filter(d => d.estado === 'ok');
+    const finPdf = perfil.modelo === 'financiera' ? indicadoresFinancieros(extraction, docsPdf, { disponibilidades: disponibilidadesActuales(extraction) }) : null;
+    const a = avisoPerfil(perfil, sectorEvaluado, { mora: finPdf?.mora ?? null, documentos: docsPdf });
     const lineas = [
-      [a.confirmacion, a.cambio, sectorEvaluado?.nota ? `Nota del analista: ${sectorEvaluado.nota}` : null].filter(Boolean).join(' '),
+      [a.confirmacion, a.subsegmento, a.cambio, sectorEvaluado?.nota ? `Nota del analista: ${sectorEvaluado.nota}` : null].filter(Boolean).join(' '),
       a.esGenerico
         ? 'Se aplican los criterios generales de la política, sin ajustes por rubro.'
         : [
@@ -491,6 +495,7 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
             a.noAplican.length ? `No aplican: ${a.noAplican.join('; ')}.` : '',
           ].filter(Boolean).join(' '),
       `KPIs prioritarios del rubro: ${a.kpis.join(', ')}.`,
+      [a.fuenteMora, a.documentacion].filter(Boolean).join(' '),
       [a.politica, a.versionDesactualizada].filter(Boolean).join(' '),
     ].filter(Boolean);
     setText(8.5, 'normal');
@@ -607,16 +612,17 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
     sectionTitle('Opinión de riesgos');
 
     subheading('Riesgo por dimensión (1 = mínimo, 100 = máximo)');
-    (Object.keys(DIMENSIONS) as RiskDimension[]).forEach(dim => {
+    // Dimensiones del perfil evaluado (con peso > 0) y sus nombres en ese perfil.
+    (Object.keys(DIMENSIONS) as RiskDimension[]).filter(dim => (perfil.pesos[dim] ?? 0) > 0).forEach(dim => {
       const d = opinion.dimensiones.find(x => x.dimension === dim);
       const p = d?.puntaje ?? null;
       setText(7.5); // el corte de líneas depende del tamaño de fuente activo
       const comment = d?.comentario ? doc.splitTextToSize(pdfSafe(d.comentario), CW - 4) as string[] : [];
       ensure(11 + comment.length * 3.6);
       setText(8.5, 'bold');
-      text(DIMENSIONS[dim].label, M, y);
+      text(perfil.etiquetasDimensiones?.[dim] ?? DIMENSIONS[dim].label, M, y);
       setText(7, 'normal', MUTED);
-      text(`peso ${DIMENSIONS[dim].weight}%`, M + 58, y);
+      text(`peso ${perfil.pesos[dim]}%`, M + 58, y);
       const bx = M + 76, bw = 90;
       doc.setFillColor(...SOFT);
       doc.rect(bx, y - 2.8, bw, 3.4, 'F');
@@ -800,9 +806,21 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
     });
   }
 
+  if (perfil.modelo === 'financiera') {
+    const fr = indicadoresFinancieros(extraction, (activeResult.documentosSectoriales ?? []).filter(d => d.estado === 'ok'), { disponibilidades: disponibilidadesActuales(extraction) });
+    subheading('PN ajustado por mora');
+    const m = (v: number | null) => (v === null ? 's/d' : money(v));
+    paragraph(`PN ${money(esp.patrimonio_neto)} − (cartera con más de 90 días ${m(fr.mora.vencida90)} − previsiones ${m(fr.mora.previsiones)}) = PN ajustado ${m(fr.valores.pn_ajustado.actual)}. Fuente de la mora: ${fr.mora.fuente === 'reporte' ? `reporte de mora${fr.mora.fechaCorte ? ` al ${fr.mora.fechaCorte}` : ''} (declarado por el cliente, no auditado)` : fr.mora.fuente === 'balance' ? `balance${fr.mora.fechaCorte ? ` al ${fr.mora.fechaCorte}` : ''}` : 'sin datos'}.${fr.cruce?.alerta ? ` La cartera del reporte difiere ${Math.round(fr.cruce.diferenciaPct * 100)}% de la del balance (fechas distintas: ${fr.cruce.fechaReporte ?? 's/f'} vs. ${fr.cruce.fechaBalance ?? 's/f'}).` : ''}`, 8.5);
+  }
+
   bloquesDelPerfil(perfil).forEach(block => {
     const rows = block.ratios.filter(spec => ratios[spec.key] && (ratios[spec.key].actual !== null || ratios[spec.key].anterior !== null));
     if (rows.length === 0) return;
+    if (block.colapsado) {
+      subheading(block.bloque);
+      paragraph(`No se evalúan en este rubro: ${rows.map(r => r.name).join(', ')}.`, 8, 'italic');
+      return;
+    }
     subheading(`Ratios · ${block.bloque}`);
     table({
       startY: y,

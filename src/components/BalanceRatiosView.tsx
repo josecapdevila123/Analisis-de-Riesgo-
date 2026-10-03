@@ -4,6 +4,8 @@ import { RawExtraction } from '../features/extraction/schemas';
 import { ComputedRatios, RatioStatus } from '../features/ratios/calculations';
 import { bloquesDelPerfil, RatioKind } from '../features/ratios/blocks';
 import { PerfilEfectivo, perfilEfectivo } from '../features/risk/policy';
+import { DocumentoSectorial } from '../features/sectorDocs/tipos';
+import { FinancieraDatos } from './FinancieraDatos';
 import { EditableNumber, Path, useEdit } from '../features/editing/editing';
 import { STATUS, Status, StatusBadge } from './riskColors';
 
@@ -213,12 +215,13 @@ function Statement({ title, sections, extraction, ratios, base, baseLabel, verti
 
 // ---------- Vista ----------
 
-export function BalanceRatiosView({ extraction, ratios, perfil = perfilEfectivo('generico'), pendienteRubro = false }: {
+export function BalanceRatiosView({ extraction, ratios, perfil = perfilEfectivo('generico'), pendienteRubro = false, documentos = [] }: {
   extraction: RawExtraction;
   ratios: ComputedRatios;
   // Perfil del rubro (umbrales, "no aplica" y KPIs prioritarios) y portón.
   perfil?: PerfilEfectivo;
   pendienteRubro?: boolean;
+  documentos?: DocumentoSectorial[];
 }) {
   const { editing } = useEdit();
   const [verticalSelected, setVertical] = useState(false);
@@ -293,6 +296,8 @@ export function BalanceRatiosView({ extraction, ratios, perfil = perfilEfectivo(
         </p>
       </div>
 
+      {perfil.modelo === 'financiera' && <FinancieraDatos extraction={extraction} documentos={documentos} perfil={perfil} />}
+
       {/* Columnas tipo mampostería: cada columna apila sus tarjetas sin huecos */}
       <div className="columns-1 @5xl:columns-2 gap-x-6">
         {bloquesDelPerfil(perfil).map(block => {
@@ -300,6 +305,31 @@ export function BalanceRatiosView({ extraction, ratios, perfil = perfilEfectivo(
           const conteo = pendienteRubro ? [] : (['critical', 'alert', 'healthy'] as RatioStatus[])
             .map(st => ({ st, n: rows.filter(r => !r.noAplica && ratios[r.key].status === st).length }))
             .filter(c => c.n > 0);
+          if (block.colapsado) {
+            if (rows.length === 0) return null;
+            return (
+              <details key={block.bloque} className="bg-white border border-ink/15 mb-6 break-inside-avoid group">
+                <summary className="px-5 py-4 cursor-pointer select-none flex items-center justify-between gap-3">
+                  <span>
+                    <span className="font-display text-base font-semibold">{block.bloque}</span>
+                    <span className="block text-xs text-ink/50">{block.descripcion} ({rows.length})</span>
+                  </span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-ink/45">No aplica</span>
+                </summary>
+                <ul className="divide-y divide-ink/5 border-t border-ink/10 text-sm">
+                  {rows.map(spec => (
+                    <li key={spec.key} className="px-5 py-2 flex items-start justify-between gap-4">
+                      <span>
+                        {spec.name}
+                        <span className="block text-[11px] text-ink/40">{spec.noAplica}</span>
+                      </span>
+                      <span className="tabular-nums text-ink/50 whitespace-nowrap">{fmtRatio(ratios[spec.key].actual, spec.kind)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            );
+          }
           return (
             <section key={block.bloque} className="bg-white border border-ink/15 mb-6 break-inside-avoid">
               <header className="px-5 py-4 border-b border-ink/10 flex items-start justify-between gap-3">

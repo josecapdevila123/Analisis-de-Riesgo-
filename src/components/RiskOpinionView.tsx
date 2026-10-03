@@ -16,6 +16,8 @@ import { RiskAssessment } from '../features/risk/assessment';
 import { EstadoPorton, SectorCaso, VERSION_PREVIA } from '../features/risk/porton';
 import { perfilEfectivo } from '../features/risk/policy';
 import { PerfilAviso } from './PerfilAviso';
+import type { FuenteMora } from '../features/ratios/financieras';
+import type { DocumentoSectorial } from '../features/sectorDocs/tipos';
 import { CATEGORY_LABEL, DIMENSIONS, RiskCategory, SEVERIDAD_LABEL, categoryOf } from '../features/risk/score';
 import { RiskDimension, SeveridadRiesgo } from '../features/extraction/schemas';
 import { cn } from '../lib/utils';
@@ -126,9 +128,11 @@ interface RiskOpinionViewProps {
   editedAt?: string;
   porton: EstadoPorton;
   sector?: SectorCaso | null;
+  mora?: FuenteMora | null;
+  documentos?: DocumentoSectorial[] | null;
 }
 
-export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGenerate, editedAt, porton, sector }: RiskOpinionViewProps) {
+export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGenerate, editedAt, porton, sector, mora, documentos }: RiskOpinionViewProps) {
   const generateButton = (label: string) => (
     <button
       onClick={onGenerate}
@@ -180,7 +184,10 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
     .map(sev => ({ sev, n: opinion.riesgos.filter(r => r.severidad === sev).length }))
     .filter(c => c.n > 0);
 
-  const dimensiones = (Object.keys(DIMENSIONS) as RiskDimension[]).map(dim => {
+  // Dimensiones del perfil evaluado (peso > 0) con sus nombres en ese perfil.
+  const perfilEval = assessment.perfil ?? perfilEfectivo('generico');
+  const etiqueta = (dim: RiskDimension) => perfilEval.etiquetasDimensiones?.[dim] ?? DIMENSIONS[dim].label;
+  const dimensiones = (Object.keys(DIMENSIONS) as RiskDimension[]).filter(dim => (perfilEval.pesos[dim] ?? 0) > 0).map(dim => {
     const d = opinion.dimensiones.find(x => x.dimension === dim);
     return { dim, puntaje: d?.puntaje ?? null, comentario: d?.comentario ?? '' };
   });
@@ -191,6 +198,8 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
       <PerfilAviso
         perfil={assessment.perfil ?? { ...perfilEfectivo('generico'), version: assessment.politicaVersion ?? VERSION_PREVIA }}
         sector={assessment.sector ?? sector}
+        mora={mora}
+        documentos={documentos}
       />
       {porton.opinion === 'desactualizada' && (
         <div className="border-l-4 border-brand-blue bg-brand-blue/5 p-3 text-sm text-ink flex items-center justify-between gap-4">
@@ -257,8 +266,8 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
               <div key={dim} className="group" title={comentario}>
                 <div className="flex items-baseline justify-between gap-3 mb-1.5">
                   <span className="text-sm font-semibold text-ink">
-                    {DIMENSIONS[dim].label}
-                    <span className="ml-2 text-[10px] font-mono text-ink/40">peso {DIMENSIONS[dim].weight}%</span>
+                    {etiqueta(dim)}
+                    <span className="ml-2 text-[10px] font-mono text-ink/40">peso {perfilEval.pesos[dim]}%</span>
                   </span>
                   <span className="text-sm font-mono font-bold text-ink tabular-nums">
                     {p === null ? 'Sin datos' : p}
@@ -322,7 +331,7 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
                     <StatusBadge status={st} label={SEVERIDAD_LABEL[r.severidad]} />
                   </div>
                   {r.dimension && (
-                    <p className="text-[10px] font-mono uppercase tracking-wider text-ink/40">{DIMENSIONS[r.dimension].label}</p>
+                    <p className="text-[10px] font-mono uppercase tracking-wider text-ink/40">{etiqueta(r.dimension)}</p>
                   )}
                   <p className="text-sm text-ink/80 leading-relaxed">{r.evidencia}</p>
                   {r.mitigante && (

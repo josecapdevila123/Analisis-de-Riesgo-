@@ -1,4 +1,6 @@
-import { PerfilEfectivo, perfilEfectivo, POLICY_STATUS, POLICY_VERSION, RATIO_LABEL_CORTO, RatioWithThreshold, SECTOR_PROFILES } from './policy';
+import { DOCUMENTOS_SECTORIALES, PerfilEfectivo, perfilEfectivo, POLICY_STATUS, POLICY_VERSION, RATIO_LABEL_CORTO, RatioWithThreshold, SECTOR_PROFILES, subsegmentoLabel } from './policy';
+import type { FuenteMora } from '../ratios/financieras';
+import type { DocumentoSectorial } from '../sectorDocs/tipos';
 import type { RatioKey } from '../ratios/calculations';
 import type { SectorCaso } from './porton';
 
@@ -25,9 +27,16 @@ export type AvisoPerfil = {
   kpis: string[];
   politica: string;         // "Política de riesgos v2.0.0 — Propuesta inicial…"
   versionDesactualizada: string | null;
+  subsegmento: string | null;   // "Sub-segmento: Consumo masivo."
+  fuenteMora: string | null;    // "Mora: reporte de mora al 2026-03-31 (declarado, no auditado)."
+  documentacion: string | null; // "Documentación sectorial considerada: Reporte de mora (mora.xlsx, al …)."
 };
 
-export function avisoPerfil(perfil: PerfilEfectivo, sector: SectorCaso | null | undefined): AvisoPerfil {
+export function avisoPerfil(
+  perfil: PerfilEfectivo,
+  sector: SectorCaso | null | undefined,
+  extras: { mora?: FuenteMora | null; documentos?: DocumentoSectorial[] | null } = {},
+): AvisoPerfil {
   const base = perfilEfectivo('generico');
   const diferencias = (Object.keys(perfil.umbrales) as RatioWithThreshold[]).flatMap(k => {
     if (perfil.noAplica[k]) return [];
@@ -68,5 +77,13 @@ export function avisoPerfil(perfil: PerfilEfectivo, sector: SectorCaso | null | 
     kpis: perfil.kpisPrioritarios.map(k => RATIO_LABEL_CORTO[k] ?? k),
     politica: `Política de riesgos v${perfil.version} — ${POLICY_STATUS}.`,
     versionDesactualizada: perfil.version !== POLICY_VERSION ? `Evaluado con política v${perfil.version}; vigente v${POLICY_VERSION}.` : null,
+    subsegmento: perfil.subsegmento ? `Sub-segmento: ${subsegmentoLabel(perfil.subsegmento)}.` : null,
+    fuenteMora: perfil.modelo !== 'financiera' || !extras.mora ? null
+      : extras.mora.fuente === 'reporte' ? `Mora: reporte de mora${extras.mora.fechaCorte ? ` al ${extras.mora.fechaCorte}` : ''} (declarado por el cliente, no auditado).`
+      : extras.mora.fuente === 'balance' ? `Mora: balance${extras.mora.fechaCorte ? ` al ${extras.mora.fechaCorte}` : ''}.`
+      : 'Mora: sin datos (falta el reporte de mora y el bloque financiero del balance).',
+    documentacion: (extras.documentos ?? []).filter(d => d.estado === 'ok').length
+      ? `Documentación sectorial considerada: ${(extras.documentos ?? []).filter(d => d.estado === 'ok').map(d => `${DOCUMENTOS_SECTORIALES[d.tipo].label} (${d.nombreArchivo}${d.fechaDocumento ? `, al ${d.fechaDocumento}` : ''}${d.editado ? ', editado' : ''})`).join('; ')}.`
+      : null,
   };
 }

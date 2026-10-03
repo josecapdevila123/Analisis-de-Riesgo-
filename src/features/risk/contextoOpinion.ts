@@ -8,6 +8,7 @@ import { DocumentoSectorial } from '../sectorDocs/tipos';
 import { indicadoresFinancieros } from '../ratios/financieras';
 import { disponibilidadesActuales } from '../ratios/calculations';
 import { RiskDimension } from '../extraction/schemas';
+import { faltantesBase } from './prechequeo';
 import { RiskSignal } from './signals';
 import { SectorCaso } from './porton';
 import { stripRiskConclusion } from './summary';
@@ -81,6 +82,8 @@ export function armarContextoOpinion(i: ContextoOpinionInput) {
       datos: d.extraccion,
       naturaleza: 'Información declarada por el cliente, no auditada.',
     })),
+    // Del pre-chequeo: documentación base que no se recibió (va a información faltante).
+    documentacion_base_faltante: faltantesBase(extraction),
     documentacion_sectorial_recomendada_faltante: perfil.documentos
       .filter(r => r.recomendado && !documentos.some(d => d.tipo === r.tipo))
       .map(r => DOCUMENTOS_SECTORIALES[r.tipo].label),

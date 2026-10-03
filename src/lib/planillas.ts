@@ -34,3 +34,16 @@ export async function planillaATexto(file: File): Promise<string> {
   const texto = hojas.join('\n\n');
   return texto.length > MAX_CARACTERES ? `${texto.slice(0, MAX_CARACTERES)}\n[... planilla recortada por tamaño ...]` : texto;
 }
+
+// Archivo → formato que acepta el cliente de Gemini: las planillas como texto,
+// el resto como data URL (base64).
+export async function leerArchivo(file: File): Promise<{ file: File; preview: string; texto?: string }> {
+  if (esPlanilla(file)) return { file, preview: '', texto: await planillaATexto(file) };
+  const preview = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+  return { file, preview };
+}
