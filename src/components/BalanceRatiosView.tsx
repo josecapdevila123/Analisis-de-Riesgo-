@@ -6,7 +6,7 @@ import { bloquesDelPerfil, RatioKind } from '../features/ratios/blocks';
 import { PerfilEfectivo, perfilEfectivo } from '../features/risk/policy';
 import { DocumentoSectorial } from '../features/sectorDocs/tipos';
 import { FinancieraDatos } from './FinancieraDatos';
-import { EditableNumber, Path, useEdit } from '../features/editing/editing';
+import { EditableNumber, EditableText, Path, useEdit } from '../features/editing/editing';
 import { STATUS, Status, StatusBadge } from './riskColors';
 
 // Pestaña "Balance y Ratios": estados contables comparativos (editables en modo
@@ -297,6 +297,26 @@ export function BalanceRatiosView({ extraction, ratios, perfil = perfilEfectivo(
       </div>
 
       {perfil.modelo === 'financiera' && <FinancieraDatos extraction={extraction} documentos={documentos} perfil={perfil} />}
+
+      {/* Anexo de bienes de uso (si el balance lo trae) */}
+      {extraction.anexo_bienes_de_uso && extraction.anexo_bienes_de_uso.length > 0 && (
+        <section className="bg-white border border-ink/15">
+          <header className="px-5 py-4 border-b border-ink/10">
+            <h3 className="font-display text-base font-semibold">Anexo de bienes de uso</h3>
+            <p className="text-xs text-ink/50">Valor residual al cierre del ejercicio actual. Miles de $.</p>
+          </header>
+          <ul className="divide-y divide-ink/5 text-sm">
+            {extraction.anexo_bienes_de_uso.map((b, i) => (
+              <li key={i} className="flex items-center justify-between gap-3 px-5 py-2">
+                <EditableText path={['anexo_bienes_de_uso', i, 'rubro']} value={b.rubro} />
+                <span className="tabular-nums font-medium">
+                  <EditableNumber path={['anexo_bienes_de_uso', i, 'valor_residual']} value={b.valor_residual} display={b.valor_residual === null ? '—' : fmtNum(b.valor_residual, 0)} inputClassName="w-28" />
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Columnas tipo mampostería: cada columna apila sus tarjetas sin huecos */}
       <div className="columns-1 @5xl:columns-2 gap-x-6">
