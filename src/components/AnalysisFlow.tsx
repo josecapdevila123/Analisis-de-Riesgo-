@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { FileText } from 'lucide-react';
+import { FileText, ShieldCheck } from 'lucide-react';
 import { CaseState } from '../features/extraction/pipeline';
 import { cn } from '../lib/utils';
 
@@ -37,6 +37,19 @@ const MENSAJES: string[][] = [
   ],
 ];
 
+// Partículas que caen de la gota al informe: desvío horizontal (px), tamaño,
+// demora y duración. Fijas para que el dibujo no cambie en cada render.
+const PARTICULAS = [
+  { x: -24, tam: 4, delay: 0, dur: 4.2 },
+  { x: 12, tam: 3, delay: 0.7, dur: 4.8 },
+  { x: -6, tam: 5, delay: 1.4, dur: 4.4 },
+  { x: 28, tam: 3, delay: 2.1, dur: 5.2 },
+  { x: -34, tam: 2.5, delay: 2.8, dur: 4.6 },
+  { x: 4, tam: 4, delay: 3.4, dur: 4.3 },
+  { x: 20, tam: 2.5, delay: 4.0, dur: 5.0 },
+];
+const CAIDA = 92;
+
 const MAX_ARCHIVOS = 4;
 const ALTO = 104;
 // Hilos por documento: desplazamiento, patrón de gotas y velocidad. Los
@@ -70,8 +83,7 @@ export function AnalysisFlow({ stage, fileNames }: { stage: CaseState | null; fi
   }, []);
 
   const visibles = fileNames.slice(0, MAX_ARCHIVOS);
-  const resto = fileNames.length - visibles.length;
-  const columnas = visibles.length + (resto > 0 ? 1 : 0) || 1;
+  const columnas = visibles.length || 1;
   const centro = ancho / 2;
   const camino = (i: number, dx: number) => {
     const x = ((i + 0.5) / columnas) * ancho + dx;
@@ -103,11 +115,6 @@ export function AnalysisFlow({ stage, fileNames }: { stage: CaseState | null; fi
               <span className="relative hidden truncate text-xs text-ink/60 sm:inline">{nombre}</span>
             </div>
           ))}
-          {resto > 0 && (
-            <div className="mx-auto flex w-full max-w-[150px] items-center justify-center rounded-xl border border-ink/10 bg-panel px-2.5 py-2.5 text-xs text-ink/40">
-              +{resto}
-            </div>
-          )}
         </div>
 
         {/* Hilos de agua hacia la gota */}
@@ -157,6 +164,41 @@ export function AnalysisFlow({ stage, fileNames }: { stage: CaseState | null; fi
           style={{ background: 'radial-gradient(circle at 60% 65%, #35EEC8 0%, #9af5e1 70%)', animationDelay: '-5s', animationDuration: '15s' }}
         />
         <span className="absolute left-[38%] top-[34%] h-4 w-4 rounded-full bg-white/80 blur-[3px]" />
+      </div>
+
+      {/* Partículas que caen de la gota y nutren el informe */}
+      <div className="relative mx-auto -mt-7 w-32" style={{ height: CAIDA }} aria-hidden="true">
+        {PARTICULAS.map((e, i) => (
+          <span
+            key={i}
+            className="agua-particula absolute left-1/2 top-0 block rounded-full bg-brand-green"
+            style={{
+              '--x': `${e.x}px`,
+              '--caida': `${CAIDA - 4}px`,
+              width: e.tam,
+              height: e.tam,
+              marginLeft: -e.tam / 2,
+              boxShadow: '0 0 6px 1px rgb(53 238 200 / 0.6)',
+              animationDelay: `${e.delay}s`,
+              animationDuration: `${e.dur}s`,
+            } as React.CSSProperties}
+          />
+        ))}
+      </div>
+
+      {/* El informe que se va formando: una línea más por etapa */}
+      <div className="agua-nutre mx-auto w-52 rounded-xl border border-ink/10 bg-white px-4 py-3">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-ink/50" />
+          <span className="text-xs font-semibold text-ink/70">Informe de riesgo</span>
+        </div>
+        <div className="mt-2.5 space-y-1.5">
+          {['w-full', 'w-4/5', 'w-3/5'].map((w, i) => (
+            <div key={w} className={cn('h-1 overflow-hidden rounded-full bg-ink/[0.06]', w)}>
+              <div className={cn('h-full rounded-full bg-brand-green/70 transition-all duration-[1500ms] ease-out', i < paso ? 'w-full' : i === paso ? 'w-1/2' : 'w-0')} />
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Qué está haciendo */}
