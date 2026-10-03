@@ -9,6 +9,10 @@ import { RiskDimension, SeveridadRiesgo } from '../extraction/schemas';
 import { stripRiskConclusion } from '../risk/summary';
 import { RATIO_ASSUMPTIONS } from '../risk/policy';
 import { RATIO_BLOCKS as SHARED_RATIO_BLOCKS, RatioKind as SharedRatioKind } from '../ratios/blocks';
+import { RATIO_THRESHOLDS, PROJECTION_PARAMS } from '../risk/policy';
+import { resolverProyeccion } from '../projections/defaults';
+import { faltantes, margenDeudaNueva, proyectar, puntoDeQuiebre } from '../projections/model';
+import { ESCENARIOS, ESCENARIO_LABEL, proyeccionesVacias } from '../projections/types';
 
 // ============================================================================
 // Informe de riesgo para comité (jsPDF). Orden: portada con el dictamen →
@@ -77,6 +81,7 @@ const pdfSafe = (s: string | number | null | undefined): string =>
     .replace(/≥/g, '>=').replace(/≤/g, '<=')
     .replace(/[→⇒]/g, '->').replace(/[←]/g, '<-').replace(/↳/g, '')
     .replace(/≈/g, '~').replace(/[•●▪]/g, '-')
+    .replace(/\u2212/g, '-').replace(/Δ\s?/g, 'Var. ')
     .replace(/[‐-‒]/g, '-')
     .replace(/[^\u0000-ÿ–—‘’“”…€]/g, '');
 
@@ -799,6 +804,134 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
   // ======================================================================
   // 5. SISTEMA FINANCIERO (NOSIS)
   // ======================================================================
+
+  // ======================================================================
+  // PROYECCIONES (capacidad de repago, cálculo determinístico)
+  // ======================================================================
+
+  sectionTitle('Proyección de capacidad de repago');
+  {
+    const g = activeResult.proyecciones ?? proyeccionesVacias();
+    const res = resolverProyeccion(extraction, ratios, g);
+    const pctTxt = (v: number | null | undefined, dec = 1) => (v === null || v === undefined ? '-' : `${fmtNum(v * 100, dec)}%`);
+    const xTxt = (v: number | null | undefined) => (v === null || v === undefined ? '-' : `${fmtNum(v, 2)}x`);
+    const dscrRGB = (v: number | null) =>
+      v === null ? null : v > RATIO_THRESHOLDS.dscr.sano ? STATUS_RGB.good : v >= RATIO_THRESHOLDS.dscr.alerta ? STATUS_RGB.warning : STATUS_RGB.critical;
+    paragraph('Cálculo determinístico en código, sin IA. Miles de $ en moneda constante del cierre del balance. Los valores editados por el analista llevan un asterisco.', 8.5, 'italic');
+
+    subheading('Año base');
+    const inflacion = g.base.inflacionMensual ?? null;
+    table({
+      startY: y,
+      body: [
+        ['Inflación mensual', inflacion === null ? (res.sugeridosBase.inflacionRequerida ? 'Falta (necesaria)' : 'No requerida') : `${pctTxt(inflacion, 2)}*`, 'La carga el analista'],
+        ['Ventas base', res.base ? `${money(res.base.ventas)}${'ventas' in g.base ? '*' : ''}` : '-', res.sugeridosBase.ventas.fuente],
+        ['Deuda bancaria corriente', money(res.base?.deudaCorriente ?? res.sugeridosBase.deudaCorriente.valor), res.sugeridosBase.deudaCorriente.fuente],
+        ['Deuda bancaria no corriente', money(res.base?.deudaNoCorriente ?? res.sugeridosBase.deudaNoCorriente.valor), res.sugeridosBase.deudaNoCorriente.fuente],
+        ['Deuda post balance', res.incluirDeudaPostBalance ? money(res.base?.deudaPostBalance ?? res.sugeridosBase.deudaPostBalance.valor) : 'Excluida', res.sugeridosBase.deudaPostBalance.fuente],
+      ],
+      columnStyles: { 0: { cellWidth: 48, fontStyle: 'bold' }, 1: { cellWidth: 34, halign: 'right' }, 2: { cellWidth: CW - 82, textColor: MUTED } },
+    });
+
+    subheading('Supuestos por escenario');
+    const horizonteMax = Math.max(...ESCENARIOS.map(e => res.supuestos[e].horizonte));
+    const mark = (e: typeof ESCENARIOS[number], campo: string) => (campo in g.escenarios[e] ? '*' : '');
+    const filasSup: Array<[string, (e: typeof ESCENARIOS[number]) => string]> = [
+      ['Horizonte (años)', e => `${res.supuestos[e].horizonte}${mark(e, 'horizonte')}`],
+      ...Array.from({ length: horizonteMax }, (_, i) => [
+        `Crecimiento real ventas año ${i + 1}`,
+        (e: typeof ESCENARIOS[number]) => i < res.supuestos[e].horizonte
+          ? `${pctTxt(res.supuestos[e].crecimiento[i])}${g.escenarios[e].crecimiento && i in g.escenarios[e].crecimiento! ? '*' : ''}`
+          : '-',
+      ] as [string, (e: typeof ESCENARIOS[number]) => string]),
+      ['Margen EBITDA', e => `${pctTxt(res.supuestos[e].margenEbitda)}${mark(e, 'margenEbitda')}`],
+      ['Capex de mantenimiento (% ventas)', e => `${pctTxt(res.supuestos[e].capexPct)}${mark(e, 'capexPct')}`],
+      ['Capital de trabajo (% ventas)', e => `${pctTxt(res.supuestos[e].capitalTrabajoPct)}${mark(e, 'capitalTrabajoPct')}`],
+      ['Liberación de capital de trabajo', e => `${res.supuestos[e].liberarCapitalTrabajo ? 'Sí' : 'No'}${mark(e, 'liberarCapitalTrabajo')}`],
+      ['Tasa real de la deuda', e => `${pctTxt(res.supuestos[e].tasaReal)}${mark(e, 'tasaReal')}`],
+      ['Alícuota impuesto a las ganancias', e => `${pctTxt(res.supuestos[e].alicuota)}${mark(e, 'alicuota')}`],
+      ['Años amortización deuda no corriente', e => `${res.supuestos[e].aniosAmortizacionNoCorriente}${mark(e, 'aniosAmortizacionNoCorriente')}`],
+      ['Años amortización deuda post balance', e => `${res.supuestos[e].aniosAmortizacionPostBalance}${mark(e, 'aniosAmortizacionPostBalance')}`],
+    ];
+    table({
+      startY: y,
+      head: [['Supuesto', ...ESCENARIOS.map(e => ESCENARIO_LABEL[e])]],
+      body: filasSup.map(([label, f]) => [label, ...ESCENARIOS.map(f)]),
+      columnStyles: { 0: { cellWidth: 82 }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+    });
+
+    const proyectados = Object.fromEntries(ESCENARIOS.map(e => {
+      const sup = res.supuestos[e];
+      const faltan = [...res.faltaBase, ...faltantes(sup)];
+      return [e, !res.base || faltan.length ? { faltan, r: null } : { faltan, r: proyectar(res.base, sup) }];
+    })) as Record<typeof ESCENARIOS[number], { faltan: string[]; r: ReturnType<typeof proyectar> | null }>;
+
+    const base = proyectados.base;
+    if (!base.r) {
+      paragraph(`Proyección incompleta: falta ${base.faltan.join(', ')}.`, 9.5, 'italic');
+    } else {
+      const f = base.r.filas;
+      subheading('Proyección · escenario Base');
+      const fila = (label: string, get: (i: number) => string, bold = false) => ({ label, get, bold });
+      const filas = [
+        fila('Ventas', i => fmtNum(f[i].ventas, 0)),
+        fila('EBITDA', i => fmtNum(f[i].ebitda, 0)),
+        fila('− Impuestos', i => fmtNum(-f[i].impuestos || 0, 0)),
+        fila('− Capex de mantenimiento', i => fmtNum(-f[i].capex || 0, 0)),
+        fila('− Δ Capital de trabajo', i => fmtNum(-f[i].deltaCapitalTrabajo || 0, 0)),
+        fila('Flujo para deuda (CFADS)', i => fmtNum(f[i].cfads, 0), true),
+        fila('Servicio de deuda', i => fmtNum(f[i].servicio, 0), true),
+        fila('DSCR', i => (f[i].dscr === null ? 'sin deuda' : xTxt(f[i].dscr)), true),
+        fila('Deuda / EBITDA (fin de año)', i => xTxt(f[i].deudaEbitda)),
+        fila('Caja acumulada', i => fmtNum(f[i].cajaAcumulada, 0)),
+      ];
+      table({
+        startY: y,
+        head: [['Miles de $', ...f.map(r => `Año ${r.anio}`)]],
+        body: filas.map(r => [r.label, ...f.map((_, i) => r.get(i))]),
+        columnStyles: Object.fromEntries([[0, { cellWidth: 62 }], ...f.map((_, i) => [i + 1, { halign: 'right' }])]),
+        didParseCell: data => {
+          if (data.section === 'body' && filas[data.row.index]?.bold) data.cell.styles.fontStyle = 'bold';
+          if (data.section === 'body' && filas[data.row.index]?.label === 'DSCR' && data.column.index > 0) {
+            const c = dscrRGB(f[data.column.index - 1].dscr);
+            if (c) data.cell.styles.fillColor = tint(c, 0.35);
+          }
+        },
+      });
+    }
+
+    subheading('DSCR por año y resumen de escenarios');
+    table({
+      startY: y,
+      head: [['Escenario', ...Array.from({ length: horizonteMax }, (_, i) => `Año ${i + 1}`), 'DSCR mínimo', 'Punto de quiebre']],
+      body: ESCENARIOS.map(e => {
+        const p = proyectados[e];
+        if (!p.r) return [ESCENARIO_LABEL[e], ...Array.from({ length: horizonteMax }, () => '-'), 'Incompleto', '-'];
+        const q = puntoDeQuiebre(res.base!, res.supuestos[e]);
+        const quiebre = q.tipo === 'valor' ? `${fmtNum(q.crecimientoAnio1 * 100, 1)}% año 1` : q.tipo === 'ya_debajo' ? 'Ya debajo de 1x' : q.tipo === 'no_se_alcanza' ? 'No se alcanza' : 'Sin deuda';
+        return [
+          ESCENARIO_LABEL[e],
+          ...Array.from({ length: horizonteMax }, (_, i) => { const fl = p.r!.filas[i]; return fl ? (fl.dscr === null ? 'sin deuda' : xTxt(fl.dscr)) : '-'; }),
+          p.r.dscrMinimo ? `${xTxt(p.r.dscrMinimo.valor)} (año ${p.r.dscrMinimo.anio})` : 'sin deuda',
+          quiebre,
+        ];
+      }),
+      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 26 } },
+      didParseCell: data => {
+        if (data.section !== 'body' || data.column.index === 0 || data.column.index > horizonteMax) return;
+        const fl = proyectados[ESCENARIOS[data.row.index]]?.r?.filas[data.column.index - 1];
+        const c = fl ? dscrRGB(fl.dscr) : null;
+        if (c) data.cell.styles.fillColor = tint(c, 0.35);
+        data.cell.styles.halign = 'right';
+      },
+    });
+    const est = proyectados.estres.r;
+    if (est) {
+      const m = margenDeudaNueva(est, PROJECTION_PARAMS.dscrObjetivoDeudaNueva);
+      paragraph(`Margen para deuda nueva (escenario Estrés): ${m > 0 ? `${money(m)} de servicio anual adicional manteniendo DSCR >= ${fmtNum(PROJECTION_PARAMS.dscrObjetivoDeudaNueva, 2)}x` : 'sin margen'}.`, 9);
+    }
+    paragraph('Punto de quiebre: caída real de ventas en el año 1 que lleva el DSCR mínimo a 1,0x, calculado sin liberación de capital de trabajo. En impuestos se usa el capex de mantenimiento como proxy de la depreciación.', 7.5, 'italic');
+  }
 
   sectionTitle('Sistema financiero (Nosis)');
   const nosis = extraction.extraccion_nosis;
