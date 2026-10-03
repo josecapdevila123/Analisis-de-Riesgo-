@@ -65,6 +65,10 @@ POST CIERRE (si hay información posterior al balance)
 ===========================================================
 Si los documentos incluyen ventas posteriores o deuda bancaria asumida post-balance, completá \`analisis_post_cierre\`. Extraé fechas, ventas mensuales (con comparativa al año anterior si está) y detalle de deuda post-balance. Para cada monto identificá la moneda: "ARS" para pesos argentinos, "USD" para dólares. Si hay montos en ambas monedas, devolvé una entrada separada por moneda.
 
+Ventas en unidades físicas: si el documento informa también las ventas medidas en una unidad física o de negocio (toneladas, litros, unidades, cabezas, metros cuadrados, clientes, usuarios, etc.):
+- \`unidad_medida\`: la unidad tal como la usa el documento, en plural y minúscula (ej. "toneladas", "clientes"). Si informa varias, usá la principal (la que representa la actividad central) y mencioná las otras en \`notas_relevantes\`.
+- En cada mes, \`cantidad\` y \`cantidad_anio_anterior\` en esa unidad, sin convertir. Si un mes tiene una fila en ARS y otra en USD, poné la cantidad en una sola de las dos y \`null\` en la otra.
+- Si no informa unidades físicas: \`unidad_medida: null\` y las cantidades en \`null\`. No las estimes a partir de los montos.
 Si no hay info: devolvé \`analisis_post_cierre: null\`.
 
 ===========================================================
@@ -127,11 +131,12 @@ ESTRUCTURA JSON DE SALIDA (estricta)
   "analisis_post_cierre": {
     "periodo_analizado": { "fecha_inicio": "2025-01-01", "fecha_fin": "2025-03-31" },
     "detalle_ventas_mensuales": [
-      { "mes": "Enero 2025", "monto": 1500, "monto_anio_anterior": 1200, "moneda": "ARS" },
-      { "mes": "Enero 2025", "monto": 50, "monto_anio_anterior": null, "moneda": "USD" }
+      { "mes": "Enero 2025", "monto": 1500, "monto_anio_anterior": 1200, "moneda": "ARS", "cantidad": 320, "cantidad_anio_anterior": 300 },
+      { "mes": "Enero 2025", "monto": 50, "monto_anio_anterior": null, "moneda": "USD", "cantidad": null, "cantidad_anio_anterior": null }
     ],
     "total_ventas_post_cierre": 4500,
     "notas_relevantes": null,
+    "unidad_medida": "toneladas",
     "deuda_bancaria_post_balance_detalle": [
       { "entidad": "Banco XYZ", "monto": 500, "moneda": "ARS" },
       { "entidad": "Banco ABC", "monto": 100, "moneda": "USD" }
