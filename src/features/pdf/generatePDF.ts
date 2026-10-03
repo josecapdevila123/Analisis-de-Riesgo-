@@ -13,6 +13,8 @@ import { RATIO_THRESHOLDS, PROJECTION_PARAMS } from '../risk/policy';
 import { resolverProyeccion } from '../projections/defaults';
 import { faltantes, margenDeudaNueva, proyectar, puntoDeQuiebre } from '../projections/model';
 import { ESCENARIOS, ESCENARIO_LABEL, proyeccionesVacias } from '../projections/types';
+import { etiquetaPeriodo, mesesDeSerie, serieTotal, seriePorEntidad, variacion, variacionTotalPeriodo } from '../nosis/evolucion';
+import { armarArbol, NodoAccionista } from '../accionistas/estructura';
 
 // ============================================================================
 // Informe de riesgo para comité (jsPDF). Orden: portada con el dictamen →
@@ -56,7 +58,8 @@ const RATIO_STATUS_LABEL: Record<RatioStatus, string> = { healthy: 'Sano', alert
 const tint = ([r, g, b]: RGB, alpha = 0.3): RGB => [r, g, b].map(c => Math.round(255 - (255 - c) * alpha)) as RGB;
 
 const situacionRGB = (s: number | null | undefined): RGB | null => {
-  if (s === null || s === undefined) return null;
+  // La escala del BCRA va de 1 a 6; otro valor es un error de lectura: sin color.
+  if (s === null || s === undefined || !Number.isInteger(s) || s < 1 || s > 6) return null;
   if (s <= 1) return STATUS_RGB.good;
   if (s === 2) return STATUS_RGB.warning;
   if (s === 3) return STATUS_RGB.serious;
@@ -952,6 +955,37 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
       { label: 'Pedidos de quiebra', value: `${nosis.pedidos_quiebra_cantidad ?? '-'}`, accent: (nosis.pedidos_quiebra_cantidad ?? 0) > 0 ? STATUS_RGB.critical : undefined },
     ]);
 
+    const serieNosis = serieTotal(nosis.evolucion_deuda ?? []);
+    const porEntidadNosis = seriePorEntidad(nosis.evolucion_deuda ?? []);
+    if (serieNosis.length >= 2) {
+      subheading(`Evolución de la deuda en el sistema (${mesesDeSerie(serieNosis)} meses)`);
+      // Gráfico de línea: total mensual, con los meses en situación 2 o peor marcados.
+      const h = 42;
+      ensure(h + 16);
+      const x0 = M + 16, x1 = M + CW - 2, y0 = y + 2, y1 = y + h;
+      const max = Math.max(...serieNosis.map(p => p.total), 1);
+      const px = (i: number) => x0 + (i / (serieNosis.length - 1)) * (x1 - x0);
+      const py = (v: number) => y1 - (v / max) * (y1 - y0);
+      doc.setDrawColor(...RULE);
+      doc.setLineWidth(0.2);
+      [0, 0.5, 1].forEach(f => doc.line(x0, py(max * f), x1, py(max * f)));
+      setText(6.5, 'normal', MUTED);
+      [0, 0.5, 1].forEach(f => text(fmtNum((max * f) / 1000, 0) + ' M', x0 - 2, py(max * f) + 1, { align: 'right' }));
+      doc.setDrawColor(...INK);
+      doc.setLineWidth(0.5);
+      for (let i = 1; i < serieNosis.length; i++) doc.line(px(i - 1), py(serieNosis[i - 1].total), px(i), py(serieNosis[i].total));
+      serieNosis.forEach((p, i) => {
+        const c = (p.peorSituacion ?? 1) >= 2 ? situacionRGB(p.peorSituacion) : null;
+        if (c) { doc.setFillColor(...c); doc.circle(px(i), py(p.total), 1, 'F'); }
+      });
+      const marcas = [0, Math.floor((serieNosis.length - 1) / 2), serieNosis.length - 1];
+      marcas.forEach(i => text(etiquetaPeriodo(serieNosis[i].periodo), px(i), y1 + 4, { align: i === 0 ? 'left' : i === serieNosis.length - 1 ? 'right' : 'center' }));
+      doc.setLineWidth(0.2);
+      y = y1 + 8;
+      const pct = (v: ReturnType<typeof variacion>) => (v && v.pct !== null ? `${v.pct > 0 ? '+' : ''}${fmtNum(v.pct * 100, 1)}%` : 's/d');
+      paragraph(`Variación: últimos 6 meses ${pct(variacion(serieNosis, 6))} · últimos 12 meses ${pct(variacion(serieNosis, 12))} · todo el período ${pct(variacionTotalPeriodo(serieNosis))}. Escala en millones de $ (miles de miles). Montos nominales, sin ajustar por inflación; los puntos de color marcan meses con situación 2 o peor.`, 7.5, 'italic');
+    }
+
     if (nosis.detalle_entidades.length > 0) {
       const totalRef = (nosis.deuda_financiera_total_nosis ?? 0) > 0
         ? nosis.deuda_financiera_total_nosis!
@@ -959,12 +993,17 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
       subheading('Deuda por entidad');
       table({
         startY: y,
-        head: [['Entidad', 'Situación', 'Monto', 'Participación']],
+        head: [['Entidad', 'Situación', 'Monto', 'Participación', ...(porEntidadNosis.length > 0 ? ['Var. 12 m'] : [])]],
         body: nosis.detalle_entidades.map(e => {
           const monto = Number(e.monto) || 0;
-          return [e.entidad || 'Desconocido', e.situacion === null ? '-' : String(e.situacion), money(monto), totalRef > 0 ? `${fmtNum((monto / totalRef) * 100, 1)}%` : '-'];
+          const fila = [e.entidad || 'Desconocido', e.situacion === null ? '-' : String(e.situacion), money(monto), totalRef > 0 ? `${fmtNum((monto / totalRef) * 100, 1)}%` : '-'];
+          if (porEntidadNosis.length === 0) return fila;
+          const norm = (x: string | null | undefined) => (x ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+          const t = porEntidadNosis.find(p => norm(p.entidad) === norm(e.entidad));
+          const v = t ? variacion(t.puntos.map(p => ({ periodo: p.periodo, total: p.monto })), 12) : null;
+          return [...fila, v && v.pct !== null ? `${v.pct > 0 ? '+' : ''}${fmtNum(v.pct * 100, 1)}%` : v ? 'nueva' : '-'];
         }),
-        columnStyles: { 0: { cellWidth: 82 }, 1: { halign: 'center', fontStyle: 'bold', cellWidth: 24 }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+        columnStyles: { 0: { cellWidth: porEntidadNosis.length > 0 ? 66 : 82 }, 1: { halign: 'center', fontStyle: 'bold', cellWidth: 24 }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } },
         didParseCell: data => {
           if (data.section === 'body' && data.column.index === 1) {
             const c = situacionRGB(nosis.detalle_entidades[data.row.index]?.situacion);
@@ -1052,7 +1091,9 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
   const accionistas = (accDir?.accionistas ?? []) as Shareholder[];
   if (accionistas.length > 0) {
     subheading('Composición accionaria');
-    const renderAccionistas = (list: Shareholder[], level: number, parent?: string) => {
+    const arbolAcc = armarArbol(accionistas);
+    const hayCadenas = arbolAcc.some(n => n.hijos.length > 0);
+    const renderAccionistas = (list: Shareholder[], nodos: NodoAccionista[], level: number, parent?: string) => {
       const indent = (level - 1) * 6;
       if (parent) {
         ensure(12);
@@ -1063,14 +1104,19 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
       table({
         startY: y,
         margin: { left: M + indent, right: M, top: TOP, bottom: PAGE_H - BOTTOM },
-        head: [['Nombre / razón social', 'DNI / CUIT', 'Participación']],
-        body: list.map(a => [a.nombre, a.dni_cuit, a.participacion === null ? 'N/D' : `${fmtNum(Number(a.participacion), 2)}%`]),
+        head: [['Nombre / razón social', 'DNI / CUIT', 'Participación', ...(hayCadenas ? ['Sobre la empresa'] : [])]],
+        body: list.map((a, i) => {
+          const fila = [a.nombre, a.dni_cuit, a.participacion === null ? 'N/D' : `${fmtNum(Number(a.participacion), 2)}%`];
+          const ind = nodos[i]?.indirecta;
+          return hayCadenas ? [...fila, ind === null || ind === undefined ? 'N/D' : `${fmtNum(ind, 2)}%`] : fila;
+        }),
         headStyles: level === 1 ? {} : { fillColor: SOFT, textColor: INK },
-        columnStyles: { 2: { halign: 'right', fontStyle: 'bold', cellWidth: 28 } },
+        columnStyles: { 2: { halign: 'right', fontStyle: 'bold', cellWidth: 28 }, 3: { halign: 'right', cellWidth: 30 } },
       });
-      list.forEach(a => { if (a.subAccionistas?.length) renderAccionistas(a.subAccionistas, level + 1, a.nombre); });
+      list.forEach((a, i) => { if (a.subAccionistas?.length) renderAccionistas(a.subAccionistas, nodos[i]?.hijos ?? [], level + 1, a.nombre); });
     };
-    renderAccionistas(accionistas, 1);
+    renderAccionistas(accionistas, arbolAcc, 1);
+    if (hayCadenas) paragraph('Participación: sobre la sociedad madre. Sobre la empresa: producto de la cadena societaria.', 7.5, 'italic');
   }
   const directorio = accDir?.directorio ?? [];
   if (directorio.length > 0) {
