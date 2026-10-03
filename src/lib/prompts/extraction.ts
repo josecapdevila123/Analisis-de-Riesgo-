@@ -41,6 +41,7 @@ Además, si el informe lo trae:
 - \`deuda_fiscal_previsional\`: deuda informada con ARCA/AFIP (fiscal y de seguridad social), en miles de pesos.
 - \`planes_de_pago_arca\`: true si informa planes de pago vigentes con ARCA/AFIP.
 - \`juicios_cantidad\`, \`embargos_cantidad\`, \`pedidos_quiebra_cantidad\`: cantidades informadas (0 si el informe dice que no hay; null si no lo informa).
+- \`evolucion_deuda\`: la evolución mensual de la deuda en el sistema financiero (Central de Deudores del BCRA, normalmente los últimos 24 meses). Una fila por entidad y por mes: \`{periodo: "AAAA-MM", entidad, monto, situacion}\`, con el monto en miles de pesos tal como figura ese mes (si el informe está en pesos, dividí por 1000). Solo los meses y entidades que el informe muestra: no completes ni estimes meses faltantes. Si el informe trae solo el total mensual sin abrir por entidad, usá \`entidad: "TOTAL"\`. Si no trae evolución: \`[]\`.
 Si no hay informe Nosis: devolvé \`extraccion_nosis: null\`.
 
 ===========================================================
@@ -152,7 +153,13 @@ ESTRUCTURA JSON DE SALIDA (estricta)
     "planes_de_pago_arca": null,
     "juicios_cantidad": 0,
     "embargos_cantidad": 0,
-    "pedidos_quiebra_cantidad": 0
+    "pedidos_quiebra_cantidad": 0,
+    "evolucion_deuda": [
+      { "periodo": "2025-05", "entidad": "Banco XYZ", "monto": 420, "situacion": 1 },
+      { "periodo": "2025-05", "entidad": "Banco ABC", "monto": 900, "situacion": 1 },
+      { "periodo": "2025-06", "entidad": "Banco XYZ", "monto": 500, "situacion": 1 },
+      { "periodo": "2025-06", "entidad": "Banco ABC", "monto": 1000, "situacion": 1 }
+    ]
   },
   "accionistas_y_directorio": null,
   "informacion_complementaria": {

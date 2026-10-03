@@ -47,6 +47,8 @@ src/
     extraction/                pipeline, geminiClient, schemas (Zod)
     ratios/                    calculations (27 ratios: incluye DSCR, deuda neta/EBITDA, calidad de la ganancia), sanityChecks, crossCheck
     risk/                      policy (umbrales), signals (reglas), score (puntaje y PCE), assessment (opinión integral)
+    nosis/evolucion.ts         Serie mensual de deuda en el sistema (Central de Deudores): total, por entidad, variaciones. Nominal, sin ajuste por inflación
+    accionistas/estructura.ts  Cadena societaria: participación indirecta, quiénes quedan al final de cada cadena, cruce directorio-accionistas
     cases/useCases.ts          CRUD de casos en Firestore
     auth/useAuth.ts            Login con Google
     editing/                   Edición de valores en el dashboard (EditProvider, inputs, SourceDataEditor)
@@ -78,12 +80,13 @@ npm run preview    # sirve dist/
 
 - Variable requerida: `GEMINI_API_KEY` en `.env.local`. Vite la inyecta en el bundle mediante `define`.
 - La configuración de Firebase está en `firebase-applet-config.json`.
-- Tests con Vitest en `src/features/ratios/*.test.ts`, sobre un balance de ejemplo en `__fixtures__/extraction.ts`. Por ahora solo cubren ratios, sanity checks y cruce Nosis.
+- Tests con Vitest junto a cada módulo (`src/features/**/*.test.ts`): ratios, sanity checks y cruce Nosis (sobre el balance de ejemplo de `ratios/__fixtures__/extraction.ts`), riesgo, proyecciones, evolución Nosis y estructura societaria.
 
 ## Reglas
 
 - **Política de riesgos: `src/features/risk/policy.ts` es la fuente única** de semáforos de ratios, reglas con severidad y piso, pesos, bandas y tramos de pérdida esperada. La usan `calculations.ts`, `signals.ts`, `score.ts` y la página "Política de riesgos" de la app (`components/RiskPolicyView.tsx`). Nunca hardcodear un umbral fuera de ese archivo. Hoy es una propuesta inicial a validar con el área de Riesgos; cambiarla sigue la regla de fórmulas: con tests.
 - **Proyecciones (`src/features/projections`) sin IA.** Flujo de fondos para capacidad de repago 100% en código: `model.ts` (proyección, punto de quiebre, margen para deuda nueva), `defaults.ts` (supuestos sugeridos con su fuente; si falta un dato, vacío con aviso, nunca un default silencioso). Todo en pesos del cierre del balance: el balance no se toca, lo posterior al cierre se lleva a esa moneda con la inflación que carga el analista. Se guarda solo lo editado (`proyecciones` en el caso), nunca la extracción. Los parámetros fijos están en `PROJECTION_PARAMS` de la política. Cambios al modelo: con tests, como los ratios.
+- **Nunca mostrar datos inventados.** Si un dato no se extrajo, se muestra vacío o con un aviso ("no se encontró en la documentación"), nunca un ejemplo que parezca real.
 - **La Opinión de riesgos es la única fuente del dictamen.** El resumen ejecutivo (verificación) no da conclusión ni calificación; los resúmenes viejos se muestran sin su párrafo de "Conclusión" (`risk/summary.ts`).
 - **No cambiar fórmulas de ratios sin tests.** Esto incluye `calculations.ts`, los umbrales de `evaluateRatioStatus`, las palabras clave de rubros, `sanityChecks.ts` y `crossCheck.ts`. Primero se escribe o ajusta el test con el valor esperado calculado a mano, después se cambia la fórmula, y `npm run test` tiene que pasar. Un ratio mal calculado termina en una decisión de crédito.
 - **Correr `npm run lint` (y `npm run test` si se tocó `src/features/ratios`) antes de cada commit.** Si falla, no se commitea.

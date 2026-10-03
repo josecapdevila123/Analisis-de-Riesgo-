@@ -66,6 +66,8 @@ import { ProyeccionesView } from './components/ProyeccionesView';
 import { ProyeccionesGuardadas } from './features/projections/types';
 import { RATIO_BLOCKS as SHARED_RATIO_BLOCKS } from './features/ratios/blocks';
 import { RiskOpinionView } from './components/RiskOpinionView';
+import { SistemaFinancieroView } from './components/SistemaFinancieroView';
+import { AccionistasView } from './components/AccionistasView';
 import { AnalysisFlow } from './components/AnalysisFlow';
 import { RiskPolicyView } from './components/RiskPolicyView';
 import { runRiskAssessment } from './features/risk/assessment';
@@ -1378,303 +1380,18 @@ export default function App() {
                   )}
 
                   {activeTab === 'Sistema Financiero (Nosis)' && (
-                      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        {/* Nosis Section */}
-                  {activeResult.extraction?.extraccion_nosis && (
-                    <div className="border border-ink/15 bg-white mt-8">
-                      <div className="flex items-center justify-between p-4 border-b border-ink/10 bg-canvas select-none">
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg">📑</span>
-                          <span className="text-lg font-bold uppercase tracking-wider">PESTAÑA NOSIS (ANTECEDENTES Y BCRA)</span>
-                        </div>
+                    activeResult.extraction?.extraccion_nosis ? (
+                      <SistemaFinancieroView nosis={activeResult.extraction.extraccion_nosis} crossCheck={activeResult.crossCheck} />
+                    ) : (
+                      <div className="bg-white border border-ink/15 px-6 py-10 text-center">
+                        <p className="font-display text-base font-semibold">Sin informe Nosis</p>
+                        <p className="text-sm text-ink/50 mt-1">No se adjuntó un informe Nosis en este caso, o no se pudo leer.</p>
                       </div>
-                      
-                      <div className="p-6 bg-panel">
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                            <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Score Crediticio</p>
-                              <p className="text-xl font-bold font-mono text-ink">
-                                <EditableNumber path={['extraccion_nosis', 'score_crediticio']} value={activeResult.extraction?.extraccion_nosis?.score_crediticio} />
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Peor Situación BCRA</p>
-                              <p className="text-xl font-bold font-mono text-ink">
-                                Categoría <EditableNumber path={['extraccion_nosis', 'situacion_bcra_peor_estado']} value={activeResult.extraction?.extraccion_nosis?.situacion_bcra_peor_estado} inputClassName="w-16" />
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Cheques Rechazados</p>
-                              <p className="text-xl font-bold font-mono text-ink">
-                                <EditableNumber path={['extraccion_nosis', 'cheques_rechazados_cantidad']} value={activeResult.extraction?.extraccion_nosis?.cheques_rechazados_cantidad} inputClassName="w-20" /> cheques
-                              </p>
-                              <p className="text-xs opacity-70 mt-1">
-                                por un total de{' '}
-                                <EditableNumber
-                                  path={['extraccion_nosis', 'cheques_rechazados_monto']}
-                                  value={activeResult.extraction?.extraccion_nosis?.cheques_rechazados_monto}
-                                  display={formatCurrencyThousands(activeResult.extraction?.extraccion_nosis?.cheques_rechazados_monto)}
-                                />
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Deuda Total Nosis</p>
-                              <p className="text-xl font-bold font-mono text-ink">
-                                <EditableNumber
-                                  path={['extraccion_nosis', 'deuda_financiera_total_nosis']}
-                                  value={activeResult.extraction?.extraccion_nosis?.deuda_financiera_total_nosis}
-                                  display={formatCurrencyThousands(activeResult.extraction?.extraccion_nosis?.deuda_financiera_total_nosis)}
-                                />
-                              </p>
-                              <p className="text-[10px] opacity-50 mt-1">(Expresado en miles)</p>
-                            </div>
-                          </div>
-
-                          {/* Antecedentes: alimentan las señales automáticas de la Opinión de riesgos */}
-                          <h4 className="text-xs font-bold uppercase mb-4 opacity-70 border-b border-ink/10 pb-2">Antecedentes</h4>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 mb-8 text-sm">
-                            {([
-                              ['Peor situación 24 meses', 'peor_situacion_24_meses'],
-                              ['Cheques levantados', 'cheques_rechazados_levantados'],
-                              ['Deuda ARCA (miles $)', 'deuda_fiscal_previsional'],
-                              ['Juicios', 'juicios_cantidad'],
-                              ['Embargos', 'embargos_cantidad'],
-                              ['Pedidos de quiebra', 'pedidos_quiebra_cantidad'],
-                            ] as const).map(([label, field]) => (
-                              <div key={field}>
-                                <p className="text-[11px] font-bold uppercase opacity-50 mb-1">{label}</p>
-                                <p className="font-mono font-bold">
-                                  <EditableNumber
-                                    path={['extraccion_nosis', field]}
-                                    value={activeResult.extraction?.extraccion_nosis?.[field]}
-                                    display={activeResult.extraction?.extraccion_nosis?.[field] ?? '—'}
-                                    inputClassName="w-24"
-                                  />
-                                </p>
-                              </div>
-                            ))}
-                            <div>
-                              <p className="text-[11px] font-bold uppercase opacity-50 mb-1">Planes de pago ARCA</p>
-                              <p className="font-mono font-bold">
-                                <EditableBoolean path={['extraccion_nosis', 'planes_de_pago_arca']} value={activeResult.extraction?.extraccion_nosis?.planes_de_pago_arca} />
-                              </p>
-                            </div>
-                          </div>
-
-                          <h4 className="text-xs font-bold uppercase mb-4 opacity-70 border-b border-ink/10 pb-2">Detalle de Entidades</h4>
-                          <div className="grid grid-cols-1 2xl:grid-cols-[1fr_340px] gap-8 items-start">
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-sm font-mono border-collapse">
-                                <thead>
-                                  <tr className="border-b border-ink">
-                                    <th className="text-left py-2 font-bold uppercase text-xs opacity-60">Entidad</th>
-                                    <th className="text-center py-2 font-bold uppercase text-xs opacity-60">Situación</th>
-                                    <th className="text-right py-2 font-bold uppercase text-xs opacity-60 w-1/3">Monto / Participación</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-ink/10">
-                                  {(() => {
-                                    const rawEntidades = activeResult.extraction?.extraccion_nosis?.detalle_entidades;
-                                    const entidades = Array.isArray(rawEntidades) ? rawEntidades : [];
-                                    const totalDeudaNosis = activeResult.extraction?.extraccion_nosis?.deuda_financiera_total_nosis || 0;
-                                    const totalSuma = entidades.reduce((acc, curr) => acc + (Number(curr?.monto) || 0), 0);
-                                    const totalReferencia = totalDeudaNosis > 0 ? totalDeudaNosis : totalSuma;
-
-                                    return entidades.map((entidad, i) => {
-                                      const participacion = totalReferencia > 0 ? (((entidad.monto ?? 0) / totalReferencia) * 100).toFixed(1) : "0.0";
-                                      return (
-                                        <tr key={i} className="hover:bg-ink/5 transition-colors">
-                                          <td className="py-3 font-bold">
-                                            {isEditing ? (
-                                              <div className="flex items-center gap-1">
-                                                <RemoveRowButton path={['extraccion_nosis', 'detalle_entidades']} list={entidades} index={i} />
-                                                <EditableText path={['extraccion_nosis', 'detalle_entidades', i, 'entidad']} value={entidad.entidad} />
-                                              </div>
-                                            ) : entidad.entidad}
-                                          </td>
-                                          <td className="py-3 text-center font-bold text-ink">
-                                            <EditableNumber path={['extraccion_nosis', 'detalle_entidades', i, 'situacion']} value={entidad.situacion} inputClassName="w-14 text-center" />
-                                          </td>
-                                          <td className="py-3">
-                                            <div className="flex flex-col gap-1 items-end">
-                                              {isEditing ? (
-                                                <span className="flex items-center gap-1">
-                                                  <EditableNumber path={['extraccion_nosis', 'detalle_entidades', i, 'monto']} value={entidad.monto} />
-                                                  <span className="text-xs opacity-60">({participacion}%)</span>
-                                                </span>
-                                              ) : (
-                                                <span className="font-bold text-ink">{formatCurrencyThousands(entidad.monto)} ({participacion}%)</span>
-                                              )}
-                                              <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden">
-                                                <div className="bg-ink h-full" style={{ width: `${participacion}%` }}></div>
-                                              </div>
-                                            </div>
-                                          </td>
-                                        </tr>
-                                      );
-                                    });
-                                  })()}
-                                </tbody>
-                              </table>
-                              <AddRowButton
-                                path={['extraccion_nosis', 'detalle_entidades']}
-                                list={activeResult.extraction?.extraccion_nosis?.detalle_entidades}
-                                newItem={{ entidad: '', situacion: 1, monto: 0 }}
-                                label="Agregar entidad"
-                              />
-                            </div>
-                            
-                            {/* Deuda por entidad: barras ordenadas (reemplaza al donut) */}
-                            {Array.isArray(activeResult.extraction?.extraccion_nosis?.detalle_entidades) && activeResult.extraction?.extraccion_nosis.detalle_entidades.length > 0 && (
-                              <NosisDebtBars entidades={activeResult.extraction.extraccion_nosis.detalle_entidades} />
-                            )}
-                          </div>
-                        </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
-                    
-                        {/* Cross Check Section */}
-                    <div className="lg:col-span-1 bg-ink text-white p-6 border border-ink/15 flex flex-col">
-                      <div className="flex items-center gap-2 mb-6 border-b border-white/20 pb-4">
-                        <Scale className="w-5 h-5" />
-                        <h3 className="font-sans font-bold text-lg">Cruce de Deuda</h3>
-                      </div>
-                      
-                      {activeResult.crossCheck ? (
-                        <div className="space-y-6">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <p className="text-[10px] opacity-50 uppercase mb-1">Deuda Balance</p>
-                              <p className="font-mono text-lg font-bold text-white">
-                                {formatCurrencyThousands(activeResult.crossCheck?.balance_debt)}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-[10px] opacity-50 uppercase mb-1">Deuda Nosis</p>
-                              <p className="font-mono text-lg font-bold text-white">
-                                {formatCurrencyThousands(activeResult.crossCheck?.nosis_debt)}
-                              </p>
-                            </div>
-                          </div>
-                          
-                          <div className={cn(
-                            "p-4 border",
-                            activeResult.crossCheck?.match 
-                              ? "border-emerald-500/50 bg-emerald-500/10" 
-                              : "border-red-500/50 bg-red-500/10"
-                          )}>
-                            <div className="flex items-center gap-2 mb-1">
-                              {activeResult.crossCheck?.match 
-                                ? <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                                : <AlertTriangle className="w-4 h-4 text-red-500" />
-                              }
-                              <span className="text-xs font-bold uppercase">
-                                {activeResult.crossCheck?.match ? "Consistente" : "Discrepancia Detectada"}
-                              </span>
-                            </div>
-                            <p className="text-[10px] opacity-70">
-                              Diferencia: {formatCurrencyThousands(activeResult.crossCheck?.difference_abs)}
-                            </p>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center opacity-30 text-center">
-                          <FileText className="w-12 h-12 mb-4" />
-                          <p className="text-xs uppercase">No se detectó reporte de deuda para cruzar información.</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  </div>
+                    )
                   )}
 
                   {activeTab === 'Accionistas y Directorio' && (
-                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 font-sans">
-                      {/* Bloque 1: COMPOSICIÓN ACCIONARIA */}
-                      <div className="bg-white border border-ink/15 p-6">
-                        <h3 className="text-lg font-semibold text-ink mb-6">COMPOSICIÓN SOCIAL / ACCIONISTAS</h3>
-                        
-                        <ShareholderTable 
-                          basePath={['accionistas_y_directorio', 'accionistas']}
-                          accionistas={
-                            isEditing
-                              ? (activeResult.extraction?.accionistas_y_directorio?.accionistas ?? [])
-                              : Array.isArray(activeResult.extraction?.accionistas_y_directorio?.accionistas) && activeResult.extraction?.accionistas_y_directorio.accionistas.length > 0
-                              ? activeResult.extraction?.accionistas_y_directorio.accionistas
-                              : [
-                                  { nombre: 'Inversiones Globales S.A.', dni_cuit: '30-71234567-8', participacion: 52.99, subAccionistas: [
-                                    { nombre: 'Persona Física 1', dni_cuit: '20.111.222', participacion: 60 },
-                                    { nombre: 'Sociedad Holding B', dni_cuit: '30-98765432-1', participacion: 40, subAccionistas: [
-                                      { nombre: 'Beneficiario Final 1', dni_cuit: '20.333.444', participacion: 50 },
-                                      { nombre: 'Fideicomiso de Control C', dni_cuit: '30-11223344-5', participacion: 50, subAccionistas: [
-                                        { nombre: 'Beneficiario Humano Final (Nivel 4)', dni_cuit: '10.999.888', participacion: 100 }
-                                      ] }
-                                    ]}
-                                  ] },
-                                  { nombre: 'Pérez, Juan Ignacio', dni_cuit: '20.123.456', participacion: 30.00 },
-                                  { nombre: 'Gómez, María Laura', dni_cuit: '25.987.654', participacion: 17.01 }
-                                ]
-                          }
-                        />
-                      </div>
-
-                      {/* Bloque 2: DIRECTORIO Y MANAGEMENT */}
-                      <div className="bg-white border border-ink/15 p-6 mt-8">
-                        <h3 className="text-base font-semibold text-black mb-6">ÓRGANO DE ADMINISTRACIÓN / DIRECTORIO</h3>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {isEditing ? (
-                            (activeResult.extraction?.accionistas_y_directorio?.directorio ?? []).map((miembro, idx, list) => (
-                              <div key={idx} className="p-4 border border-brand-blue/50 bg-panel rounded-sm flex flex-col gap-2">
-                                <div className="flex items-center gap-1">
-                                  <EditableText path={['accionistas_y_directorio', 'directorio', idx, 'cargo']} value={miembro.cargo} />
-                                  <RemoveRowButton path={['accionistas_y_directorio', 'directorio']} list={list} index={idx} />
-                                </div>
-                                <EditableText path={['accionistas_y_directorio', 'directorio', idx, 'nombre']} value={miembro.nombre} />
-                              </div>
-                            ))
-                          ) : Array.isArray(activeResult.extraction?.accionistas_y_directorio?.directorio) && activeResult.extraction?.accionistas_y_directorio.directorio.length > 0 ? (
-                            activeResult.extraction?.accionistas_y_directorio.directorio.map((miembro, idx) => (
-                              <div key={idx} className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">{miembro.cargo}</p>
-                                <p className="font-medium text-ink">{miembro.nombre}</p>
-                              </div>
-                            ))
-                          ) : (
-                            <>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Presidente</p>
-                                <p className="font-medium text-ink">Juan Ignacio Pérez</p>
-                              </div>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Vicepresidente</p>
-                                <p className="font-medium text-ink">María Laura Gómez</p>
-                              </div>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Director Titular</p>
-                                <p className="font-medium text-ink">Carlos Alberto Ruiz</p>
-                              </div>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Director Suplente</p>
-                                <p className="font-medium text-ink">Ana Clara Fernández</p>
-                              </div>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Síndico Titular</p>
-                                <p className="font-medium text-ink">Estudio Contable López & Asoc.</p>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                        <AddRowButton
-                          path={['accionistas_y_directorio', 'directorio']}
-                          list={activeResult.extraction?.accionistas_y_directorio?.directorio}
-                          newItem={{ cargo: '', nombre: '' }}
-                          label="Agregar miembro"
-                        />
-                      </div>
-                    </div>
+                    <AccionistasView datos={activeResult.extraction?.accionistas_y_directorio ?? null} />
                   )}
 
                   {activeTab === 'Mercado' && (
@@ -1937,25 +1654,11 @@ export default function App() {
                       {/* Bloque 1: COMPOSICIÓN ACCIONARIA */}
                       <div className="bg-white border border-ink/15 p-6">
                         <h3 className="text-lg font-semibold text-ink mb-6">COMPOSICIÓN SOCIAL / ACCIONISTAS</h3>
-                        
+                        {!(activeResult.extraction?.accionistas_y_directorio?.accionistas?.length) && (
+                          <p className="text-sm text-ink/50">No se encontró la composición accionaria en la documentación.</p>
+                        )}
                         <ShareholderTable 
-                          accionistas={
-                            Array.isArray(activeResult.extraction?.accionistas_y_directorio?.accionistas) && activeResult.extraction?.accionistas_y_directorio.accionistas.length > 0
-                              ? activeResult.extraction?.accionistas_y_directorio.accionistas
-                              : [
-                                  { nombre: 'Inversiones Globales S.A.', dni_cuit: '30-71234567-8', participacion: 52.99, subAccionistas: [
-                                    { nombre: 'Persona Física 1', dni_cuit: '20.111.222', participacion: 60 },
-                                    { nombre: 'Sociedad Holding B', dni_cuit: '30-98765432-1', participacion: 40, subAccionistas: [
-                                      { nombre: 'Beneficiario Final 1', dni_cuit: '20.333.444', participacion: 50 },
-                                      { nombre: 'Fideicomiso de Control C', dni_cuit: '30-11223344-5', participacion: 50, subAccionistas: [
-                                        { nombre: 'Beneficiario Humano Final (Nivel 4)', dni_cuit: '10.999.888', participacion: 100 }
-                                      ] }
-                                    ]}
-                                  ] },
-                                  { nombre: 'Pérez, Juan Ignacio', dni_cuit: '20.123.456', participacion: 30.00 },
-                                  { nombre: 'Gómez, María Laura', dni_cuit: '25.987.654', participacion: 17.01 }
-                                ]
-                          }
+                          accionistas={activeResult.extraction?.accionistas_y_directorio?.accionistas ?? []}
                         />
                       </div>
 
@@ -1972,28 +1675,7 @@ export default function App() {
                               </div>
                             ))
                           ) : (
-                            <>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Presidente</p>
-                                <p className="font-medium text-ink">Juan Ignacio Pérez</p>
-                              </div>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Vicepresidente</p>
-                                <p className="font-medium text-ink">María Laura Gómez</p>
-                              </div>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Director Titular</p>
-                                <p className="font-medium text-ink">Carlos Alberto Ruiz</p>
-                              </div>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Director Suplente</p>
-                                <p className="font-medium text-ink">Ana Clara Fernández</p>
-                              </div>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Síndico Titular</p>
-                                <p className="font-medium text-ink">Estudio Contable López & Asoc.</p>
-                              </div>
-                            </>
+                            <p className="text-sm text-ink/50 col-span-full">No se encontró el directorio en la documentación.</p>
                           )}
                         </div>
                       </div>
