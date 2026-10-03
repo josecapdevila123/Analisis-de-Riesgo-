@@ -1596,27 +1596,12 @@ export default function App() {
                       <div className="bg-white border border-ink/15 p-6">
                         <h3 className="text-lg font-semibold text-ink mb-6">COMPOSICIÓN SOCIAL / ACCIONISTAS</h3>
                         
+                        {!isEditing && !(activeResult.extraction?.accionistas_y_directorio?.accionistas?.length) && (
+                          <p className="text-sm text-ink/50">No se encontró la composición accionaria en la documentación. Se puede cargar a mano con "Editar valores".</p>
+                        )}
                         <ShareholderTable 
                           basePath={['accionistas_y_directorio', 'accionistas']}
-                          accionistas={
-                            isEditing
-                              ? (activeResult.extraction?.accionistas_y_directorio?.accionistas ?? [])
-                              : Array.isArray(activeResult.extraction?.accionistas_y_directorio?.accionistas) && activeResult.extraction?.accionistas_y_directorio.accionistas.length > 0
-                              ? activeResult.extraction?.accionistas_y_directorio.accionistas
-                              : [
-                                  { nombre: 'Inversiones Globales S.A.', dni_cuit: '30-71234567-8', participacion: 52.99, subAccionistas: [
-                                    { nombre: 'Persona Física 1', dni_cuit: '20.111.222', participacion: 60 },
-                                    { nombre: 'Sociedad Holding B', dni_cuit: '30-98765432-1', participacion: 40, subAccionistas: [
-                                      { nombre: 'Beneficiario Final 1', dni_cuit: '20.333.444', participacion: 50 },
-                                      { nombre: 'Fideicomiso de Control C', dni_cuit: '30-11223344-5', participacion: 50, subAccionistas: [
-                                        { nombre: 'Beneficiario Humano Final (Nivel 4)', dni_cuit: '10.999.888', participacion: 100 }
-                                      ] }
-                                    ]}
-                                  ] },
-                                  { nombre: 'Pérez, Juan Ignacio', dni_cuit: '20.123.456', participacion: 30.00 },
-                                  { nombre: 'Gómez, María Laura', dni_cuit: '25.987.654', participacion: 17.01 }
-                                ]
-                          }
+                          accionistas={activeResult.extraction?.accionistas_y_directorio?.accionistas ?? []}
                         />
                       </div>
 
@@ -1643,28 +1628,7 @@ export default function App() {
                               </div>
                             ))
                           ) : (
-                            <>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Presidente</p>
-                                <p className="font-medium text-ink">Juan Ignacio Pérez</p>
-                              </div>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Vicepresidente</p>
-                                <p className="font-medium text-ink">María Laura Gómez</p>
-                              </div>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Director Titular</p>
-                                <p className="font-medium text-ink">Carlos Alberto Ruiz</p>
-                              </div>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Director Suplente</p>
-                                <p className="font-medium text-ink">Ana Clara Fernández</p>
-                              </div>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Síndico Titular</p>
-                                <p className="font-medium text-ink">Estudio Contable López & Asoc.</p>
-                              </div>
-                            </>
+                            <p className="text-sm text-ink/50 col-span-full">No se encontró el directorio en la documentación. Se puede cargar a mano con "Editar valores".</p>
                           )}
                         </div>
                         <AddRowButton
@@ -1937,25 +1901,11 @@ export default function App() {
                       {/* Bloque 1: COMPOSICIÓN ACCIONARIA */}
                       <div className="bg-white border border-ink/15 p-6">
                         <h3 className="text-lg font-semibold text-ink mb-6">COMPOSICIÓN SOCIAL / ACCIONISTAS</h3>
-                        
+                        {!(activeResult.extraction?.accionistas_y_directorio?.accionistas?.length) && (
+                          <p className="text-sm text-ink/50">No se encontró la composición accionaria en la documentación.</p>
+                        )}
                         <ShareholderTable 
-                          accionistas={
-                            Array.isArray(activeResult.extraction?.accionistas_y_directorio?.accionistas) && activeResult.extraction?.accionistas_y_directorio.accionistas.length > 0
-                              ? activeResult.extraction?.accionistas_y_directorio.accionistas
-                              : [
-                                  { nombre: 'Inversiones Globales S.A.', dni_cuit: '30-71234567-8', participacion: 52.99, subAccionistas: [
-                                    { nombre: 'Persona Física 1', dni_cuit: '20.111.222', participacion: 60 },
-                                    { nombre: 'Sociedad Holding B', dni_cuit: '30-98765432-1', participacion: 40, subAccionistas: [
-                                      { nombre: 'Beneficiario Final 1', dni_cuit: '20.333.444', participacion: 50 },
-                                      { nombre: 'Fideicomiso de Control C', dni_cuit: '30-11223344-5', participacion: 50, subAccionistas: [
-                                        { nombre: 'Beneficiario Humano Final (Nivel 4)', dni_cuit: '10.999.888', participacion: 100 }
-                                      ] }
-                                    ]}
-                                  ] },
-                                  { nombre: 'Pérez, Juan Ignacio', dni_cuit: '20.123.456', participacion: 30.00 },
-                                  { nombre: 'Gómez, María Laura', dni_cuit: '25.987.654', participacion: 17.01 }
-                                ]
-                          }
+                          accionistas={activeResult.extraction?.accionistas_y_directorio?.accionistas ?? []}
                         />
                       </div>
 
@@ -1972,28 +1922,7 @@ export default function App() {
                               </div>
                             ))
                           ) : (
-                            <>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Presidente</p>
-                                <p className="font-medium text-ink">Juan Ignacio Pérez</p>
-                              </div>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Vicepresidente</p>
-                                <p className="font-medium text-ink">María Laura Gómez</p>
-                              </div>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Director Titular</p>
-                                <p className="font-medium text-ink">Carlos Alberto Ruiz</p>
-                              </div>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Director Suplente</p>
-                                <p className="font-medium text-ink">Ana Clara Fernández</p>
-                              </div>
-                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Síndico Titular</p>
-                                <p className="font-medium text-ink">Estudio Contable López & Asoc.</p>
-                              </div>
-                            </>
+                            <p className="text-sm text-ink/50 col-span-full">No se encontró el directorio en la documentación.</p>
                           )}
                         </div>
                       </div>
