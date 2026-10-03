@@ -66,6 +66,7 @@ import { ProyeccionesView } from './components/ProyeccionesView';
 import { ProyeccionesGuardadas } from './features/projections/types';
 import { RATIO_BLOCKS as SHARED_RATIO_BLOCKS } from './features/ratios/blocks';
 import { RiskOpinionView } from './components/RiskOpinionView';
+import { AnalysisFlow } from './components/AnalysisFlow';
 import { RiskPolicyView } from './components/RiskPolicyView';
 import { runRiskAssessment } from './features/risk/assessment';
 import { stripRiskConclusion } from './features/risk/summary';
@@ -958,45 +959,11 @@ export default function App() {
             <div className="h-full flex flex-col gap-8">
               {/* Dashboard Header Status */}
               {activeResult?.status === 'processing' && (
-                <div className="relative w-full min-h-[500px] flex items-center justify-center border border-ink/15 overflow-hidden bg-canvas">
-                  <div className="absolute inset-0 z-0 bg-gradient-to-b from-transparent via-white/30 to-transparent animate-pulse"></div>
-                  <div className="relative z-10 bg-white/90 backdrop-blur-md p-10 border border-ink/20 shadow-2xl max-w-lg w-full animate-in fade-in zoom-in-95 duration-500">
-                    <h3 className="text-2xl font-sans font-bold text-ink mb-6 tracking-tight text-center">Procesando con IA</h3>
-                    <ol className="space-y-3">
-                      {(() => {
-                        const stages: Array<{ key: CaseState | 'verifying-2'; label: string }> = [
-                          { key: 'extracting', label: 'Extrayendo números del balance' },
-                          { key: 'computing', label: 'Calculando ratios' },
-                          { key: 'verifying', label: 'Verificando coherencia' },
-                          { key: 'verifying-2', label: 'Generando informe' },
-                        ];
-                        const order: CaseState[] = ['processing', 'extracting', 'computing', 'verifying'];
-                        const currentIdx = processingStage ? order.indexOf(processingStage) : 0;
-                        return stages.map((stage, idx) => {
-                          const stageIdx = stage.key === 'verifying-2' ? 3 : order.indexOf(stage.key as CaseState);
-                          const isActive = processingStage === 'verifying'
-                            ? idx >= 2 && idx <= 3
-                            : stageIdx === currentIdx;
-                          const isDone = stageIdx < currentIdx;
-                          return (
-                            <li key={stage.label} className="flex items-center gap-3 text-sm">
-                              {isDone ? (
-                                <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
-                              ) : isActive ? (
-                                <Loader2 className="w-5 h-5 text-ink animate-spin shrink-0" />
-                              ) : (
-                                <div className="w-5 h-5 rounded-full border-2 border-ink/20 shrink-0" />
-                              )}
-                              <span className={cn('font-medium', isDone ? 'text-ink/50' : isActive ? 'text-ink' : 'text-ink/40')}>
-                                {stage.label}
-                              </span>
-                            </li>
-                          );
-                        });
-                      })()}
-                    </ol>
-                  </div>
-                </div>
+                <AnalysisFlow
+                  stage={processingStage}
+                  fileNames={activeResult.fileNames}
+                  startedAt={activeResult.timestamp}
+                />
               )}
 
               {activeResult?.status === 'error' && (
