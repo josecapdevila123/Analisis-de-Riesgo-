@@ -173,13 +173,13 @@ export default function App() {
   const TABS = [
     "Resumen Ejecutivo",
     "Balance y Ratios",
+    "Sistema Financiero (Nosis)",
     "Accionistas y Directorio",
     "Historia y actividad de la empresa",
     "Mercado",
     "Información post balance",
     "Proyecciones",
-    "Opinión de riesgos",
-    "Sistema Financiero (Nosis)"
+    "Opinión de riesgos"
   ];
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStage, setProcessingStage] = useState<CaseState | null>(null);
