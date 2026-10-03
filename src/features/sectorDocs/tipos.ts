@@ -35,14 +35,100 @@ export const ReporteMoraSchema = z.object({
 });
 export type ReporteMora = z.infer<typeof ReporteMoraSchema>;
 
+const texto = z.preprocess(v => (v === undefined || v === '' || v === 'N/A' ? null : v), z.string().nullable()).catch(null);
+const bool = z.preprocess(v => (typeof v === 'boolean' ? v : v === 'si' || v === 'sí' || v === 'true' ? true : v === 'no' || v === 'false' ? false : null), z.boolean().nullable());
+const lista = <T extends z.ZodTypeAny>(item: T) => z.preprocess(v => (Array.isArray(v) ? v : []), z.array(item));
+
+// ---------- plan_siembra (agro) ----------
+export const TENENCIAS = ['propia', 'arrendada', 'aparceria', 'otra'] as const;
+export const PlanSiembraSchema = z.object({
+  fecha_documento: texto,
+  campania: texto,
+  lotes: lista(z.object({
+    cultivo: z.string().catch('Sin cultivo'),
+    hectareas: num,
+    tenencia: z.enum(TENENCIAS).catch('otra'),
+    zona: texto,
+    rinde_esperado: num, // qq/ha
+  })),
+  costo_arrendamiento: z.object({ texto, monto: num }).nullable().catch(null),
+});
+export type PlanSiembra = z.infer<typeof PlanSiembraSchema>;
+
+// ---------- listado_obras (construcción) ----------
+export const ESTADOS_OBRA = ['en_ejecucion', 'adjudicada', 'presentada', 'finalizada'] as const;
+export const ListadoObrasSchema = z.object({
+  fecha_documento: texto,
+  obras: lista(z.object({
+    obra: z.string().catch('Sin nombre'),
+    comitente: z.string().catch('Sin comitente'),
+    tipo_comitente: z.enum(['publico', 'privado']).nullable().catch(null),
+    monto_contrato: num,
+    porcentaje_avance: num, // 0–100
+    saldo_a_ejecutar: num,
+    estado: z.enum(ESTADOS_OBRA).nullable().catch(null),
+    plazo_fin: texto,
+  })),
+});
+export type ListadoObras = z.infer<typeof ListadoObrasSchema>;
+
+// ---------- documento adicional (cualquier rubro) ----------
+export const PrincipalesClientesSchema = z.object({
+  fecha_documento: texto,
+  clientes: lista(z.object({
+    cliente: z.string().catch('Sin nombre'),
+    porcentaje_ventas: num, // 0–100
+    monto: num,
+  })),
+});
+export type PrincipalesClientes = z.infer<typeof PrincipalesClientesSchema>;
+
+export const CarteraContratosSchema = z.object({
+  fecha_documento: texto,
+  contratos: lista(z.object({
+    cliente: z.string().catch('Sin nombre'),
+    objeto: texto,
+    monto: num,
+    vigencia_hasta: texto,
+    recurrente: bool,
+  })),
+});
+export type CarteraContratos = z.infer<typeof CarteraContratosSchema>;
+
+export const CATEGORIAS_HECHO = ['ingresos', 'clientes', 'contratos', 'deuda', 'fondeo', 'garantias', 'contingencias', 'operativo', 'societario', 'otro'] as const;
+export const OtroDocumentoSchema = z.object({
+  fecha_documento: texto,
+  descripcion_documento: texto,
+  hechos: lista(z.object({
+    categoria: z.enum(CATEGORIAS_HECHO).catch('otro'),
+    descripcion: z.string().catch(''),
+    monto: num,
+    fecha: texto,
+    cita_textual: z.string().catch(''),
+    pagina: num,
+    // Lo marca el analista (no Gemini): solo los marcados llegan a la opinión.
+    incluir: z.boolean().catch(false).default(false),
+  })),
+});
+export type OtroDocumento = z.infer<typeof OtroDocumentoSchema>;
+
 // ---------- registro de tipos ----------
-export type TipoDocumentoSectorial = 'reporte_mora';
+export type TipoDocumentoSectorial = 'reporte_mora' | 'plan_siembra' | 'listado_obras' | 'principales_clientes' | 'cartera_contratos' | 'otro';
 
 export const SCHEMAS_DOCUMENTOS: Record<TipoDocumentoSectorial, z.ZodTypeAny> = {
   reporte_mora: ReporteMoraSchema,
+  plan_siembra: PlanSiembraSchema,
+  listado_obras: ListadoObrasSchema,
+  principales_clientes: PrincipalesClientesSchema,
+  cartera_contratos: CarteraContratosSchema,
+  otro: OtroDocumentoSchema,
 };
 
-export type ExtraccionDocumento = { reporte_mora: ReporteMora }[TipoDocumentoSectorial];
+export type ExtraccionDocumento = ReporteMora | PlanSiembra | ListadoObras | PrincipalesClientes | CarteraContratos | OtroDocumento;
+
+// Fecha del documento según el tipo (corte del reporte o fecha declarada).
+export const fechaDeExtraccion = (e: ExtraccionDocumento | null | undefined): string | null =>
+  normalizarFecha((e as { fecha_corte?: string | null })?.fecha_corte ?? (e as { fecha_documento?: string | null })?.fecha_documento ?? null);
 
 export type DocumentoSectorial = {
   id: string;
@@ -89,3 +175,10 @@ export function documentoDesactualizado(doc: Pick<DocumentoSectorial, 'fechaDocu
 // si después se carga, edita o borra alguno).
 export const firmaDocumentos = (docs: DocumentoSectorial[] | null | undefined) =>
   (docs ?? []).filter(d => d.estado === 'ok').map(d => `${d.id}@${d.actualizadoEn}`).sort().join('|');
+
+// Suma de los 10 primeros montos de "principales clientes" (en financieras:
+// completa el top 10 de deudores si no se cargó a mano).
+export const sumaTop10 = (c: PrincipalesClientes) => {
+  const montos = c.clientes.map(x => x.monto).filter((m): m is number => typeof m === 'number' && Number.isFinite(m)).sort((a, b) => b - a).slice(0, 10);
+  return montos.length ? montos.reduce((a, b) => a + b, 0) : null;
+};

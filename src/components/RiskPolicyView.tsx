@@ -22,6 +22,9 @@ import {
   SUBSEGMENTOS,
   SIGNAL_PARAMS_FINANCIERA,
   DOCUMENTOS_SECTORIALES,
+  UMBRALES_DOCUMENTOS,
+  SIGNAL_PARAMS_DOCUMENTOS,
+  KW_CAMPO_PROPIO,
 } from '../features/risk/policy';
 import { CATEGORY_LABEL, categoryOf, SEVERIDAD_LABEL } from '../features/risk/score';
 import { RiskDimension, SeveridadRiesgo } from '../features/extraction/schemas';
@@ -379,6 +382,8 @@ function CriteriosPorRubro() {
 
       <CriteriosFinanciera />
 
+      <DocumentosSectorialesPolitica />
+
       <h4 className="text-xs font-bold uppercase tracking-wider text-ink/60 mb-2">Qué mira la opinión en cada rubro</h4>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         {RUBROS.map(r => {
@@ -502,6 +507,77 @@ function CriteriosFinanciera() {
             <li>Bloque financiero del balance (cartera por tramo, previsiones, fondeo), extraído a demanda.</li>
           </ul>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Documentos sectoriales ----------
+
+function DocumentosSectorialesPolitica() {
+  const U = UMBRALES_DOCUMENTOS;
+  const S = SIGNAL_PARAMS_DOCUMENTOS;
+  const u = (t: RatioThreshold) => {
+    const f = (v: number) => (t.unidad === 'x' ? `${fmtNum(v)}x` : `${fmtNum(v * 100)}%`);
+    const sg = t.mejorSi === 'mayor' ? '≥' : '≤';
+    return `sano ${sg} ${f(t.sano)} · alerta ${sg} ${f(t.alerta)}`;
+  };
+  const recomendadoEn = (tipo: keyof typeof DOCUMENTOS_SECTORIALES) =>
+    RUBROS.filter(r => SECTOR_PROFILES[r].documentosSectoriales?.some(d => d.tipo === tipo && d.recomendado)).map(r => SECTOR_PROFILES[r].label);
+  const filas: Array<{ tipo: keyof typeof DOCUMENTOS_SECTORIALES; kpis: string[]; cruces: string[]; senales: string[] }> = [
+    { tipo: 'reporte_mora', kpis: ['Mora, cobertura y PN ajustado (ver Financiera)'], cruces: ['Cartera del reporte vs. créditos financieros del balance: diferencia > 15% → alerta (con las dos fechas)'], senales: ['Las de Financiera (mora, cobertura, PN ajustado)'] },
+    { tipo: 'plan_siembra',
+      kpis: [`${U.pct_arrendado.label}: ${u(U.pct_arrendado)}`, `${U.concentracion_cultivo.label}: ${u(U.concentracion_cultivo)}`, 'Deuda bancaria por hectárea: informativo'],
+      cruces: [`Hectáreas propias declaradas sin campo en el anexo de bienes de uso (${KW_CAMPO_PROPIO.slice(0, 4).join(', ')}…) → alerta`],
+      senales: [`Más del ${S.agro.arrendadoMaximo * 100}% no propio y cultivo principal > ${S.agro.concentracionCultivoMaxima * 100}% → alta (negocio y mercado)`] },
+    { tipo: 'listado_obras',
+      kpis: ['Obra pendiente = saldo de obras en ejecución + adjudicadas (sin saldo: monto × (1 − avance)); las presentadas no suman', `${U.obra_pendiente_sobre_ventas.label}: ${u(U.obra_pendiente_sobre_ventas)}`, `${U.pct_obra_publica.label}: ${u(U.pct_obra_publica)}`, `${U.concentracion_comitente.label}: ${u(U.concentracion_comitente)}`, 'Licitaciones presentadas: informativo'],
+      cruces: [`Obra pendiente > ${S.cruces.obraPendienteSobreVentasMaxima} años de ventas → alerta`, 'Anticipos de clientes en el balance sin obras en ejecución → alerta'],
+      senales: [`Mayor comitente > ${S.construccion.concentracionComitenteMaxima * 100}% de la obra pendiente y público → alta (negocio y mercado)`] },
+    { tipo: 'principales_clientes',
+      kpis: [`${U.top1_clientes.label}: ${u(U.top1_clientes)}`, `${U.top3_clientes.label}: ${u(U.top3_clientes)}`, 'En financieras ("Principales deudores"): completa el top 10 de deudores si no se cargó a mano'],
+      cruces: ['Suma de porcentajes > 100% → error de datos', 'Suma de montos > ventas anuales → alerta'], senales: [] },
+    { tipo: 'cartera_contratos', kpis: ['Contratos / ventas: informativo', 'Contratos recurrentes / total: informativo'], cruces: [], senales: [] },
+    { tipo: 'otro', kpis: ['Sin KPIs: se extraen hechos con su cita textual; el analista tilda cuáles van a la opinión (por defecto, ninguno)'], cruces: [], senales: [] },
+  ];
+  return (
+    <div className="mb-6">
+      <h4 className="text-xs font-bold uppercase tracking-wider text-ink/60 mb-2">Documentos sectoriales (declarados por el cliente, no auditados)</h4>
+      <p className="text-xs text-ink/60 mb-3 leading-relaxed">
+        Opcionales: ninguno bloquea la opinión; si falta el recomendado, va a información faltante. Gemini extrae sin calcular; el código calcula KPIs y cruces; la opinión interpreta.
+        Pueden cambiar la opinión, pero nunca bajan un piso. Máximo 3 por caso; más de 6 meses respecto del caso → aviso de desactualizado.
+        El documento adicional (principales clientes, cartera de contratos u otro) está disponible en todos los rubros.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr>
+              <th className={`${th} text-left`}>Documento</th>
+              <th className={`${th} text-left`}>Recomendado en</th>
+              <th className={`${th} text-left`}>Qué se extrae</th>
+              <th className={`${th} text-left`}>KPIs</th>
+              <th className={`${th} text-left`}>Cruces y señales</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filas.map(f => {
+              const d = DOCUMENTOS_SECTORIALES[f.tipo];
+              const rec = recomendadoEn(f.tipo);
+              return (
+                <tr key={f.tipo}>
+                  <td className={`${td} font-medium`}>{d.label}{d.labelFinanciera ? ` (en financieras: ${d.labelFinanciera})` : ''}</td>
+                  <td className={`${td} !text-left`}>{rec.length ? rec.join(', ') : d.grupo === 'adicional' ? 'Opcional en todos los rubros' : '—'}</td>
+                  <td className={`${td} !text-left`}>{d.campos.join('; ')}</td>
+                  <td className={`${td} !text-left`}><ul className="list-disc pl-4">{f.kpis.map(x => <li key={x}>{x}</li>)}</ul></td>
+                  <td className={`${td} !text-left`}>
+                    <ul className="list-disc pl-4">{[...f.cruces, ...f.senales.map(x => `Señal: ${x}`)].map(x => <li key={x}>{x}</li>)}</ul>
+                    {f.cruces.length + f.senales.length === 0 && '—'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );

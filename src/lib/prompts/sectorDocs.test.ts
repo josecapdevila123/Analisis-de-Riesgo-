@@ -4,8 +4,13 @@ import { ReporteMoraSchema } from '../../features/sectorDocs/tipos';
 import { ExtraccionFinancieraSchema } from '../../features/extraction/schemas';
 
 describe('prompts de documentos sectoriales', () => {
+  it('"otro" prohíbe calificar los hechos y pide la cita textual', () => {
+    expect(SECTOR_DOC_PROMPTS.otro).toContain('PROHIBIDO calificar');
+    expect(SECTOR_DOC_PROMPTS.otro).toContain('cita_textual');
+  });
+
   it('prohíben calcular y piden null si falta', () => {
-    for (const p of [FINANCIAL_BLOCK_PROMPT, SECTOR_DOC_PROMPTS.reporte_mora]) {
+    for (const p of [FINANCIAL_BLOCK_PROMPT, ...Object.values(SECTOR_DOC_PROMPTS)]) {
       expect(p).toContain('PROHIBIDO calcular');
       expect(p).toContain('devolvé `null`');
     }

@@ -15,9 +15,18 @@ export const POLICY_STATUS = 'Propuesta inicial — pendiente de validación por
 // Versión de la política (semver). Un test compara un hash de umbrales, señales,
 // pesos y perfiles: si cambian, hay que subir la versión y anotar el cambio acá.
 // Los casos evaluados guardan la versión y el perfil con el que se evaluaron.
-export const POLICY_VERSION = '2.1.0';
+export const POLICY_VERSION = '2.2.0';
 
 export const POLICY_CHANGELOG: Array<{ version: string; fecha: string; cambios: string[] }> = [
+  {
+    version: '2.2.0',
+    fecha: '2026-10-03',
+    cambios: [
+      'Documentos sectoriales nuevos: plan de siembra (agro), listado de obras (construcción) y documento adicional para cualquier rubro (principales clientes / deudores, cartera de contratos, otro).',
+      'KPIs, cruces y señales de esos documentos (declarados por el cliente, no auditados; nunca bajan un piso).',
+      'Anexo de bienes de uso en la extracción, para verificar el campo propio declarado.',
+    ],
+  },
   {
     version: '2.1.0',
     fecha: '2026-10-03',
@@ -268,12 +277,77 @@ export const subsegmentoLabel = (id: SubSegmento | null | undefined) => SUBSEGME
 
 // ---------- Documentos sectoriales (declarados por el cliente, no auditados) ----------
 // Registro de tipos; qué admite cada perfil se define en el perfil.
-export const DOCUMENTOS_SECTORIALES: Record<'reporte_mora', { label: string; descripcion: string }> = {
+export type DefDocumento = {
+  label: string;
+  descripcion: string;
+  campos: string[];                     // qué se extrae (para la página de política)
+  grupo: 'rubro' | 'adicional';
+  labelFinanciera?: string;             // rótulo en financieras (ej. "Principales deudores")
+};
+export const DOCUMENTOS_SECTORIALES: Record<'reporte_mora' | 'plan_siembra' | 'listado_obras' | 'principales_clientes' | 'cartera_contratos' | 'otro', DefDocumento> = {
   reporte_mora: {
     label: 'Reporte de mora',
     descripcion: 'Cartera por tramo de atraso, previsiones y mora por producto a una fecha de corte.',
+    campos: ['fecha de corte', 'cartera por tramo de atraso', 'previsiones', 'cartera y mora por producto'],
+    grupo: 'rubro',
+  },
+  plan_siembra: {
+    label: 'Plan de siembra / hectáreas',
+    descripcion: 'Lotes de la campaña con cultivo, hectáreas, tenencia, zona y rinde esperado.',
+    campos: ['campaña', 'lotes: cultivo, hectáreas, tenencia (propia / arrendada / aparcería / otra), zona, rinde esperado (qq/ha)', 'costo de arrendamiento'],
+    grupo: 'rubro',
+  },
+  listado_obras: {
+    label: 'Listado de obras / licitaciones',
+    descripcion: 'Obras en ejecución, adjudicadas, presentadas y finalizadas, con comitente, monto y avance.',
+    campos: ['obra', 'comitente y tipo (público / privado)', 'monto del contrato', '% de avance', 'saldo a ejecutar', 'estado', 'plazo de fin'],
+    grupo: 'rubro',
+  },
+  principales_clientes: {
+    label: 'Principales clientes',
+    descripcion: 'Clientes con su participación en las ventas o su monto.',
+    campos: ['cliente', '% de las ventas', 'monto'],
+    grupo: 'adicional',
+    labelFinanciera: 'Principales deudores',
+  },
+  cartera_contratos: {
+    label: 'Cartera de pedidos / contratos',
+    descripcion: 'Contratos y pedidos vigentes con cliente, objeto, monto, vigencia y si son recurrentes.',
+    campos: ['cliente', 'objeto', 'monto', 'vigencia', 'recurrente'],
+    grupo: 'adicional',
+  },
+  otro: {
+    label: 'Otro documento',
+    descripcion: 'Flujo proyectado, informe de gestión, prospecto de ON, nota del cliente, etc. Se extraen hechos con su cita; el analista elige cuáles van a la opinión.',
+    campos: ['hechos: categoría, descripción, monto, fecha, cita textual y página'],
+    grupo: 'adicional',
   },
 };
+// Disponibles en todos los rubros (no recomendados).
+export const DOCUMENTOS_ADICIONALES = ['principales_clientes', 'cartera_contratos', 'otro'] as const;
+
+// Umbrales de los KPIs de documentos (propuesta pendiente de validación por Riesgos).
+// Inclusivos, como los de financieras. Los informativos no tienen semáforo.
+export const UMBRALES_DOCUMENTOS = {
+  pct_arrendado: { label: 'Hectáreas no propias / totales', mejorSi: 'menor', sano: 0.5, alerta: 0.8, unidad: '%', inclusivo: true },
+  concentracion_cultivo: { label: 'Cultivo principal / hectáreas totales', mejorSi: 'menor', sano: 0.6, alerta: 0.8, unidad: '%', inclusivo: true },
+  obra_pendiente_sobre_ventas: { label: 'Obra pendiente / ventas (años de trabajo)', mejorSi: 'mayor', sano: 1, alerta: 0.5, unidad: 'x', inclusivo: true },
+  pct_obra_publica: { label: 'Obra pública / obra pendiente', mejorSi: 'menor', sano: 0.5, alerta: 0.7, unidad: '%', inclusivo: true },
+  concentracion_comitente: { label: 'Mayor comitente / obra pendiente', mejorSi: 'menor', sano: 0.4, alerta: 0.6, unidad: '%', inclusivo: true },
+  top1_clientes: { label: 'Principal cliente / ventas', mejorSi: 'menor', sano: 0.25, alerta: 0.4, unidad: '%', inclusivo: true },
+  top3_clientes: { label: 'Tres principales clientes / ventas', mejorSi: 'menor', sano: 0.5, alerta: 0.7, unidad: '%', inclusivo: true },
+} as const satisfies Record<string, RatioThreshold>;
+export type KpiDocumento = keyof typeof UMBRALES_DOCUMENTOS;
+
+export const SIGNAL_PARAMS_DOCUMENTOS = {
+  agro: { arrendadoMaximo: 0.8, concentracionCultivoMaxima: 0.8 },
+  construccion: { concentracionComitenteMaxima: 0.7 },
+  cruces: { obraPendienteSobreVentasMaxima: 5 },
+} as const;
+
+// Palabras que identifican un campo propio en el anexo de bienes de uso.
+export const KW_CAMPO_PROPIO = ['campo', 'inmueble rural', 'inmuebles rurales', 'tierra', 'establecimiento rural', 'estancia', 'fraccion rural', 'terreno rural', 'chacra'];
+
 export type TipoDocumento = keyof typeof DOCUMENTOS_SECTORIALES;
 
 // SIGNAL_PARAMS con los números "abiertos" (no literales) para poder sobrescribirlos.
@@ -361,6 +435,8 @@ export const SECTOR_PROFILES: Record<RubroDisponible, SectorProfile> = {
     },
     senales: { deuda: { cortoPlazoShare: 0.9 }, liquidez: { ciclosDiasAumento: 60 } },
     ajustes: { margenEbitdaPromedio: true },
+    documentosSectoriales: [{ tipo: 'plan_siembra', recomendado: true }],
+    instruccionesOpinion: ['Si hay plan de siembra, empezá por la tenencia (cuánto es arrendado) y la concentración de cultivos.'],
   },
   comercio: {
     label: 'Comercio y distribución',
@@ -408,6 +484,8 @@ export const SECTOR_PROFILES: Record<RubroDisponible, SectorProfile> = {
     umbrales: { margen_ebitda: { sano: 0.08, alerta: 0.04 } },
     senales: { deuda: { cortoPlazoShare: 0.8 }, liquidez: { ciclosDiasAumento: 45 } },
     ajustes: { excluirAnticiposClientes: true },
+    documentosSectoriales: [{ tipo: 'listado_obras', recomendado: true }],
+    instruccionesOpinion: ['Si hay listado de obras, empezá por la obra pendiente (años de trabajo asegurado) y la concentración de comitentes.'],
   },
   servicios: {
     label: 'Servicios',
@@ -425,6 +503,7 @@ export const SECTOR_PROFILES: Record<RubroDisponible, SectorProfile> = {
       margen_ebitda: { sano: 0.15, alerta: 0.08 },
     },
     pesos: { negocio_mercado: 15, liquidez_solvencia: 10 },
+    instruccionesOpinion: ['Si el documento adicional trae la concentración de clientes, empezá por ahí.'],
   },
   financiera: {
     label: 'Financiera (no bancaria)',
@@ -539,6 +618,8 @@ export type PerfilEfectivo = {
   etiquetasDimensiones: Record<RiskDimension, string>;
   bloques: SectorProfile['bloques'] | null;
   documentos: NonNullable<SectorProfile['documentosSectoriales']>;
+  umbralesDocumentos: Record<KpiDocumento, RatioThreshold>;
+  senalesDocumentos: typeof SIGNAL_PARAMS_DOCUMENTOS;
   instruccionesOpinion: string[];
   ajustes: NonNullable<SectorProfile['ajustes']>;
 };
@@ -595,7 +676,13 @@ export function perfilEfectivo(rubro: RubroDisponible = 'generico', subsegmento:
     pesos,
     etiquetasDimensiones,
     bloques: p.bloques ? JSON.parse(JSON.stringify(p.bloques)) : null,
-    documentos: [...(p.documentosSectoriales ?? [])],
+    // Los del rubro y, en todos los rubros, el documento adicional (opcional).
+    documentos: [
+      ...(p.documentosSectoriales ?? []),
+      ...DOCUMENTOS_ADICIONALES.map(tipo => ({ tipo, recomendado: false })),
+    ],
+    umbralesDocumentos: JSON.parse(JSON.stringify(UMBRALES_DOCUMENTOS)),
+    senalesDocumentos: JSON.parse(JSON.stringify(SIGNAL_PARAMS_DOCUMENTOS)),
     instruccionesOpinion: [...(p.instruccionesOpinion ?? [])],
     ajustes: { ...(p.ajustes ?? {}) },
   };

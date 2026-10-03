@@ -11,6 +11,7 @@ import { RATIO_ASSUMPTIONS } from '../risk/policy';
 import { RATIO_BLOCKS as SHARED_RATIO_BLOCKS, RatioKind as SharedRatioKind, bloquesDelPerfil, SECTOR_KPI_SPECS } from '../ratios/blocks';
 import { avisoPerfil } from '../risk/avisoPerfil';
 import { indicadoresFinancieros } from '../ratios/financieras';
+import { analizarDocumentos } from '../sectorDocs/analisis';
 import { disponibilidadesActuales } from '../ratios/calculations';
 import { perfilEfectivo, RATIO_LABEL_CORTO } from '../risk/policy';
 import { VERSION_PREVIA } from '../risk/porton';
@@ -491,6 +492,7 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
         : [
             'Este análisis se realiza con criterios específicos del rubro.',
             a.diferencias.length ? `Difiere del perfil genérico en: ${a.diferencias.join('; ')}.` : '',
+            a.propios.length ? `Indicadores propios del rubro: ${a.propios.join('; ')}.` : '',
             a.ajustes.length ? `${a.ajustes.join('. ')}.` : '',
             a.noAplican.length ? `No aplican: ${a.noAplican.join('; ')}.` : '',
           ].filter(Boolean).join(' '),
@@ -1155,6 +1157,54 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
   // ======================================================================
   // 7. ACCIONISTAS Y DIRECTORIO
   // ======================================================================
+
+  // ======================================================================
+  // INFORMACIÓN SECTORIAL ADICIONAL (documentos declarados por el cliente)
+  // ======================================================================
+  {
+    const docsSec = (activeResult.documentosSectoriales ?? []).filter(d => d.estado === 'ok');
+    if (docsSec.length > 0) {
+      sectionTitle('Información sectorial adicional (declarada por el cliente, no auditada)');
+      paragraph('Documentos aportados por el cliente, no auditados. Los indicadores y cruces los calcula el sistema; pueden cambiar la opinión, pero nunca bajan los pisos de las señales automáticas.', 8, 'italic');
+      const SEM: Record<string, string> = { healthy: 'Sano', alert: 'Alerta', critical: 'Crítico' };
+      const fmtK = (v: number | null, u: string) => v === null ? 's/d'
+        : u === 'pct' ? `${fmtNum(v * 100, 1)}%` : u === 'monto' ? money(v) : u === 'ha' ? `${fmtNum(v, 0)} ha`
+        : u === 'anios' ? `${fmtNum(v, 1)} años` : fmtNum(v, 2);
+      for (const a of analizarDocumentos(docsSec, { extraction, perfil })) {
+        subheading(a.titulo);
+        paragraph(`${a.doc.nombreArchivo}${a.doc.fechaDocumento ? ` · al ${a.doc.fechaDocumento}` : ''} · cargado por ${a.doc.cargadoPor ?? 'el analista'} el ${new Date(a.doc.cargadoEn).toLocaleDateString('es-AR')}${a.doc.editado ? ' · editado por el analista' : ''}.`, 8);
+        // Reporte de mora: sus indicadores salen del módulo de financieras.
+        if (a.doc.tipo === 'reporte_mora' && perfil.modelo === 'financiera') {
+          const fr = indicadoresFinancieros(extraction, docsSec, { disponibilidades: disponibilidadesActuales(extraction) });
+          if (fr.mora.documentoId === a.doc.id) {
+            const st = (k: 'mora' | 'cobertura') => (ratios[k]?.status ? ` (${SEM[ratios[k].status as string]})` : '');
+            paragraph(`Cartera ${fr.mora.cartera === null ? 's/d' : money(fr.mora.cartera)} · más de 90 días ${fr.mora.vencida90 === null ? 's/d' : money(fr.mora.vencida90)} · mora ${fr.valores.mora.actual === null ? 's/d' : `${fmtNum(fr.valores.mora.actual * 100, 1)}%`}${st('mora')} · cobertura ${fr.valores.cobertura.actual === null ? 's/d' : `${fmtNum(fr.valores.cobertura.actual * 100, 1)}%`}${st('cobertura')}.${fr.cruce?.alerta ? ` Alerta: la cartera difiere ${Math.round(fr.cruce.diferenciaPct * 100)}% de la del balance (fechas distintas).` : ''}`, 8.5);
+          } else {
+            paragraph('Reporte anterior: no se usa para la mora (se usa el más reciente).', 8, 'italic');
+          }
+        }
+        if (a.kpis.length > 0) {
+          table({
+            startY: y,
+            head: [['Indicador', 'Valor', 'Estado']],
+            body: a.kpis.map(k => [k.label, fmtK(k.valor, k.unidad), k.informativo ? 'Informativo' : k.status ? SEM[k.status] : (k.motivo ?? '-')]),
+            columnStyles: { 0: { cellWidth: 100 }, 1: { halign: 'right' }, 2: { halign: 'center' } },
+            didParseCell: data => {
+              if (data.section === 'body' && data.column.index === 2) {
+                const st = a.kpis[data.row.index]?.status;
+                if (st) data.cell.styles.fillColor = tint(RATIO_STATUS_RGB[st], 0.35);
+              }
+            },
+          });
+        }
+        a.cruces.forEach(c => paragraph(`${c.nivel === 'error' ? 'Error de datos' : c.nivel === 'alerta' ? 'Alerta' : 'Nota'}: ${c.mensaje.replace(/^Error de datos: /, '')}`, 8.5, c.nivel === 'aviso' ? 'italic' : 'normal'));
+        if (a.doc.tipo === 'otro') {
+          if (a.hechosIncluidos.length === 0) paragraph('Ningún hecho de este documento se incluyó en la opinión.', 8, 'italic');
+          a.hechosIncluidos.forEach(h => paragraph(`• ${h.descripcion}${h.monto !== null ? ` (${money(h.monto)})` : ''} — "${h.cita_textual}"${h.pagina !== null ? ` (pág. ${h.pagina})` : ''}`, 8.5));
+        }
+      }
+    }
+  }
 
   sectionTitle('Accionistas y directorio');
   const accDir = extraction.accionistas_y_directorio;

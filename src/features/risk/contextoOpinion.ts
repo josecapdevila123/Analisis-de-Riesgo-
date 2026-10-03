@@ -9,6 +9,7 @@ import { indicadoresFinancieros } from '../ratios/financieras';
 import { disponibilidadesActuales } from '../ratios/calculations';
 import { RiskDimension } from '../extraction/schemas';
 import { faltantesBase } from './prechequeo';
+import { analizarDocumentos } from '../sectorDocs/analisis';
 import { RiskSignal } from './signals';
 import { SectorCaso } from './porton';
 import { stripRiskConclusion } from './summary';
@@ -73,14 +74,19 @@ export function armarContextoOpinion(i: ContextoOpinionInput) {
       no_aplican: Object.entries(perfil.noAplica).map(([k, motivo]) => ({ indicador: nombreRatio(k as RatioKey), motivo })),
       senales_desactivadas: perfil.senalesDesactivadas,
     },
-    // Documentos sectoriales: DECLARADOS por el cliente, no auditados.
-    documentacion_sectorial: documentos.map(d => ({
-      tipo: DOCUMENTOS_SECTORIALES[d.tipo].label,
-      archivo: d.nombreArchivo,
-      fecha: d.fechaDocumento,
-      editado_por_el_analista: d.editado,
-      datos: d.extraccion,
+    // Documentos sectoriales: DECLARADOS por el cliente, no auditados. Van con
+    // los KPIs y cruces que calculó el código; de "Otro", solo los hechos que el
+    // analista marcó (con su cita).
+    documentacion_sectorial: analizarDocumentos(documentos, { extraction, perfil }).map(a => ({
+      tipo: a.titulo,
+      archivo: a.doc.nombreArchivo,
+      fecha: a.doc.fechaDocumento,
+      cargado_por: a.doc.cargadoPor,
+      editado_por_el_analista: a.doc.editado,
       naturaleza: 'Información declarada por el cliente, no auditada.',
+      kpis: a.kpis.map(x => ({ indicador: x.label, valor: x.valor, semaforo: x.informativo ? 'informativo' : x.status ? SEMAFORO[x.status] : 'sin dato', motivo: x.motivo ?? null })),
+      cruces: a.cruces,
+      ...(a.doc.tipo === 'otro' ? { hechos_incluidos_por_el_analista: a.hechosIncluidos } : { datos: a.doc.extraccion }),
     })),
     // Del pre-chequeo: documentación base que no se recibió (va a información faltante).
     documentacion_base_faltante: faltantesBase(extraction),

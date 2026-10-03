@@ -80,6 +80,97 @@ ESTRUCTURA JSON DE SALIDA
 }
 `;
 
+const DECLARADO = 'El documento es información DECLARADA por el cliente (no auditada). Puede venir en PDF, imagen o como planilla convertida a texto.';
+
+const PLAN_SIEMBRA_PROMPT = `
+Sos un extractor estructurado. El documento adjunto es un PLAN DE SIEMBRA / DETALLE DE HECTÁREAS de una empresa agropecuaria. ${DECLARADO}
+${REGLAS_BASE}
+- PROHIBIDO sumar hectáreas, calcular porcentajes o concentraciones: devolvé cada lote tal como figura.
+
+CAMPOS
+- \`fecha_documento\`: fecha del documento si figura (si no, null).
+- \`campania\`: campaña a la que corresponde (ej. "2025/26").
+- \`lotes\`: una entrada por lote o renglón: \`{ cultivo, hectareas, tenencia, zona, rinde_esperado }\`. \`tenencia\` en "propia" | "arrendada" | "aparceria" | "otra" (si no se aclara, "otra"). \`rinde_esperado\` en quintales por hectárea (null si no figura).
+- \`costo_arrendamiento\`: \`{ texto, monto }\` con lo que diga el documento (ej. "12 qq/ha soja" o "USD 250/ha") y el monto en miles de pesos si está expresado en pesos; si no, monto null. Sin dato: null.
+
+ESTRUCTURA JSON DE SALIDA
+{
+  "fecha_documento": null,
+  "campania": "2025/26",
+  "lotes": [{ "cultivo": "Soja", "hectareas": 600, "tenencia": "arrendada", "zona": "Pergamino", "rinde_esperado": 35 }],
+  "costo_arrendamiento": { "texto": "12 qq/ha de soja", "monto": null }
+}
+`;
+
+const LISTADO_OBRAS_PROMPT = `
+Sos un extractor estructurado. El documento adjunto es un LISTADO DE OBRAS / LICITACIONES de una constructora. ${DECLARADO}
+${REGLAS_BASE}
+- PROHIBIDO calcular saldos, sumas o concentraciones. Si el documento no informa el saldo a ejecutar, devolvé null (no lo calcules).
+
+CAMPOS
+- \`fecha_documento\`: fecha del listado si figura.
+- \`obras\`: una entrada por obra o licitación: \`{ obra, comitente, tipo_comitente, monto_contrato, porcentaje_avance, saldo_a_ejecutar, estado, plazo_fin }\`.
+  - \`tipo_comitente\`: "publico" (Estado nacional, provincial, municipal, empresas y entes estatales) | "privado". Si no se puede saber, null.
+  - \`porcentaje_avance\`: número de 0 a 100 (null si no figura).
+  - \`estado\`: "en_ejecucion" | "adjudicada" | "presentada" (licitación presentada, no adjudicada) | "finalizada". Si no se puede saber, null.
+  - Montos en miles de pesos.
+
+ESTRUCTURA JSON DE SALIDA
+{
+  "fecha_documento": "2026-03-31",
+  "obras": [{ "obra": "Ruta 5 tramo II", "comitente": "Vialidad Provincial", "tipo_comitente": "publico", "monto_contrato": 3000, "porcentaje_avance": 40, "saldo_a_ejecutar": 1800, "estado": "en_ejecucion", "plazo_fin": "2027-06" }]
+}
+`;
+
+const PRINCIPALES_CLIENTES_PROMPT = `
+Sos un extractor estructurado. El documento adjunto lista los PRINCIPALES CLIENTES (o deudores, en una financiera) de la empresa. ${DECLARADO}
+${REGLAS_BASE}
+- PROHIBIDO calcular participaciones que el documento no informe: si solo hay montos, \`porcentaje_ventas\` va en null.
+
+CAMPOS
+- \`fecha_documento\`: fecha o período del listado si figura.
+- \`clientes\`: una entrada por cliente, en el orden del documento: \`{ cliente, porcentaje_ventas, monto }\`. \`porcentaje_ventas\` de 0 a 100 tal como figura; \`monto\` en miles de pesos.
+
+ESTRUCTURA JSON DE SALIDA
+{ "fecha_documento": null, "clientes": [{ "cliente": "Supermercados XX", "porcentaje_ventas": 30, "monto": 4500 }] }
+`;
+
+const CARTERA_CONTRATOS_PROMPT = `
+Sos un extractor estructurado. El documento adjunto es una CARTERA DE PEDIDOS / CONTRATOS de la empresa. ${DECLARADO}
+${REGLAS_BASE}
+
+CAMPOS
+- \`fecha_documento\`: fecha del documento si figura.
+- \`contratos\`: una entrada por contrato o pedido: \`{ cliente, objeto, monto, vigencia_hasta, recurrente }\`. \`monto\` en miles de pesos (el monto total pendiente del contrato). \`recurrente\`: true si es un abono / servicio periódico, false si es una venta única, null si no se puede saber.
+
+ESTRUCTURA JSON DE SALIDA
+{ "fecha_documento": null, "contratos": [{ "cliente": "YPF", "objeto": "Mantenimiento de planta", "monto": 1200, "vigencia_hasta": "2027-12", "recurrente": true }] }
+`;
+
+const OTRO_PROMPT = `
+Sos un extractor estructurado. El documento adjunto es un documento del cliente (flujo proyectado, informe de gestión, prospecto de ON, nota de la empresa u otro). ${DECLARADO}
+${REGLAS_BASE}
+- PROHIBIDO calificar los hechos como buenos, malos, riesgosos o favorables. Solo extraés hechos verificables con su cita.
+
+CAMPOS
+- \`fecha_documento\`: fecha del documento si figura.
+- \`descripcion_documento\`: qué tipo de documento es, en pocas palabras (ej. "Prospecto de ON Clase 3").
+- \`hechos\`: los hechos concretos relevantes para un análisis de crédito (montos, clientes, contratos, deuda, fondeo, garantías, contingencias, cambios operativos o societarios). Una entrada por hecho: \`{ categoria, descripcion, monto, fecha, cita_textual, pagina }\`.
+  - \`categoria\`: "ingresos" | "clientes" | "contratos" | "deuda" | "fondeo" | "garantias" | "contingencias" | "operativo" | "societario" | "otro".
+  - \`descripcion\`: el hecho en una oración neutra, sin adjetivos de valoración.
+  - \`cita_textual\`: el fragmento del documento del que sale, copiado literal.
+  - \`monto\` en miles de pesos (null si no hay); \`pagina\` si se puede saber.
+  - Como máximo 20 hechos.
+
+ESTRUCTURA JSON DE SALIDA
+{ "fecha_documento": null, "descripcion_documento": "Nota de la empresa", "hechos": [{ "categoria": "contratos", "descripcion": "Firmó un contrato de provisión por 24 meses con Toyota Argentina.", "monto": 900, "fecha": "2026-02", "cita_textual": "…hemos suscripto un contrato de provisión por 24 meses…", "pagina": 2 }] }
+`;
+
 export const SECTOR_DOC_PROMPTS: Record<TipoDocumentoSectorial, string> = {
   reporte_mora: REPORTE_MORA_PROMPT,
+  plan_siembra: PLAN_SIEMBRA_PROMPT,
+  listado_obras: LISTADO_OBRAS_PROMPT,
+  principales_clientes: PRINCIPALES_CLIENTES_PROMPT,
+  cartera_contratos: CARTERA_CONTRATOS_PROMPT,
+  otro: OTRO_PROMPT,
 };

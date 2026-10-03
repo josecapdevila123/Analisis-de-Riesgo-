@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DIMENSION_WEIGHTS, PCE_TRAMOS, perfilEfectivo, POLICY_CHANGELOG, POLICY_VERSION, RATIO_THRESHOLDS, RUBROS,
   SCORE_BANDS, SECTOR_PROFILES, SIGNAL_PARAMS, SUGERENCIA_RUBRO,
+  SUBSEGMENTOS, SIGNAL_PARAMS_FINANCIERA, DOCUMENTOS_SECTORIALES, UMBRALES_DOCUMENTOS, SIGNAL_PARAMS_DOCUMENTOS, KW_CAMPO_PROPIO,
 } from './policy';
 
 // Hash FNV-1a de 32 bits: estable y sin dependencias.
@@ -15,11 +16,12 @@ const fnv1a = (s: string) => {
 };
 
 const hashPolitica = () =>
-  fnv1a(JSON.stringify({ RATIO_THRESHOLDS, SIGNAL_PARAMS, DIMENSION_WEIGHTS, SCORE_BANDS, PCE_TRAMOS, SECTOR_PROFILES, SUGERENCIA_RUBRO }));
+  fnv1a(JSON.stringify({ RATIO_THRESHOLDS, SIGNAL_PARAMS, DIMENSION_WEIGHTS, SCORE_BANDS, PCE_TRAMOS, SECTOR_PROFILES, SUGERENCIA_RUBRO,
+    SUBSEGMENTOS, SIGNAL_PARAMS_FINANCIERA, DOCUMENTOS_SECTORIALES, UMBRALES_DOCUMENTOS, SIGNAL_PARAMS_DOCUMENTOS, KW_CAMPO_PROPIO }));
 
 // Si cambiás umbrales, señales, pesos o perfiles: subí POLICY_VERSION, anotá el
 // cambio en POLICY_CHANGELOG y actualizá esta línea con la versión y el hash nuevos.
-const REGISTRADA = { version: '2.1.0', hash: '84f155d4' };
+const REGISTRADA = { version: '2.2.0', hash: '94704043' };
 
 describe('versión de la política', () => {
   it('el hash coincide con la versión registrada (si falla: subí la versión y actualizá REGISTRADA)', () => {

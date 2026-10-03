@@ -79,7 +79,7 @@ import { RubroDisponible, SubSegmento, TipoDocumento } from './features/risk/pol
 import { PreChequeo } from './components/PreChequeo';
 import { armarPrechequeo } from './features/risk/prechequeo';
 import { indicadoresFinancieros } from './features/ratios/financieras';
-import { DocumentoSectorial, ExtraccionDocumento, MAX_DOCUMENTOS_POR_CASO, normalizarFecha } from './features/sectorDocs/tipos';
+import { DocumentoSectorial, ExtraccionDocumento, fechaDeExtraccion, MAX_DOCUMENTOS_POR_CASO } from './features/sectorDocs/tipos';
 import { runFinancialBlockExtraction, runSectorDocExtraction } from './features/extraction/geminiClient';
 import { SectorBanner } from './components/SectorBanner';
 import { stripRiskConclusion } from './features/risk/summary';
@@ -555,7 +555,7 @@ export default function App() {
     guardarDocumentos(result.id, docs => [...docs, doc]);
     try {
       const extraccion = await runSectorDocExtraction(tipo, [await leerArchivo(file)]);
-      const fecha = normalizarFecha((extraccion as { fecha_corte?: string | null }).fecha_corte ?? null);
+      const fecha = fechaDeExtraccion(extraccion);
       guardarDocumentos(result.id, docs => docs.map(d => d.id === doc.id ? { ...d, extraccion, fechaDocumento: fecha, estado: 'ok', actualizadoEn: new Date().toISOString() } : d));
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
@@ -566,7 +566,7 @@ export default function App() {
   const editarDocumento = (result: ExtractionResult, docId: string, extraccion: ExtraccionDocumento) => {
     guardarDocumentos(result.id, docs => docs.map(d => d.id === docId ? {
       ...d, extraccion, editado: true, actualizadoEn: new Date().toISOString(),
-      fechaDocumento: normalizarFecha((extraccion as { fecha_corte?: string | null }).fecha_corte ?? null) ?? d.fechaDocumento,
+      fechaDocumento: fechaDeExtraccion(extraccion) ?? d.fechaDocumento,
     } : d));
   };
 

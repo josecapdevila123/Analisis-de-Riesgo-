@@ -7,6 +7,7 @@ import { PerfilEfectivo, perfilEfectivo } from './policy';
 import { disponibilidadesActuales } from '../ratios/calculations';
 import { indicadoresFinancieros } from '../ratios/financieras';
 import type { DocumentoSectorial } from '../sectorDocs/tipos';
+import { senalesDeDocumentos } from '../sectorDocs/analisis';
 
 // Señales de riesgo objetivas, calculadas con reglas fijas (sin IA). Se le pasan
 // al modelo como evidencia y algunas fijan un PISO al puntaje final, para que una
@@ -439,6 +440,9 @@ export function detectSignals({ extraction, ratios, inconsistencias, crossCheck,
   if (perfil.modelo === 'financiera' && perfil.senalesFinanciera) {
     detectarSenalesFinanciera(extraction, ratios, perfil, documentos, add);
   }
+
+  // ---------- Documentos sectoriales (declarados): solo suman señales ----------
+  senalesDeDocumentos(documentos, { extraction, perfil }).forEach(add);
 
   // Señales desactivadas por el rubro (o de ratios que no aplican): no suman.
   const desactivadas = new Set(perfil.senalesDesactivadas.map(d => d.id));

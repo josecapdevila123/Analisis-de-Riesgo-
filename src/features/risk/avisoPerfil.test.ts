@@ -38,3 +38,12 @@ describe('aviso del perfil de evaluación', () => {
     expect(a.politica).toMatch(/^Política de riesgos v1\.0\.0 — Propuesta inicial/);
   });
 });
+
+describe('aviso de una financiera (umbrales propios que el genérico no tiene)', () => {
+  it.each(['consumo', 'prendario_empresas', 'factoring', 'leasing'] as const)('no se rompe y lista la mora del sub-segmento (%s)', sub => {
+    const sector = confirmarRubro(sectorInicial(buildExtraction()), 'financiera', 'Es una financiera', '', null, new Date(), sub);
+    const a = avisoPerfil(perfilEfectivo('financiera', sub), sector);
+    expect(a.propios.some(x => x.startsWith('Mora (sano ≤'))).toBe(true);
+    expect(a.subsegmento).toMatch(/^Sub-segmento: /);
+  });
+});

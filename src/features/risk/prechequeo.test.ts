@@ -16,10 +16,10 @@ describe('pre-chequeo', () => {
     expect(faltantesBase(e)).toEqual(['Informe Nosis', 'Ventas post balance', 'Deudas post balance', 'Accionistas y directorio']);
   });
 
-  it('rubro productivo: sin documentos sectoriales ni bloque financiero; KPIs del perfil', () => {
+  it('comercio: ningún documento recomendado, solo el documento adicional opcional; sin bloque financiero', () => {
     const e = buildExtraction();
     const p = armarPrechequeo({ extraction: e, ratios: computeRatios(e), crossCheck: null, inconsistencias: [], documentos: [], fechaCaso: '2026-04-01', perfil: perfilEfectivo('comercio') });
-    expect(p.documentosRubro).toEqual([]);
+    expect(p.documentosRubro.map(d => [d.tipo, d.recomendado])).toEqual([['principales_clientes', false], ['cartera_contratos', false], ['otro', false]]);
     expect(p.bloqueFinanciero.requerido).toBe(false);
     expect(p.kpis[0].label).toBe('Días de stock');
   });
