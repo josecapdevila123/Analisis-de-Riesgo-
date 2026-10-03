@@ -962,7 +962,6 @@ export default function App() {
                 <AnalysisFlow
                   stage={processingStage}
                   fileNames={activeResult.fileNames}
-                  startedAt={activeResult.timestamp}
                 />
               )}
 

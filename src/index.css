@@ -75,51 +75,37 @@
   background: rgba(0, 0, 0, 0.35);
 }
 
+
 /* ==========================================================================
    Animación del análisis en curso (components/AnalysisFlow.tsx)
+   Lenta y suave a propósito: tiene que acompañar la espera, no apurarla.
    ========================================================================== */
-@keyframes flujo-giro { to { transform: rotate(360deg); } }
-@keyframes flujo-respira {
-  0%, 100% { transform: scale(0.92); opacity: 0.55; }
-  50% { transform: scale(1.08); opacity: 0.9; }
+@keyframes agua-corre { to { stroke-dashoffset: -64; } }
+@keyframes agua-lee {
+  0% { transform: translateY(-100%); opacity: 0; }
+  20%, 80% { opacity: 1; }
+  100% { transform: translateY(260%); opacity: 0; }
 }
-@keyframes flujo-onda {
-  0% { transform: scale(0.6); opacity: 0.7; }
-  100% { transform: scale(1.9); opacity: 0; }
+@keyframes agua-gota {
+  0%, 100% { border-radius: 58% 42% 50% 50% / 52% 48% 52% 48%; transform: rotate(0deg) scale(1); }
+  33% { border-radius: 45% 55% 42% 58% / 58% 44% 56% 42%; transform: rotate(60deg) scale(1.04); }
+  66% { border-radius: 52% 48% 60% 40% / 44% 56% 46% 54%; transform: rotate(120deg) scale(0.97); }
 }
-@keyframes flujo-brillo {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+@keyframes agua-onda {
+  0% { transform: scale(0.7); opacity: 0.5; }
+  100% { transform: scale(1.7); opacity: 0; }
 }
-@keyframes flujo-entra {
-  from { opacity: 0; transform: translateY(6px); filter: blur(4px); }
-  to { opacity: 1; transform: translateY(0); filter: blur(0); }
-}
-@keyframes flujo-avance {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(250%); }
+@keyframes agua-aparece {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.flujo-giro { animation: flujo-giro 6s linear infinite; }
-.flujo-giro-lento { animation: flujo-giro 14s linear infinite reverse; }
-.flujo-respira { animation: flujo-respira 3.2s ease-in-out infinite; }
-.flujo-onda { animation: flujo-onda 2.8s ease-out infinite; }
-.flujo-entra { animation: flujo-entra 0.5s ease-out both; }
-.flujo-avance { animation: flujo-avance 1.6s ease-in-out infinite; }
-
-/* Texto con brillo que lo recorre, como el "pensando" de los asistentes. */
-.flujo-texto-brillo {
-  background: linear-gradient(90deg, rgb(255 255 255 / 0.45) 0%, #fff 40%, var(--color-brand-green) 50%, #fff 60%, rgb(255 255 255 / 0.45) 100%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: flujo-brillo 2.6s linear infinite;
-}
+.agua-corre { animation: agua-corre 3.2s linear infinite; }
+.agua-lee { animation: agua-lee 3.6s ease-in-out infinite; }
+.agua-gota { animation: agua-gota 12s ease-in-out infinite; }
+.agua-onda { animation: agua-onda 6s ease-out infinite; }
+.agua-aparece { animation: agua-aparece 1.2s ease-out both; }
 
 @media (prefers-reduced-motion: reduce) {
-  .flujo-giro, .flujo-giro-lento, .flujo-respira, .flujo-onda, .flujo-avance, .flujo-texto-brillo, .flujo-entra {
-    animation: none;
-  }
-  .flujo-texto-brillo { color: #fff; }
+  .agua-corre, .agua-lee, .agua-gota, .agua-onda, .agua-aparece { animation: none; }
 }
