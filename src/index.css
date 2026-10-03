@@ -74,3 +74,44 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.35);
 }
+
+
+/* ==========================================================================
+   Animación del análisis en curso (components/AnalysisFlow.tsx)
+   Lenta y suave a propósito: tiene que acompañar la espera, no apurarla.
+   ========================================================================== */
+@keyframes agua-corre { to { stroke-dashoffset: -64; } }
+@keyframes agua-lee {
+  0% { transform: translateY(-100%); opacity: 0; }
+  20%, 80% { opacity: 1; }
+  100% { transform: translateY(260%); opacity: 0; }
+}
+@keyframes agua-gota {
+  0%, 100% { border-radius: 58% 42% 50% 50% / 52% 48% 52% 48%; transform: rotate(0deg) scale(1); }
+  33% { border-radius: 45% 55% 42% 58% / 58% 44% 56% 42%; transform: rotate(60deg) scale(1.04); }
+  66% { border-radius: 52% 48% 60% 40% / 44% 56% 46% 54%; transform: rotate(120deg) scale(0.97); }
+}
+@keyframes agua-onda {
+  0% { transform: scale(0.7); opacity: 0.5; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+@keyframes agua-late {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.992); }
+}
+@keyframes agua-aparece {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.agua-corre { animation: agua-corre 3.2s linear infinite; }
+.agua-lee { animation: agua-lee 3.6s ease-in-out infinite; }
+.agua-gota { animation: agua-gota 12s ease-in-out infinite; }
+.agua-onda { animation: agua-onda 6s ease-out infinite; }
+.agua-aparece { animation: agua-aparece 1.2s ease-out both; }
+/* Latido lento del título de la etapa: como una respiración tranquila. */
+.agua-late { animation: agua-late 3.6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .agua-corre, .agua-lee, .agua-gota, .agua-onda, .agua-aparece, .agua-late { animation: none; }
+}
