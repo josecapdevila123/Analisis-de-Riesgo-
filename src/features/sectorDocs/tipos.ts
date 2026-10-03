@@ -175,3 +175,10 @@ export function documentoDesactualizado(doc: Pick<DocumentoSectorial, 'fechaDocu
 // si después se carga, edita o borra alguno).
 export const firmaDocumentos = (docs: DocumentoSectorial[] | null | undefined) =>
   (docs ?? []).filter(d => d.estado === 'ok').map(d => `${d.id}@${d.actualizadoEn}`).sort().join('|');
+
+// Suma de los 10 primeros montos de "principales clientes" (en financieras:
+// completa el top 10 de deudores si no se cargó a mano).
+export const sumaTop10 = (c: PrincipalesClientes) => {
+  const montos = c.clientes.map(x => x.monto).filter((m): m is number => typeof m === 'number' && Number.isFinite(m)).sort((a, b) => b - a).slice(0, 10);
+  return montos.length ? montos.reduce((a, b) => a + b, 0) : null;
+};

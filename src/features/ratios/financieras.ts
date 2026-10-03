@@ -1,5 +1,5 @@
 import { RawExtraction } from '../extraction/schemas';
-import { DocumentoSectorial, normalizarFecha, ReporteMora, TRAMOS_MAS_90 } from '../sectorDocs/tipos';
+import { DocumentoSectorial, normalizarFecha, PrincipalesClientes, ReporteMora, sumaTop10, TRAMOS_MAS_90 } from '../sectorDocs/tipos';
 
 // Indicadores de financieras no bancarias. Funciones puras, sin IA.
 // Fuente de la mora y las previsiones: el reporte de mora más reciente si está
@@ -176,6 +176,13 @@ export function indicadoresFinancieros(
   const varCartera = div(carteraBalance !== null && carteraAnt !== null ? carteraBalance - carteraAnt : null, carteraAnt);
   const varPn = espAnt && espAnt.patrimonio_neto !== 0 ? (pn - espAnt.patrimonio_neto) / Math.abs(espAnt.patrimonio_neto) : null;
 
+  // Top 10 deudores: la carga manual manda; si no está, el documento de
+  // principales deudores (suma de los 10 primeros montos).
+  const docDeudores = (documentos ?? []).filter(d => d.tipo === 'principales_clientes' && d.estado === 'ok' && d.extraccion)
+    .sort((a, b) => (normalizarFecha(b.fechaDocumento) ?? '').localeCompare(normalizarFecha(a.fechaDocumento) ?? ''))[0];
+  const top10 = f && fin(f.top10_deudores_monto) ? f.top10_deudores_monto
+    : docDeudores ? sumaTop10(docDeudores.extraccion as PrincipalesClientes) : null;
+
   const valores: Record<FinKey, ValorFin> = {
     cartera_financiera: valor(m.cartera, SIN_CARTERA),
     mora: valor(div(m.vencida90, m.cartera), SIN_CARTERA),
@@ -197,10 +204,7 @@ export function indicadoresFinancieros(
     concentracion_fondeo: valor(totalFondeo > 0 ? mayorFondeo / totalFondeo : null, 'Sin apertura de las fuentes de fondeo.'),
     eficiencia: valor(margenFinanciero !== null && margenFinanciero > 0 ? gastos / margenFinanciero : null,
       margenFinanciero !== null && margenFinanciero <= 0 ? 'Margen financiero no positivo.' : 'Faltan ingresos o egresos financieros.'),
-    top10_sobre_cartera: valor(
-      f && fin(f.top10_deudores_monto) ? div(f.top10_deudores_monto, m.cartera ?? carteraBalance) : null,
-      'Cargá a mano el monto de los 10 principales deudores.',
-    ),
+    top10_sobre_cartera: valor(div(top10, m.cartera ?? carteraBalance), 'Cargá a mano el monto de los 10 principales deudores o el documento de principales deudores.'),
     brecha_crecimiento_cartera_pn: valor(
       varCartera !== null && varPn !== null ? varCartera - varPn : null,
       'Falta la cartera del ejercicio anterior o el comparativo.',

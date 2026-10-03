@@ -1,5 +1,5 @@
 import { RawExtraction } from '../extraction/schemas';
-import { PerfilEfectivo, perfilEfectivo } from '../risk/policy';
+import { PerfilEfectivo, perfilEfectivo, RatioThreshold } from '../risk/policy';
 import { FIN_KEYS, FinKey, indicadoresFinancieros } from './financieras';
 import type { DocumentoSectorial } from '../sectorDocs/tipos';
 
@@ -165,24 +165,29 @@ const computeEBITDA = (year: Year): number => {
 
 // Semáforo según la política de riesgos (src/features/risk/policy.ts), con los
 // umbrales del perfil efectivo del rubro. Un ratio que "no aplica" no tiene semáforo.
-const evaluateRatioStatus = (key: RatioKey, value: number | null, perfil: PerfilEfectivo): RatioStatus | null => {
-  if (!isFiniteNumber(value)) return null;
-  const t = perfil.umbrales[key];
-  if (!t) return null;
-  if (perfil.noAplica[key]) return null;
-  // Inclusivo (financieras): el valor exacto del umbral cae en el tramo mejor.
+// Semáforo de un valor contra un umbral de la política (estricto o inclusivo).
+export const evaluarConUmbral = (value: number | null, t: RatioThreshold | null | undefined): RatioStatus | null => {
+  if (!isFiniteNumber(value) || !t) return null;
+  // Inclusivo (financieras, documentos): el valor exacto del umbral cae en el tramo mejor.
   const inc = t.inclusivo === true;
   if (t.mejorSi === 'mayor') {
     if (inc ? value >= t.sano : value > t.sano) return 'healthy';
     if (value >= t.alerta) return 'alert';
     return 'critical';
   }
-  // Menor = mejor (múltiplos de deuda). Negativo en deuda bruta / EBITDA solo
-  // ocurre con EBITDA negativo: no hay capacidad de repago.
-  if (key === 'deuda_ebitda' && value < 0) return 'critical';
   if (value <= t.sano) return 'healthy';
   if (value <= t.alerta) return 'alert';
   return 'critical';
+};
+
+const evaluateRatioStatus = (key: RatioKey, value: number | null, perfil: PerfilEfectivo): RatioStatus | null => {
+  if (!isFiniteNumber(value)) return null;
+  const t = perfil.umbrales[key];
+  if (!t) return null;
+  if (perfil.noAplica[key]) return null;
+  // Negativo en deuda bruta / EBITDA solo ocurre con EBITDA negativo: no hay capacidad de repago.
+  if (key === 'deuda_ebitda' && value < 0) return 'critical';
+  return evaluarConUmbral(value, t);
 };
 
 type YearValues = Record<RatioKey, number | null>;
