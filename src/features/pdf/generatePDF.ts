@@ -492,6 +492,7 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
         : [
             'Este análisis se realiza con criterios específicos del rubro.',
             a.diferencias.length ? `Difiere del perfil genérico en: ${a.diferencias.join('; ')}.` : '',
+            a.propios.length ? `Indicadores propios del rubro: ${a.propios.join('; ')}.` : '',
             a.ajustes.length ? `${a.ajustes.join('. ')}.` : '',
             a.noAplican.length ? `No aplican: ${a.noAplican.join('; ')}.` : '',
           ].filter(Boolean).join(' '),

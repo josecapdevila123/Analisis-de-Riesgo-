@@ -22,6 +22,7 @@ export type AvisoPerfil = {
   cambio: string | null;    // "Sugerido: Industria. Motivo del cambio: …"
   esGenerico: boolean;
   diferencias: string[];    // "Margen EBITDA (sano > 5% vs. 10%)"
+  propios: string[];        // umbrales que solo existen en este rubro (ej. "Mora (sano ≤ 5%; alerta ≤ 10%)")
   ajustes: string[];        // "Liquidez corriente y pasivo / PN sin anticipos de clientes"
   noAplican: string[];      // "Prueba ácida (motivo)"
   kpis: string[];
@@ -38,13 +39,22 @@ export function avisoPerfil(
   extras: { mora?: FuenteMora | null; documentos?: DocumentoSectorial[] | null } = {},
 ): AvisoPerfil {
   const base = perfilEfectivo('generico');
+  // Diferencias solo contra los umbrales que existen en el genérico; los propios
+  // del rubro (ej. mora en financieras) no tienen contra qué compararse y van aparte.
   const diferencias = (Object.keys(perfil.umbrales) as RatioWithThreshold[]).flatMap(k => {
     if (perfil.noAplica[k]) return [];
     const p = perfil.umbrales[k];
     const g = base.umbrales[k];
+    if (!p || !g) return [];
     if (p.sano === g.sano && p.alerta === g.alerta) return [];
     const signo = p.mejorSi === 'mayor' ? '>' : '≤';
     return [`${RATIO_LABEL_CORTO[k] ?? p.label} (sano ${signo} ${fmtUmbral(p.sano, p.unidad)} vs. ${fmtUmbral(g.sano, g.unidad)}; alerta ${fmtUmbral(p.alerta, p.unidad)} vs. ${fmtUmbral(g.alerta, g.unidad)})`];
+  });
+  const propios = (Object.keys(perfil.umbrales) as RatioKey[]).flatMap(k => {
+    const p = perfil.umbrales[k];
+    if (!p || (base.umbrales as Partial<Record<RatioKey, unknown>>)[k] || perfil.noAplica[k]) return [];
+    const signo = p.mejorSi === 'mayor' ? (p.inclusivo ? '≥' : '>') : '≤';
+    return [`${RATIO_LABEL_CORTO[k] ?? p.label} (sano ${signo} ${fmtUmbral(p.sano, p.unidad)}; alerta ${signo} ${fmtUmbral(p.alerta, p.unidad)})`];
   });
   const s = perfil.senales;
   const gs = base.senales;
@@ -72,6 +82,7 @@ export function avisoPerfil(
     cambio,
     esGenerico: perfil.rubro === 'generico',
     diferencias,
+    propios,
     ajustes,
     noAplican: Object.entries(perfil.noAplica).map(([k, m]) => `${RATIO_LABEL_CORTO[k as RatioKey] ?? k} (${m})`),
     kpis: perfil.kpisPrioritarios.map(k => RATIO_LABEL_CORTO[k] ?? k),

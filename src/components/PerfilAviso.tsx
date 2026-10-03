@@ -30,6 +30,7 @@ export function PerfilAviso({ perfil, sector, mora, documentos }: {
         <div className="text-ink/70 space-y-1">
           <p>Este análisis se realiza con criterios específicos del rubro.</p>
           {a.diferencias.length > 0 && <p><span className="font-medium text-ink/80">Difiere del perfil genérico en:</span> {a.diferencias.join('; ')}.</p>}
+          {a.propios.length > 0 && <p><span className="font-medium text-ink/80">Indicadores propios del rubro:</span> {a.propios.join('; ')}.</p>}
           {a.ajustes.length > 0 && <p>{a.ajustes.join('. ')}.</p>}
           {a.noAplican.length > 0 && <p><span className="font-medium text-ink/80">No aplican:</span> {a.noAplican.join('; ')}.</p>}
         </div>
