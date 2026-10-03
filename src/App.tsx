@@ -60,6 +60,7 @@ import { SourceDataEditor } from './features/editing/SourceDataEditor';
 import { BiBankLogo } from './components/BiBankLogo';
 import { CompanyHistoryView } from './components/CompanyHistoryView';
 import { NosisDebtBars } from './components/NosisDebtBars';
+import { ExecutiveSummaryView } from './components/ExecutiveSummaryView';
 import { RiskOpinionView } from './components/RiskOpinionView';
 import { RiskPolicyView } from './components/RiskPolicyView';
 import { runRiskAssessment } from './features/risk/assessment';
@@ -828,37 +829,39 @@ export default function App() {
               <div 
                 {...getRootProps()} 
                 className={cn(
-                  "border-2 border-dashed border-ink p-16 flex flex-col items-center justify-center transition-all bg-white/50",
-                  !user ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-white",
-                  isDragActive && user ? "bg-ink/5 scale-[0.99]" : ""
+                  "border-2 border-dashed border-ink/20 rounded-lg p-16 flex flex-col items-center justify-center transition-all bg-white",
+                  !user ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:border-brand-green",
+                  isDragActive && user ? "border-brand-green bg-brand-green/5 scale-[0.99]" : ""
                 )}
               >
                 <input {...getInputProps()} disabled={!user} />
-                <div className="w-16 h-16 border border-ink/15 flex items-center justify-center mb-6">
-                  <Upload className="w-8 h-8" />
+                <div className="w-14 h-14 rounded-full bg-ink text-brand-green flex items-center justify-center mb-5">
+                  <Upload className="w-6 h-6" />
                 </div>
                 {user ? (
                   <>
-                    <p className="text-sm font-bold uppercase tracking-widest mb-2">Arrastre archivos aquí</p>
-                    <p className="text-[10px] font-mono opacity-50 uppercase">Soporta Múltiples Archivos (PDF, IMG)</p>
+                    <p className="text-base font-semibold mb-1">Arrastrá los archivos acá o hacé clic para elegirlos</p>
+                    <p className="text-xs text-ink/50">Balance, Memoria, informe Nosis y ventas post balance · PDF o imágenes</p>
                   </>
                 ) : (
                   <>
-                    <p className="text-sm font-bold uppercase tracking-widest mb-2">Inicie sesión para analizar</p>
-                    <p className="text-[10px] font-mono opacity-50 uppercase">Debe iniciar sesión para guardar el historial</p>
+                    <p className="text-base font-semibold mb-1">Iniciá sesión para analizar</p>
+                    <p className="text-xs text-ink/50">El historial de casos se guarda en tu cuenta</p>
                   </>
                 )}
               </div>
 
               <div className="mt-12 grid grid-cols-3 gap-8">
                 {[
-                  { label: "Análisis", value: "Ratios Automáticos" },
-                  { label: "Cruce", value: "Balance vs Nosis" },
-                  { label: "Proyección", value: "Ventas & EBITDA" }
+                  { label: "Análisis", value: "Ratios y capacidad de pago", detail: "27 indicadores calculados en código" },
+                  { label: "Cruce", value: "Balance vs. Nosis", detail: "Situación BCRA, cheques y deuda en el sistema" },
+                  { label: "Opinión", value: "Riesgo de 1 a 100", detail: "Lectura integral con política de riesgos" }
                 ].map((stat, i) => (
-                  <div key={i} className="border-t border-ink pt-4">
-                    <p className="text-[10px] opacity-50 uppercase mb-1">{stat.label}</p>
-                    <p className="text-sm font-bold uppercase">{stat.value}</p>
+                  <div key={i} className="relative pt-4 border-t border-ink/15">
+                    <span className="absolute -top-px left-0 w-8 h-0.5 bg-brand-green" />
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-ink/50 mb-1">{stat.label}</p>
+                    <p className="text-sm font-semibold text-ink">{stat.value}</p>
+                    <p className="text-xs text-ink/50 mt-0.5">{stat.detail}</p>
                   </div>
                 ))}
               </div>
@@ -1072,239 +1075,13 @@ export default function App() {
                   
 
                     {activeTab === 'Resumen Ejecutivo' && (
-                      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        
-                        {/* Análisis High Thinking AI */}
-                        <div className="w-full bg-white border border-ink/15 p-6 mb-8 font-sans">
-                          <h3 className="text-lg font-bold mb-4 uppercase text-ink">Resumen</h3>
-                          {activeResult.verification?.executive_summary ? (
-                            <div className="text-left text-ink prose prose-sm max-w-none prose-p:mb-4 last:prose-p:mb-0">
-                              <ReactMarkdown>{stripRiskConclusion(activeResult.verification.executive_summary)}</ReactMarkdown>
-                            </div>
-                          ) : (
-                            <p className="text-sm text-ink/60 italic">
-                              El resumen ejecutivo no se pudo generar para este caso.
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Opinión de riesgos: única fuente del dictamen */}
-                        <button
-                          onClick={() => setActiveTab('Opinión de riesgos')}
-                          className="w-full text-left bg-white border border-ink/15 p-5 mb-8 flex items-center justify-between gap-6 hover:bg-ink/5 transition-colors"
-                        >
-                          <div className="min-w-0">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-ink/60 mb-1">Opinión de riesgos</p>
-                            {activeResult.riskAssessment ? (
-                              <>
-                                <p className="text-xl font-bold text-ink">
-                                  {activeResult.riskAssessment.puntaje.final}/100 · {CATEGORY_LABEL[activeResult.riskAssessment.puntaje.categoria]}
-                                </p>
-                                <p className="text-sm text-ink/70 mt-1 line-clamp-2">{activeResult.riskAssessment.opinion.dictamen}</p>
-                              </>
-                            ) : (
-                              <p className="text-sm text-ink/60">
-                                {riskBusyId === activeResult.id ? 'Generando la opinión de riesgo...' : 'Este caso todavía no tiene opinión de riesgo.'}
-                              </p>
-                            )}
-                          </div>
-                          <ChevronRight className="w-5 h-5 shrink-0 opacity-50" />
-                        </button>
-
-                        {/* Patrimonial Summary Table (Quick View) */}
-                        <div className="bg-canvas p-6 border border-ink/15 mb-8">
-                          <h3 className="text-base font-bold uppercase tracking-widest mb-4 opacity-70 text-ink">Resumen Patrimonial {activeResult.extraction?.company_profile?.anio_actual || ''} (Vista Rápida)</h3>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-                            <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Total Activo</p>
-                              <div className="flex items-baseline">
-                                <p className="text-xl font-bold font-mono text-ink">
-                                  <EditableNumber
-                                    path={['ejercicio_actual', 'estado_situacion_patrimonial', 'total_activo']}
-                                    value={activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_activo}
-                                    display={formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_activo)}
-                                    required
-                                  />
-                                </p>
-                                <VariationBadge variation={calculateVariation(
-                                  activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_activo || 0,
-                                  activeResult.extraction?.ejercicio_anterior?.estado_situacion_patrimonial?.total_activo || 0
-                                )} />
-                              </div>
-                            </div>
-                            <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Total Pasivo</p>
-                              <div className="flex items-baseline">
-                                <p className="text-xl font-bold font-mono text-ink">
-                                  <EditableNumber
-                                    path={['ejercicio_actual', 'estado_situacion_patrimonial', 'total_pasivo']}
-                                    value={activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_pasivo}
-                                    display={formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_pasivo)}
-                                    required
-                                  />
-                                </p>
-                                <VariationBadge variation={calculateVariation(
-                                  activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_pasivo || 0,
-                                  activeResult.extraction?.ejercicio_anterior?.estado_situacion_patrimonial?.total_pasivo || 0
-                                )} />
-                              </div>
-                            </div>
-                            <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Patrimonio Neto</p>
-                              <div className="flex items-baseline">
-                                <p className="text-xl font-bold font-mono text-ink">
-                                  <EditableNumber
-                                    path={['ejercicio_actual', 'estado_situacion_patrimonial', 'patrimonio_neto']}
-                                    value={activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.patrimonio_neto}
-                                    display={formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.patrimonio_neto)}
-                                    required
-                                  />
-                                </p>
-                                <VariationBadge variation={calculateVariation(
-                                  activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.patrimonio_neto || 0,
-                                  activeResult.extraction?.ejercicio_anterior?.estado_situacion_patrimonial?.patrimonio_neto || 0
-                                )} />
-                              </div>
-                            </div>
-                            <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Resultado Final</p>
-                              <div className="flex items-baseline">
-                                <p className={cn(
-                                  "text-xl font-bold font-mono",
-                                  (activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto || 0) >= 0 ? "text-ink" : "text-red-600"
-                                )}>
-                                  <EditableNumber
-                                    path={['ejercicio_actual', 'estado_resultados', 'resultado_neto']}
-                                    value={activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto}
-                                    display={formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto)}
-                                    required
-                                  />
-                                </p>
-                                <VariationBadge variation={calculateVariation(
-                                  activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto || 0,
-                                  activeResult.extraction?.ejercicio_anterior?.estado_resultados?.resultado_neto || 0
-                                )} />
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                  {/* Nuevas Tarjetas KPI (Fila Superior) */}
-                  <h3 className="text-lg font-bold mb-4 uppercase text-ink">Ratios</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                    {/* Tarjeta 1: VENTAS */}
-                    <div className="bg-white border border-ink/15 p-4 relative overflow-hidden group hover:shadow-lg transition-all">
-                      <div className="absolute top-4 right-4">
-                          <StatusBadge status={evaluateVariation(calculateVariation(
-                            activeResult.extraction?.ejercicio_actual?.estado_resultados?.ventas_netas || 0,
-                            activeResult.extraction?.ejercicio_anterior?.estado_resultados?.ventas_netas || 0
-                          ))} />
-                        </div>
-                        <p className="text-[10px] font-sans font-bold text-ink uppercase mb-2">VENTAS (EN MILES)</p>
-                      <p className="text-3xl font-bold font-sans mb-2 text-ink">
-                        <EditableNumber
-                          path={['ejercicio_actual', 'estado_resultados', 'ventas_netas']}
-                          value={activeResult.extraction?.ejercicio_actual?.estado_resultados?.ventas_netas}
-                          display={formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_resultados?.ventas_netas)}
-                          required
+                      <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <ExecutiveSummaryView
+                          result={activeResult}
+                          riskBusy={riskBusyId === activeResult.id}
+                          onOpenTab={setActiveTab}
+                          onGeneratePdf={() => generatePDF(activeResult)}
                         />
-                      </p>
-                      <div className="flex items-center text-xs font-sans font-bold text-gray-600 leading-tight">
-                        <VariationBadge variation={calculateVariation(
-                          activeResult.extraction?.ejercicio_actual?.estado_resultados?.ventas_netas || 0,
-                          activeResult.extraction?.ejercicio_anterior?.estado_resultados?.ventas_netas || 0
-                        )} />
-                        <span className="ml-1">Var. interanual</span>
-                      </div>
-                    </div>
-
-                    {/* Tarjeta 2: EBITDA */}
-                    <div className="bg-white border border-ink/15 p-4 relative overflow-hidden group hover:shadow-lg transition-all">
-                      <div className="absolute top-4 right-4">
-                          <StatusBadge status={evaluateVariation(calculateVariation(
-                            (activeResult.ratios?.ebitda.actual ?? 0),
-                            (activeResult.ratios?.ebitda.anterior ?? 0)
-                          ))} />
-                        </div>
-                        <p className="text-[10px] font-sans font-bold text-ink uppercase mb-2">EBITDA (EN MILES)</p>
-                      <p className="text-3xl font-bold font-sans mb-2 text-ink">
-                        {formatCurrencyThousands((activeResult.ratios?.ebitda.actual ?? null))}
-                      </p>
-                      <div className="flex items-center text-xs font-sans font-bold text-gray-600 leading-tight">
-                        <VariationBadge variation={calculateVariation(
-                          (activeResult.ratios?.ebitda.actual ?? 0),
-                          (activeResult.ratios?.ebitda.anterior ?? 0)
-                        )} />
-                        <span className="ml-1">Var. interanual</span>
-                      </div>
-                    </div>
-
-                    {/* Tarjeta 3: DEUDA BANCARIA TOTAL */}
-                    <div className="bg-white border border-ink/15 p-4 relative overflow-hidden group hover:shadow-lg transition-all">
-                      <div className="absolute top-4 right-4">
-                          <StatusBadge status={activeResult.ratios?.deuda_ebitda.status ?? null} />
-                        </div>
-                        <p className="text-[10px] font-sans font-bold text-ink uppercase mb-2">DEUDA BANCARIA TOTAL (EN MILES)</p>
-                      <p className="text-3xl font-bold font-sans mb-2 text-ink">
-                        {formatCurrencyThousands(activeResult.ratios?.deuda_bancaria_total.actual ?? null)}
-                      </p>
-                      <p className="text-xs font-sans font-bold text-gray-600 leading-tight">Total sistema financiero</p>
-                    </div>
-
-                    {/* Tarjeta 4: DEUDA CORTO PLAZO */}
-                    <div className="bg-white border border-ink/15 p-4 relative overflow-hidden group hover:shadow-lg transition-all">
-                      <div className="absolute top-4 right-4">
-                          {(() => {
-                            const deudaCPActual = activeResult.extraction?.deuda_bancaria_actual?.corriente?.total ?? null;
-                            const deudaCPAnterior = activeResult.extraction?.deuda_bancaria_anterior?.corriente?.total ?? null;
-                            return <StatusBadge status={evaluateVariation(calculateVariation(deudaCPActual || 0, deudaCPAnterior || 0))} />;
-                          })()}
-                        </div>
-                        <p className="text-[10px] font-sans font-bold text-ink uppercase mb-2">DEUDA CORTO PLAZO (EN MILES)</p>
-                      {(() => {
-                        const deudaCPActual = activeResult.extraction?.deuda_bancaria_actual?.corriente?.total ?? null;
-                        const deudaCPAnterior = activeResult.extraction?.deuda_bancaria_anterior?.corriente?.total ?? null;
-                        
-                        if (deudaCPActual === null) {
-                          return <p className="text-3xl font-bold font-sans mb-2 text-ink">-</p>;
-                        }
-
-                        return (
-                          <>
-                            <p className="text-3xl font-bold font-sans mb-2 text-ink">
-                              <EditableNumber
-                                path={['deuda_bancaria_actual', 'corriente', 'total']}
-                                value={deudaCPActual}
-                                display={formatCurrencyThousands(deudaCPActual)}
-                                required
-                              />
-                            </p>
-                            {deudaCPAnterior !== null && (
-                              <div className="flex items-center text-xs font-sans font-bold text-gray-600 leading-tight">
-                                <VariationBadge variation={calculateVariation(deudaCPActual, deudaCPAnterior)} />
-                                <span className="ml-1">Var. interanual</span>
-                              </div>
-                            )}
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </div>
-
-                  {/* Report Generation Button */}
-                  <div className="flex flex-col items-center justify-center py-8 border-t border-ink/10">
-                    <button 
-                      onClick={() => generatePDF(activeResult)}
-                      className="bg-brand-green text-ink px-8 py-4 rounded-full text-sm font-semibold hover:brightness-95 transition flex items-center gap-3 shadow-sm"
-                    >
-                      <FileSpreadsheet className="w-5 h-5" />
-                      Generar informe para comité
-                    </button>
-                    <p className="text-xs text-ink/50 mt-3">
-                      Incluye opinión de riesgos, ratios, historia, Nosis, post balance y mercado
-                    </p>
-                  </div>
-                  
                       </div>
                     )}
 
