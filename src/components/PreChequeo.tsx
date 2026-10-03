@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, FileUp, Loader2, Pencil, Trash2, XCircle } from 'lucide-react';
-import { AddRowButton, EditableNumber, EditableSelect, EditableText, EditProvider, Path, RemoveRowButton, setIn } from '../features/editing/editing';
+import { AddRowButton, EditableBoolean, EditableNumber, EditableSelect, EditableText, EditProvider, Path, RemoveRowButton, setIn } from '../features/editing/editing';
 import { Prechequeo } from '../features/risk/prechequeo';
-import { DocumentoSectorial, documentoDesactualizado, ExtraccionDocumento, MAX_DOCUMENTOS_POR_CASO, ReporteMora, TRAMOS_MORA } from '../features/sectorDocs/tipos';
-import { TipoDocumento } from '../features/risk/policy';
+import { CATEGORIAS_HECHO, DocumentoSectorial, documentoDesactualizado, ESTADOS_OBRA, ExtraccionDocumento, MAX_DOCUMENTOS_POR_CASO, ReporteMora, TENENCIAS, TipoDocumentoSectorial, TRAMOS_MORA } from '../features/sectorDocs/tipos';
+import { AnalisisDocumento, KpiDoc } from '../features/sectorDocs/analisis';
+import { DOCUMENTOS_SECTORIALES, TipoDocumento } from '../features/risk/policy';
 import { RatioStatus } from '../features/ratios/calculations';
 import { RatioKind } from '../features/ratios/blocks';
 import { StatusBadge, Status } from './riskColors';
@@ -42,6 +43,8 @@ export function PreChequeo(p: Props) {
   const balanceInput = useRef<HTMLInputElement | null>(null);
   const lleno = p.documentos.length >= MAX_DOCUMENTOS_POR_CASO;
   const pc = p.prechequeo;
+  const adicionales = pc.documentosRubro.filter(d => DOCUMENTOS_SECTORIALES[d.tipo].grupo === 'adicional');
+  const [tipoAdicional, setTipoAdicional] = useState<TipoDocumento>(adicionales[0]?.tipo ?? 'principales_clientes');
 
   return (
     <section className="bg-white border border-ink/15 print:hidden">
@@ -71,8 +74,8 @@ export function PreChequeo(p: Props) {
           {/* Documentación del rubro */}
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-ink/50 mb-2">Documentación del rubro</p>
-            {pc.documentosRubro.length === 0 && !pc.bloqueFinanciero.requerido && (
-              <p className="text-sm text-ink/50">Este rubro no tiene documentos propios.</p>
+            {!pc.documentosRubro.some(d => d.recomendado) && !pc.bloqueFinanciero.requerido && (
+              <p className="text-sm text-ink/50 mb-2">Este rubro no tiene documento recomendado; el documento adicional es opcional.</p>
             )}
             <ul className="space-y-2 text-sm">
               {pc.bloqueFinanciero.requerido && (
@@ -89,7 +92,7 @@ export function PreChequeo(p: Props) {
                   </button>
                 </li>
               )}
-              {pc.documentosRubro.map(d => (
+              {pc.documentosRubro.filter(d => DOCUMENTOS_SECTORIALES[d.tipo].grupo === 'rubro').map(d => (
                 <li key={d.tipo} className="space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
                     {d.cargados.length ? <CheckCircle2 className="w-4 h-4 text-ink shrink-0" /> : <XCircle className="w-4 h-4 text-ink/35 shrink-0" />}
@@ -104,10 +107,34 @@ export function PreChequeo(p: Props) {
                     </button>
                   </div>
                   {p.documentos.filter(x => x.tipo === d.tipo).map(doc => (
-                    <DocumentoFila key={doc.id} doc={doc} fechaCaso={p.fechaCaso} onEditar={p.onEditarDocumento} onBorrar={p.onBorrarDocumento} />
+                    <DocumentoFila key={doc.id} doc={doc} analisis={pc.analisis.find(a => a.doc.id === doc.id)} fechaCaso={p.fechaCaso} onEditar={p.onEditarDocumento} onBorrar={p.onBorrarDocumento} />
                   ))}
                 </li>
               ))}
+              {/* Documento adicional: cualquier rubro, opcional */}
+              {adicionales.length > 0 && (
+                <li className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <FileUp className="w-4 h-4 text-ink/40 shrink-0" />
+                    <span>Documento adicional</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-ink/45">opcional</span>
+                    <select value={tipoAdicional} onChange={e => setTipoAdicional(e.target.value as TipoDocumento)}
+                      className="ml-auto border border-ink/20 rounded px-2 py-1 text-xs bg-white">
+                      {adicionales.map(a => <option key={a.tipo} value={a.tipo}>{a.label}</option>)}
+                    </select>
+                    <input ref={el => { inputs.current.adicional = el; }} type="file" accept={ACCEPT} className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) p.onCargarDocumento(tipoAdicional, f); e.target.value = ''; }} />
+                    <button disabled={lleno} onClick={() => inputs.current.adicional?.click()}
+                      title={lleno ? `Máximo ${MAX_DOCUMENTOS_POR_CASO} documentos por caso` : 'PDF, imagen, Excel o CSV'}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-ink/20 text-xs font-semibold hover:border-ink disabled:opacity-50">
+                      <FileUp className="w-3.5 h-3.5" /> Cargar
+                    </button>
+                  </div>
+                  {p.documentos.filter(x => adicionales.some(a => a.tipo === x.tipo)).map(doc => (
+                    <DocumentoFila key={doc.id} doc={doc} titulo={adicionales.find(a => a.tipo === doc.tipo)?.label} analisis={pc.analisis.find(a => a.doc.id === doc.id)} fechaCaso={p.fechaCaso} onEditar={p.onEditarDocumento} onBorrar={p.onBorrarDocumento} />
+                  ))}
+                </li>
+              )}
             </ul>
             {pc.documentosRubro.length > 0 && (
               <p className="mt-2 text-[11px] text-ink/45">Información declarada por el cliente, no auditada: puede cambiar la opinión, pero nunca baja los pisos de las señales automáticas.</p>
@@ -151,8 +178,18 @@ export function PreChequeo(p: Props) {
   );
 }
 
-function DocumentoFila({ doc, fechaCaso, onEditar, onBorrar }: {
+const fmtDoc = (v: number | null, u: KpiDoc['unidad']) =>
+  v === null ? '—'
+    : u === 'pct' ? `${(v * 100).toLocaleString('es-AR', { maximumFractionDigits: 1 })}%`
+    : u === 'monto' ? `$ ${v.toLocaleString('es-AR', { maximumFractionDigits: 1 })}`
+    : u === 'ha' ? `${v.toLocaleString('es-AR')} ha`
+    : u === 'anios' ? `${v.toLocaleString('es-AR', { maximumFractionDigits: 1 })} años`
+    : v.toLocaleString('es-AR', { maximumFractionDigits: 2 });
+
+function DocumentoFila({ doc, analisis, titulo, fechaCaso, onEditar, onBorrar }: {
   doc: DocumentoSectorial;
+  analisis?: AnalisisDocumento;
+  titulo?: string;
   fechaCaso: string;
   onEditar: (id: string, extraccion: ExtraccionDocumento) => void;
   onBorrar: (id: string) => void;
@@ -162,6 +199,7 @@ function DocumentoFila({ doc, fechaCaso, onEditar, onBorrar }: {
   return (
     <div className="ml-6 border border-ink/10 rounded px-3 py-2 text-xs">
       <div className="flex flex-wrap items-center gap-2">
+        {titulo && <span className="text-ink/50">{titulo}:</span>}
         <span className="font-medium truncate max-w-[220px]" title={doc.nombreArchivo}>{doc.nombreArchivo}</span>
         {doc.estado === 'procesando' && <span className="inline-flex items-center gap-1 text-ink/50"><Loader2 className="w-3 h-3 animate-spin" /> leyendo…</span>}
         {doc.estado === 'error' && <span className="text-ink font-medium bg-brand-blue/10 px-1.5 rounded-sm" title={doc.error}>no se pudo leer</span>}
@@ -170,15 +208,123 @@ function DocumentoFila({ doc, fechaCaso, onEditar, onBorrar }: {
         {doc.editado && <span className="font-semibold uppercase tracking-wider text-[10px] text-brand-blue">editado</span>}
         <span className="ml-auto inline-flex gap-1">
           {doc.estado === 'ok' && (
-            <button onClick={() => setEditando(e => !e)} className="p-1 text-ink/50 hover:text-ink" title="Ver y editar lo extraído"><Pencil className="w-3.5 h-3.5" /></button>
+            <button onClick={() => setEditando(e => !e)} className="p-1 text-ink/50 hover:text-ink" title={doc.tipo === 'otro' ? 'Ver los hechos y elegir cuáles van a la opinión' : 'Ver y editar lo extraído'}><Pencil className="w-3.5 h-3.5" /></button>
           )}
           <button onClick={() => onBorrar(doc.id)} className="p-1 text-ink/50 hover:text-ink" title="Borrar documento"><Trash2 className="w-3.5 h-3.5" /></button>
         </span>
       </div>
-      {editando && doc.estado === 'ok' && doc.tipo === 'reporte_mora' && doc.extraccion && (
-        <EditorReporteMora reporte={doc.extraccion as ReporteMora} onCambio={r => onEditar(doc.id, r)} />
+      {analisis && (analisis.kpis.length > 0 || analisis.cruces.length > 0) && (
+        <div className="mt-1.5 space-y-1">
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {analisis.kpis.map(k => (
+              <span key={k.key} className="inline-flex items-center gap-1.5" title={k.motivo}>
+                <span className="text-ink/55">{k.label}</span>
+                <span className="font-semibold tabular-nums">{fmtDoc(k.valor, k.unidad)}</span>
+                {k.status && <StatusBadge status={SEMAFORO[k.status].status} label={SEMAFORO[k.status].label} />}
+              </span>
+            ))}
+          </div>
+          {analisis.cruces.map(c => (
+            <p key={c.mensaje} className={c.nivel === 'aviso' ? 'text-ink/50' : 'text-ink font-medium'}>
+              {c.nivel === 'error' ? 'Error de datos: ' : c.nivel === 'alerta' ? 'Alerta: ' : ''}{c.mensaje.replace(/^Error de datos: /, '')}
+            </p>
+          ))}
+        </div>
+      )}
+      {editando && doc.estado === 'ok' && doc.extraccion && (
+        doc.tipo === 'reporte_mora'
+          ? <EditorReporteMora reporte={doc.extraccion as ReporteMora} onCambio={r => onEditar(doc.id, r)} />
+          : <EditorDocumento tipo={doc.tipo} datos={doc.extraccion} onCambio={r => onEditar(doc.id, r)} />
       )}
     </div>
+  );
+}
+
+// ---------- editores por tipo (configuración, no código por tipo) ----------
+type Columna = { campo: string; label: string; tipo: 'texto' | 'numero' | 'select' | 'bool' | 'incluir'; opciones?: readonly string[] };
+const EDITORES: Partial<Record<TipoDocumentoSectorial, { escalares: Array<{ campo: string; label: string }>; lista: { campo: string; label: string; columnas: Columna[]; nuevo: Record<string, unknown> } }>> = {
+  plan_siembra: {
+    escalares: [{ campo: 'campania', label: 'Campaña' }],
+    lista: { campo: 'lotes', label: 'Lotes', nuevo: { cultivo: '', hectareas: null, tenencia: 'otra', zona: null, rinde_esperado: null }, columnas: [
+      { campo: 'cultivo', label: 'Cultivo', tipo: 'texto' }, { campo: 'hectareas', label: 'Ha', tipo: 'numero' },
+      { campo: 'tenencia', label: 'Tenencia', tipo: 'select', opciones: TENENCIAS }, { campo: 'zona', label: 'Zona', tipo: 'texto' },
+      { campo: 'rinde_esperado', label: 'Rinde (qq/ha)', tipo: 'numero' },
+    ] },
+  },
+  listado_obras: {
+    escalares: [],
+    lista: { campo: 'obras', label: 'Obras', nuevo: { obra: '', comitente: '', tipo_comitente: null, monto_contrato: null, porcentaje_avance: null, saldo_a_ejecutar: null, estado: null, plazo_fin: null }, columnas: [
+      { campo: 'obra', label: 'Obra', tipo: 'texto' }, { campo: 'comitente', label: 'Comitente', tipo: 'texto' },
+      { campo: 'tipo_comitente', label: 'Tipo', tipo: 'select', opciones: ['publico', 'privado'] },
+      { campo: 'estado', label: 'Estado', tipo: 'select', opciones: ESTADOS_OBRA },
+      { campo: 'monto_contrato', label: 'Monto', tipo: 'numero' }, { campo: 'porcentaje_avance', label: 'Avance %', tipo: 'numero' },
+      { campo: 'saldo_a_ejecutar', label: 'Saldo', tipo: 'numero' },
+    ] },
+  },
+  principales_clientes: {
+    escalares: [],
+    lista: { campo: 'clientes', label: 'Clientes', nuevo: { cliente: '', porcentaje_ventas: null, monto: null }, columnas: [
+      { campo: 'cliente', label: 'Cliente', tipo: 'texto' }, { campo: 'porcentaje_ventas', label: '% ventas', tipo: 'numero' }, { campo: 'monto', label: 'Monto', tipo: 'numero' },
+    ] },
+  },
+  cartera_contratos: {
+    escalares: [],
+    lista: { campo: 'contratos', label: 'Contratos', nuevo: { cliente: '', objeto: null, monto: null, vigencia_hasta: null, recurrente: null }, columnas: [
+      { campo: 'cliente', label: 'Cliente', tipo: 'texto' }, { campo: 'objeto', label: 'Objeto', tipo: 'texto' }, { campo: 'monto', label: 'Monto', tipo: 'numero' },
+      { campo: 'vigencia_hasta', label: 'Vigencia', tipo: 'texto' }, { campo: 'recurrente', label: 'Recurrente', tipo: 'bool' },
+    ] },
+  },
+  otro: {
+    escalares: [{ campo: 'descripcion_documento', label: 'Documento' }],
+    lista: { campo: 'hechos', label: 'Hechos (tildá los que van a la opinión)', nuevo: { categoria: 'otro', descripcion: '', monto: null, fecha: null, cita_textual: '', pagina: null, incluir: false }, columnas: [
+      { campo: 'incluir', label: 'A la opinión', tipo: 'incluir' }, { campo: 'categoria', label: 'Categoría', tipo: 'select', opciones: CATEGORIAS_HECHO },
+      { campo: 'descripcion', label: 'Hecho', tipo: 'texto' }, { campo: 'cita_textual', label: 'Cita textual', tipo: 'texto' },
+      { campo: 'monto', label: 'Monto', tipo: 'numero' }, { campo: 'pagina', label: 'Pág.', tipo: 'numero' },
+    ] },
+  },
+};
+
+function EditorDocumento({ tipo, datos, onCambio }: { tipo: TipoDocumentoSectorial; datos: ExtraccionDocumento; onCambio: (d: ExtraccionDocumento) => void }) {
+  const cfg = EDITORES[tipo];
+  if (!cfg) return null;
+  const d = datos as unknown as Record<string, unknown>;
+  const update = (path: Path, value: unknown) => onCambio(setIn(datos, path, value));
+  const filas = (d[cfg.lista.campo] as Array<Record<string, unknown>>) ?? [];
+  return (
+    <EditProvider value={{ editing: true, update }}>
+      <div className="mt-2 space-y-2 overflow-x-auto">
+        {cfg.escalares.map(e => (
+          <label key={e.campo} className="flex items-center gap-2">{e.label} <EditableText path={[e.campo]} value={d[e.campo] as string | null} inputClassName="w-56" /></label>
+        ))}
+        <p className="text-ink/45">{cfg.lista.label}</p>
+        <table className="w-full">
+          <thead><tr className="text-ink/45">{cfg.lista.columnas.map(c => <th key={c.campo} className="text-left py-1 pr-2 font-medium">{c.label}</th>)}<th /></tr></thead>
+          <tbody>
+            {filas.map((f, i) => (
+              <tr key={i} className="align-top">
+                {cfg.lista.columnas.map(c => (
+                  <td key={c.campo} className="!text-left py-0.5 pr-2">
+                    {c.tipo === 'incluir' ? (
+                      <input type="checkbox" checked={f[c.campo] === true} onChange={e => update([cfg.lista.campo, i, c.campo], e.target.checked)} aria-label="Incluir en la opinión" />
+                    ) : c.tipo === 'numero' ? (
+                      <EditableNumber path={[cfg.lista.campo, i, c.campo]} value={f[c.campo] as number | null} inputClassName="w-20" />
+                    ) : c.tipo === 'select' ? (
+                      <EditableSelect path={[cfg.lista.campo, i, c.campo]} value={(f[c.campo] as string) ?? ''} options={['', ...(c.opciones ?? [])]} />
+                    ) : c.tipo === 'bool' ? (
+                      <EditableBoolean path={[cfg.lista.campo, i, c.campo]} value={f[c.campo] as boolean | null} />
+                    ) : (
+                      <EditableText path={[cfg.lista.campo, i, c.campo]} value={f[c.campo] as string | null} inputClassName={c.campo === 'cita_textual' || c.campo === 'descripcion' ? 'w-56' : 'w-28'} />
+                    )}
+                  </td>
+                ))}
+                <td><RemoveRowButton path={[cfg.lista.campo]} list={filas} index={i} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <AddRowButton path={[cfg.lista.campo]} list={filas} newItem={cfg.lista.nuevo} label="Agregar fila" />
+      </div>
+    </EditProvider>
   );
 }
 

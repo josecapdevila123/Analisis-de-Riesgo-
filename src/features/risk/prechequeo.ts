@@ -3,6 +3,7 @@ import { ComputedRatios, disponibilidadesActuales, RatioKey } from '../ratios/ca
 import { CrossCheckResult } from '../ratios/crossCheck';
 import { Inconsistencia } from '../ratios/sanityChecks';
 import { indicadoresFinancieros } from '../ratios/financieras';
+import { AnalisisDocumento, analizarDocumentos, tituloDocumento } from '../sectorDocs/analisis';
 import { DocumentoSectorial, documentoDesactualizado } from '../sectorDocs/tipos';
 import { DOCUMENTOS_SECTORIALES, PerfilEfectivo, RATIO_LABEL_CORTO, TipoDocumento } from './policy';
 import { RATIO_BLOCKS, RatioKind, SECTOR_KPI_SPECS } from '../ratios/blocks';
@@ -38,6 +39,8 @@ export type DocumentoDelRubro = {
 export type Prechequeo = {
   base: ItemBase[];
   documentosRubro: DocumentoDelRubro[];
+  // KPIs y cruces calculados de cada documento cargado.
+  analisis: AnalisisDocumento[];
   bloqueFinanciero: { requerido: boolean; cargado: boolean };
   kpis: Array<{ key: RatioKey; label: string; kind: RatioKind; actual: number | null; status: string | null; noAplica: string | null }>;
   alertas: string[];
@@ -72,13 +75,17 @@ export function armarPrechequeo(i: {
   const documentosRubro = perfil.documentos.map(r => {
     const cargados = docsOk.filter(d => d.tipo === r.tipo);
     const desactualizados = cargados.filter(d => documentoDesactualizado(d, i.fechaCaso));
-    desactualizados.forEach(d => alertas.push(`${DOCUMENTOS_SECTORIALES[r.tipo].label} "${d.nombreArchivo}" desactualizado: tiene más de 6 meses respecto del caso.`));
-    return { tipo: r.tipo, label: DOCUMENTOS_SECTORIALES[r.tipo].label, recomendado: r.recomendado, cargados, desactualizados };
+    desactualizados.forEach(d => alertas.push(`${tituloDocumento({ tipo: r.tipo }, perfil)} "${d.nombreArchivo}" desactualizado: tiene más de 6 meses respecto del caso.`));
+    return { tipo: r.tipo, label: tituloDocumento({ tipo: r.tipo }, perfil), recomendado: r.recomendado, cargados, desactualizados };
   });
+
+  const analisis = extraction ? analizarDocumentos(docsOk, { extraction, perfil }) : [];
+  analisis.forEach(a => a.cruces.filter(c => c.nivel !== 'aviso').forEach(c => alertas.push(`${a.titulo}: ${c.mensaje}`)));
 
   return {
     base: documentacionBase(extraction),
     documentosRubro,
+    analisis,
     bloqueFinanciero: { requerido: perfil.modelo === 'financiera', cargado: !!extraction?.extraccion_financiera },
     kpis: perfil.kpisPrioritarios.map(key => ({
       key,
