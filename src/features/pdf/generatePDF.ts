@@ -4,6 +4,8 @@ import { getComparativeTablesData, formatValue, getVariationText } from '../../c
 import { ExtractionResult, Shareholder } from '../../types';
 import { formatCurrencyThousands } from '../../lib/utils';
 import { ComputedRatios, RatioKey, RatioStatus } from '../ratios/calculations';
+import { CATEGORY_LABEL, DIMENSIONS, RiskCategory, SEVERIDAD_LABEL, categoryOf } from '../risk/score';
+import { RiskDimension, SeveridadRiesgo } from '../extraction/schemas';
 
 type Status = RatioStatus | null;
 
@@ -72,6 +74,30 @@ const formatBlockCell = (value: number | null, format: RatioBlockFormat): number
   return value;
 };
 
+// Paleta de estados (igual que en la vista de Opinión de riesgos).
+type RGB = [number, number, number];
+const STATUS_RGB: Record<'good' | 'warning' | 'serious' | 'critical', RGB> = {
+  good: [12, 163, 12],
+  warning: [250, 178, 25],
+  serious: [236, 131, 90],
+  critical: [208, 59, 59],
+};
+const CATEGORY_RGB: Record<RiskCategory, RGB> = {
+  bajo: STATUS_RGB.good, moderado: STATUS_RGB.warning, alto: STATUS_RGB.serious, critico: STATUS_RGB.critical,
+};
+const SEVERIDAD_RGB: Record<SeveridadRiesgo, RGB> = {
+  baja: STATUS_RGB.good, media: STATUS_RGB.warning, alta: STATUS_RGB.serious, critica: STATUS_RGB.critical,
+};
+// Tinte claro para fondos de celda: el texto sigue en negro.
+const tintRGB = ([r, g, b]: RGB, alpha = 0.3): RGB =>
+  [r, g, b].map(c => Math.round(255 - (255 - c) * alpha)) as RGB;
+
+const POSTURA_LABEL = {
+  favorable: 'Favorable',
+  favorable_con_condiciones: 'Favorable con condiciones',
+  desfavorable: 'Desfavorable',
+} as const;
+
 export const generatePDF = (activeResult: ExtractionResult | null | undefined) => {
   if (!activeResult || !activeResult.extraction || !activeResult.ratios) return;
 
@@ -82,6 +108,7 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
   const crossCheck = activeResult.crossCheck;
   const marketAnalysis = activeResult.marketAnalysis;
   const companyHistory = activeResult.companyHistory;
+  const riskAssessment = activeResult.riskAssessment;
   const company = extraction.company_profile;
 
   const addSectionTitle = (title: string, isFirstPage = false) => {
@@ -188,7 +215,141 @@ export const generatePDF = (activeResult: ExtractionResult | null | undefined) =
     addLongText(verification.executive_summary, 65);
   }
 
-  let currentY = addSectionTitle('Historia y actividad de la empresa');
+  let currentY = addSectionTitle('Opinión de riesgos');
+  if (riskAssessment) {
+    const { opinion, puntaje, senales, pce_proxy } = riskAssessment;
+    const color = CATEGORY_RGB[puntaje.categoria];
+
+    // Puntaje grande + categoría + postura
+    doc.setFillColor(...color);
+    doc.rect(14, currentY - 2, 3, 22, 'F');
+    doc.setFontSize(32);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(20, 20, 20);
+    doc.text(String(puntaje.final), 21, currentY + 14);
+    const scoreWidth = doc.getTextWidth(String(puntaje.final)); // medido con la fuente de 32
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('/ 100', 21 + scoreWidth + 2, currentY + 14);
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.text(CATEGORY_LABEL[puntaje.categoria], 60, currentY + 6);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    if (opinion.postura) doc.text(`Postura: ${POSTURA_LABEL[opinion.postura]}`, 60, currentY + 13);
+    if (pce_proxy !== null) doc.text(`Pérdida esperada (proxy score Nosis): ${pce_proxy}/100`, 60, currentY + 19);
+    currentY += 28;
+
+    // Barra de escala 1–100 con las 4 bandas y marcador
+    const barX = 14, barW = 182, barH = 5;
+    ([[0, 25, 'bajo'], [25, 50, 'moderado'], [50, 75, 'alto'], [75, 100, 'critico']] as Array<[number, number, RiskCategory]>)
+      .forEach(([from, to, cat]) => {
+        doc.setFillColor(...(cat === puntaje.categoria ? CATEGORY_RGB[cat] : tintRGB(CATEGORY_RGB[cat], 0.35)));
+        doc.rect(barX + (from / 100) * barW + (from ? 0.4 : 0), currentY, ((to - from) / 100) * barW - 0.8, barH, 'F');
+      });
+    const mx = barX + (puntaje.final / 100) * barW;
+    doc.setFillColor(20, 20, 20);
+    doc.triangle(mx - 2, currentY - 3, mx + 2, currentY - 3, mx, currentY, 'F');
+    doc.setFontSize(7);
+    doc.setTextColor(120, 120, 120);
+    [0, 25, 50, 75, 100].forEach(v => doc.text(String(v), barX + (v / 100) * barW, currentY + barH + 4, { align: 'center' }));
+    doc.setTextColor(20, 20, 20);
+    currentY += barH + 12;
+
+    currentY = addSubheading('Dictamen', currentY);
+    currentY = addLongText(opinion.dictamen, currentY);
+    if (puntaje.piso && puntaje.ponderado !== null && puntaje.piso.piso > puntaje.ponderado) {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'italic');
+      doc.text(`Promedio de dimensiones ${puntaje.ponderado}; elevado a ${puntaje.final} por regla automática: ${puntaje.piso.motivo}.`, 14, currentY - 4);
+      doc.setFont('helvetica', 'normal');
+      currentY += 4;
+    }
+
+    currentY = addSubheading('Riesgo por dimensión', currentY);
+    autoTable(doc, {
+      startY: currentY,
+      head: [['Dimensión', 'Peso', 'Puntaje', 'Comentario']],
+      body: (Object.keys(DIMENSIONS) as RiskDimension[]).map(dim => {
+        const d = opinion.dimensiones.find(x => x.dimension === dim);
+        return [DIMENSIONS[dim].label, `${DIMENSIONS[dim].weight}%`, d?.puntaje ?? 'S/D', d?.comentario ?? ''];
+      }),
+      theme: 'grid',
+      headStyles: { fillColor: [240, 240, 240], textColor: [20, 20, 20], fontStyle: 'bold' },
+      styles: { fontSize: 8, cellPadding: 1.8, textColor: [20, 20, 20] },
+      columnStyles: { 0: { cellWidth: 40, fontStyle: 'bold' }, 1: { cellWidth: 14, halign: 'right' }, 2: { cellWidth: 16, halign: 'center', fontStyle: 'bold' }, 3: { cellWidth: 112 } },
+      margin: { left: 14, right: 14 },
+      didParseCell: data => {
+        if (data.section === 'body' && data.column.index === 2 && typeof data.cell.raw === 'number') {
+          data.cell.styles.fillColor = tintRGB(CATEGORY_RGB[categoryOf(data.cell.raw)], 0.45);
+        }
+      },
+    });
+    currentY = (doc as any).lastAutoTable.finalY + 10;
+
+    if (opinion.riesgos.length > 0) {
+      currentY = addSubheading('Riesgos detectados', currentY);
+      autoTable(doc, {
+        startY: currentY,
+        head: [['Severidad', 'Riesgo', 'Evidencia y mitigante']],
+        body: opinion.riesgos.map(r => [
+          SEVERIDAD_LABEL[r.severidad],
+          r.titulo,
+          r.mitigante ? `${r.evidencia}\nMitigante: ${r.mitigante}` : r.evidencia,
+        ]),
+        theme: 'grid',
+        headStyles: { fillColor: [240, 240, 240], textColor: [20, 20, 20], fontStyle: 'bold' },
+        styles: { fontSize: 8, cellPadding: 1.8, textColor: [20, 20, 20] },
+        columnStyles: { 0: { cellWidth: 20, fontStyle: 'bold', halign: 'center' }, 1: { cellWidth: 48, fontStyle: 'bold' }, 2: { cellWidth: 114 } },
+        margin: { left: 14, right: 14 },
+        didParseCell: data => {
+          if (data.section === 'body' && data.column.index === 0) {
+            const sev = opinion.riesgos[data.row.index]?.severidad;
+            if (sev) data.cell.styles.fillColor = tintRGB(SEVERIDAD_RGB[sev], 0.45);
+          }
+        },
+      });
+      currentY = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    currentY = addSubheading('Lectura integral', currentY);
+    currentY = addLongText(opinion.lectura_integral, currentY);
+
+    if (opinion.condiciones_sugeridas.length > 0) {
+      currentY = addSubheading('Condiciones sugeridas', currentY);
+      currentY = addBulletList(opinion.condiciones_sugeridas, currentY);
+    }
+    if (opinion.fortalezas.length > 0) {
+      currentY = addSubheading('Fortalezas', currentY);
+      currentY = addBulletList(opinion.fortalezas, currentY);
+    }
+    if (opinion.informacion_faltante.length > 0) {
+      currentY = addSubheading('Información faltante', currentY);
+      currentY = addBulletList(opinion.informacion_faltante, currentY);
+    }
+    if (senales.length > 0) {
+      currentY = addSubheading('Señales automáticas (reglas fijas)', currentY);
+      autoTable(doc, {
+        startY: currentY,
+        body: senales.map(sg => [SEVERIDAD_LABEL[sg.severidad], `${sg.titulo}: ${sg.detalle}`]),
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 1.5, textColor: [20, 20, 20] },
+        columnStyles: { 0: { cellWidth: 20, fontStyle: 'bold', halign: 'center' }, 1: { cellWidth: 162 } },
+        margin: { left: 14, right: 14 },
+        didParseCell: data => {
+          if (data.column.index === 0) {
+            const sev = senales[data.row.index]?.severidad;
+            if (sev) data.cell.styles.fillColor = tintRGB(SEVERIDAD_RGB[sev], 0.45);
+          }
+        },
+      });
+    }
+  } else {
+    doc.setFontSize(10);
+    doc.text('Opinión de riesgos no disponible para este caso.', 14, currentY);
+  }
+
+  currentY = addSectionTitle('Historia y actividad de la empresa');
   if (companyHistory) {
     if (!companyHistory.memoria_disponible) {
       doc.setFontSize(9);

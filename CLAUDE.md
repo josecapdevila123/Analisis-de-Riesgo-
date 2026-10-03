@@ -8,6 +8,7 @@ Herramienta interna de **análisis de riesgo crediticio para BiBank**. El analis
 2. **Calcula 23 ratios en código**, sin IA (`src/features/ratios/calculations.ts`), además de chequeos de consistencia contable y un cruce de deuda Balance vs Nosis.
 3. **Verifica y redacta** con Gemini: interpreta los ratios ya calculados, explica las inconsistencias y genera el resumen ejecutivo.
 4. Genera en paralelo un **análisis de mercado** del sector y la **historia y actividad de la empresa**, leída de la Memoria del balance.
+5. Como último paso, da una **opinión de riesgo integral** con puntaje 1–100 (1 = riesgo mínimo).
 
 El resultado se ve en un dashboard por pestañas, se guarda por usuario en Firestore y se exporta como PDF para el comité (`src/features/pdf/generatePDF.ts`). Los valores extraídos se pueden corregir a mano desde el dashboard ("Editar valores"), y en ese caso los ratios se recalculan.
 
@@ -23,6 +24,7 @@ Orquestado en `src/features/extraction/pipeline.ts` (`runPipeline`):
 | 2. Cómputo | `computeRatios`, `runSanityChecks` y `runCrossCheck`. Determinístico, sin IA | `src/features/ratios/` | — |
 | 3. Verificación | Gemini recibe extracción, ratios, inconsistencias y cruce. Interpreta, **no recalcula** | `runVerification`, prompt en `verification.ts` | Estado `completed_partial` (hay ratios, falta el resumen) |
 | 4. Mercado | Se lanza en paralelo a la etapa 3 y no bloquea; el resultado llega por callback | `runMarketAnalysis`, prompt en `marketAnalysis.ts` | Se loguea y el caso queda sin análisis de mercado |
+| 5. Opinión de riesgos (último paso) | Espera a verificación, mercado e historia, sin bloquear. Reglas fijas detectan señales (`risk/signals.ts`, algunas con **piso** de puntaje); Gemini hace la lectura integral y puntúa 7 dimensiones; el código pondera y aplica el piso (`risk/score.ts`) → puntaje 1–100. Solo texto, no reenvía archivos | `risk/assessment.ts`, prompt en `riskOpinion.ts`, vista en `components/RiskOpinionView.tsx` | Se loguea; el caso queda sin opinión y se puede generar desde la pestaña |
 | 4b. Historia y actividad | En paralelo, como el mercado. Lee la Memoria: **core business** (lo principal), historia, datos relevantes, proyecciones y explicaciones del balance. Salida validada con `CompanyHistorySchema` | `runCompanyHistory`, prompt en `companyHistory.ts`, vista en `components/CompanyHistoryView.tsx` | Se loguea y el caso queda sin historia |
 
 Puntos clave:
@@ -70,6 +72,7 @@ npm run preview    # sirve dist/
 
 ## Reglas
 
+- **El puntaje de riesgo no lo decide solo el modelo.** Las reglas de `risk/signals.ts` (umbrales y pisos), los pesos de `risk/score.ts` y el proxy de pérdida esperada siguen la misma regla que las fórmulas: se cambian con tests.
 - **No cambiar fórmulas de ratios sin tests.** Esto incluye `calculations.ts`, los umbrales de `evaluateRatioStatus`, las palabras clave de rubros, `sanityChecks.ts` y `crossCheck.ts`. Primero se escribe o ajusta el test con el valor esperado calculado a mano, después se cambia la fórmula, y `npm run test` tiene que pasar. Un ratio mal calculado termina en una decisión de crédito.
 - **Correr `npm run lint` (y `npm run test` si se tocó `src/features/ratios`) antes de cada commit.** Si falla, no se commitea.
 - **Commits chicos y en español**: un cambio lógico por commit, con un mensaje en minúscula que describa qué cambia (por ejemplo: `fix extraccion nosis post cierre y moneda opcional`).

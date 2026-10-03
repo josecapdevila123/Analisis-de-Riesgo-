@@ -10,6 +10,7 @@ import { EXTRACTION_PROMPT } from '../../lib/prompts/extraction';
 import { VERIFICATION_PROMPT } from '../../lib/prompts/verification';
 import { MARKET_ANALYSIS_PROMPT } from '../../lib/prompts/marketAnalysis';
 import { COMPANY_HISTORY_PROMPT } from '../../lib/prompts/companyHistory';
+import { RISK_OPINION_PROMPT } from '../../lib/prompts/riskOpinion';
 import {
   RawExtraction,
   RawExtractionSchema,
@@ -18,6 +19,8 @@ import {
   MarketAnalysisResultSchema,
   CompanyHistory,
   CompanyHistorySchema,
+  RiskOpinion,
+  RiskOpinionSchema,
 } from './schemas';
 import { ComputedRatios } from '../ratios/calculations';
 import { Inconsistencia } from '../ratios/sanityChecks';
@@ -137,4 +140,13 @@ export async function runCompanyHistory(
     ...filesToParts(files),
   ]);
   return CompanyHistorySchema.parse(JSON.parse(text));
+}
+
+// Solo texto: toda la información ya fue extraída, no hace falta reenviar los archivos.
+export async function runRiskOpinion(contextJson: string): Promise<RiskOpinion> {
+  const text = await callGemini('riskOpinion', [
+    { text: RISK_OPINION_PROMPT },
+    { text: `\n\nINFORMACIÓN DEL ANÁLISIS:\n${contextJson}` },
+  ]);
+  return RiskOpinionSchema.parse(JSON.parse(text));
 }

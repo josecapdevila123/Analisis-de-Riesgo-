@@ -5,7 +5,7 @@
 const FLASH = 'gemini-3.8-flash';
 const FLASH_LITE = 'gemini-3.5-flash-lite';
 
-export type GeminiStage = 'extraction' | 'verification' | 'marketAnalysis' | 'companyHistory';
+export type GeminiStage = 'extraction' | 'verification' | 'marketAnalysis' | 'companyHistory' | 'riskOpinion';
 
 export const GEMINI_MODELS: Record<GeminiStage, { primary: string; fallback: string }> = {
   extraction: { primary: FLASH, fallback: FLASH_LITE },
@@ -13,6 +13,8 @@ export const GEMINI_MODELS: Record<GeminiStage, { primary: string; fallback: str
   marketAnalysis: { primary: FLASH_LITE, fallback: FLASH },
   // Lectura de la Memoria: tiene que ser fiel al documento, mismo modelo que la extracción.
   companyHistory: { primary: FLASH, fallback: FLASH_LITE },
+  // Opinión final de riesgo: el razonamiento más exigente, mejor modelo.
+  riskOpinion: { primary: FLASH, fallback: FLASH_LITE },
 };
 
 export const GEMINI_MAX_RETRIES = 4;

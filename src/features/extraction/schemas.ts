@@ -221,3 +221,63 @@ export const CompanyHistorySchema = z.object({
 });
 
 export type CompanyHistory = z.infer<typeof CompanyHistorySchema>;
+
+// ---------- Opinión de riesgo ----------
+
+export const RISK_DIMENSIONS = [
+  'nosis_bcra',
+  'endeudamiento',
+  'liquidez_solvencia',
+  'rentabilidad',
+  'ventas_post_balance',
+  'negocio_mercado',
+  'calidad_informacion',
+] as const;
+export type RiskDimension = (typeof RISK_DIMENSIONS)[number];
+
+export const SEVERIDADES = ['baja', 'media', 'alta', 'critica'] as const;
+export type SeveridadRiesgo = (typeof SEVERIDADES)[number];
+
+const stringArray = z.preprocess(
+  v => (Array.isArray(v) ? v.filter(x => typeof x === 'string' && x.trim() !== '') : []),
+  z.array(z.string())
+);
+
+const isKnownDimension = (d: unknown): boolean =>
+  typeof d === 'object' && d !== null && RISK_DIMENSIONS.includes((d as { dimension?: never }).dimension as RiskDimension);
+
+// Puntaje del modelo por dimensión: 1 (riesgo mínimo) a 100 (máximo); null si no hay datos.
+const dimensionScore = z.preprocess(v => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(100, Math.max(1, Math.round(n))) : null;
+}, z.number().nullable());
+
+export const RiskOpinionSchema = z.object({
+  postura: z.enum(['favorable', 'favorable_con_condiciones', 'desfavorable']).nullable().catch(null),
+  dictamen: lenientString,
+  lectura_integral: lenientString,
+  dimensiones: z.preprocess(
+    v => (Array.isArray(v) ? v.filter(isKnownDimension) : []),
+    z.array(z.object({
+      dimension: z.enum(RISK_DIMENSIONS),
+      puntaje: dimensionScore,
+      comentario: lenientString,
+    }))
+  ),
+  riesgos: z.preprocess(
+    v => v ?? [],
+    z.array(z.object({
+      titulo: lenientString,
+      severidad: z.enum(SEVERIDADES).catch('media'),
+      dimension: z.enum(RISK_DIMENSIONS).nullable().catch(null),
+      evidencia: lenientString,
+      mitigante: lenientString,
+    }))
+  ),
+  fortalezas: stringArray,
+  condiciones_sugeridas: stringArray,
+  informacion_faltante: stringArray,
+});
+
+export type RiskOpinion = z.infer<typeof RiskOpinionSchema>;

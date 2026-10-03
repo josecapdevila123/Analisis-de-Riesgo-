@@ -60,6 +60,8 @@ import {
 import { SourceDataEditor } from './features/editing/SourceDataEditor';
 import { BiBankLogo } from './components/BiBankLogo';
 import { CompanyHistoryView } from './components/CompanyHistoryView';
+import { RiskOpinionView } from './components/RiskOpinionView';
+import { runRiskAssessment } from './features/risk/assessment';
 
 const ShareholderTable = ({ accionistas, level = 1, parentName = '', basePath }: { accionistas: Shareholder[], level?: number, parentName?: string, basePath?: Path }) => {
   const { editing } = useEdit();
@@ -179,6 +181,7 @@ export default function App() {
   const [processingStage, setProcessingStage] = useState<CaseState | null>(null);
   const [marketAnalysisBusyId, setMarketAnalysisBusyId] = useState<string | null>(null);
   const [companyHistoryBusyId, setCompanyHistoryBusyId] = useState<string | null>(null);
+  const [riskBusyId, setRiskBusyId] = useState<string | null>(null);
   const [currentFiles, setCurrentFiles] = useState<{ file: File; preview: string }[]>([]);
   const { user, isAuthReady, handleLogin, handleLogout } = useAuth(() => {
     setActiveResultId(null);
@@ -191,6 +194,7 @@ export default function App() {
     saveCaseCompleted,
     saveCaseMarketAnalysis,
     saveCaseCompanyHistory,
+    saveCaseRiskAssessment,
     saveCaseEdits,
     saveCaseError,
     removeCase,
@@ -330,15 +334,18 @@ export default function App() {
       verification: null,
       marketAnalysis: null,
       companyHistory: null,
+      riskAssessment: null,
     };
 
     setResults(prev => [newResult, ...prev]);
     setActiveResultId(newId);
     setMarketAnalysisBusyId(newId);
     setCompanyHistoryBusyId(newId);
+    setRiskBusyId(newId);
     const clearBusy = () => {
       setMarketAnalysisBusyId(curr => (curr === newId ? null : curr));
       setCompanyHistoryBusyId(curr => (curr === newId ? null : curr));
+      setRiskBusyId(curr => (curr === newId ? null : curr));
     };
 
     try {
@@ -363,6 +370,15 @@ export default function App() {
           }
           setResults(prev => prev.map(r => r.id === newId ? { ...r, companyHistory: history } : r));
           saveCaseCompanyHistory(newId, history);
+        },
+        onRiskAssessment: (assessment, err) => {
+          setRiskBusyId(curr => (curr === newId ? null : curr));
+          if (err) {
+            console.error('Risk assessment failed:', err);
+            return;
+          }
+          setResults(prev => prev.map(r => r.id === newId ? { ...r, riskAssessment: assessment } : r));
+          saveCaseRiskAssessment(newId, assessment);
         },
       });
 
@@ -404,6 +420,31 @@ export default function App() {
     }
   };
 
+  // Genera o regenera la opinión de riesgo con los datos ya guardados del caso
+  // (no necesita los archivos). Sirve para casos viejos y después de editar valores.
+  const generateRiskAssessment = async (result: ExtractionResult) => {
+    if (!result.extraction || !result.ratios) return;
+    setRiskBusyId(result.id);
+    try {
+      const assessment = await runRiskAssessment({
+        extraction: result.extraction,
+        ratios: result.ratios,
+        inconsistencias: result.inconsistencias,
+        crossCheck: result.crossCheck,
+        verification: result.verification,
+        marketAnalysis: result.marketAnalysis,
+        companyHistory: result.companyHistory,
+      });
+      setResults(prev => prev.map(r => r.id === result.id ? { ...r, riskAssessment: assessment } : r));
+      await saveCaseRiskAssessment(result.id, assessment);
+    } catch (err) {
+      console.error('Risk assessment failed:', err);
+      alert(`No se pudo generar la opinión de riesgo: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setRiskBusyId(curr => (curr === result.id ? null : curr));
+    }
+  };
+
   const removeResult = async (id: string) => {
     await removeCase(id);
     if (activeResultId === id) setActiveResultId(null);
@@ -418,6 +459,7 @@ export default function App() {
       verification: result.verification,
       marketAnalysis: result.marketAnalysis,
       companyHistory: result.companyHistory,
+      riskAssessment: result.riskAssessment,
     };
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
     const downloadAnchorNode = document.createElement('a');
@@ -941,6 +983,12 @@ export default function App() {
                     <div className="border-l-4 border-blue-500 bg-blue-50 p-3 text-xs text-blue-900 flex items-center gap-2 print:hidden">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Leyendo la Memoria para historia y actividad de la empresa...
+                    </div>
+                  )}
+                  {riskBusyId === activeResult.id && (
+                    <div className="border-l-4 border-blue-500 bg-blue-50 p-3 text-xs text-blue-900 flex items-center gap-2 print:hidden">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Generando la opinión de riesgo integral (último paso)...
                     </div>
                   )}
                 <div className="flex flex-col md:flex-row gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -1853,10 +1901,16 @@ export default function App() {
                   )}
 
                   {activeTab === 'Opinión de riesgos' && (
-                      <div className="bg-white border border-[#141414] p-12 text-center text-[#141414]/60 font-mono text-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        Contenido de {activeTab} en desarrollo
-                      </div>
-                    )}
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                      <RiskOpinionView
+                        assessment={activeResult.riskAssessment ?? null}
+                        isGenerating={riskBusyId === activeResult.id}
+                        canGenerate={!!storedResult?.extraction && !!storedResult?.ratios && !isEditing}
+                        onGenerate={() => storedResult && generateRiskAssessment(storedResult)}
+                        editedAt={activeResult.editedAt}
+                      />
+                    </div>
+                  )}
 
                   </div>
                 </div>
