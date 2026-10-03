@@ -61,12 +61,17 @@ const EstadoResultadosEjercicio = z.object({
   resultado_ordinario: num,
   gastos_financieros: nullableNum,
   resultado_financiero_y_tenencia: nullableNum,
+  // Opcionales (agregados después): los casos viejos no los tienen.
+  recpam: nullableNum.optional(),
+  impuesto_ganancias: nullableNum.optional(),
   resultado_neto: num,
 });
 
 const FlujoEfectivoEjercicio = z.object({
   depreciacion_bienes_de_uso: nullableNum,
   flujo_neto_operativo: nullableNum,
+  // Pagos por compras de bienes de uso (capex total). Opcional.
+  pagos_bienes_de_uso: nullableNum.optional(),
 });
 
 const EstadosContablesEjercicio = z.object({
@@ -137,6 +142,24 @@ const ExtraccionNosis = z.object({
   cheques_rechazados_monto: lenientNum,
   deuda_financiera_total_nosis: lenientNum,
   detalle_entidades: z.array(NosisEntidad).default([]),
+  // Opcionales (agregados después): los casos viejos no los tienen.
+  peor_situacion_24_meses: lenientNum.optional(),
+  cheques_rechazados_levantados: lenientNum.optional(),
+  deuda_fiscal_previsional: lenientNum.optional(),
+  planes_de_pago_arca: z.boolean().nullable().catch(null).optional(),
+  juicios_cantidad: lenientNum.optional(),
+  embargos_cantidad: lenientNum.optional(),
+  pedidos_quiebra_cantidad: lenientNum.optional(),
+}).nullable();
+
+const InformacionComplementaria = z.object({
+  // RT 6: estados en moneda homogénea. Si es true, el comparativo está reexpresado.
+  balance_ajustado_por_inflacion: z.boolean().nullable().catch(null),
+  opinion_auditor: z.enum(['favorable', 'con_salvedades', 'adversa', 'abstencion']).nullable().catch(null),
+  detalle_opinion_auditor: z.string().nullable().catch(null),
+  // En miles de pesos al tipo de cambio de cierre.
+  deuda_financiera_moneda_extranjera: lenientNum,
+  porcentaje_ventas_exportacion: lenientNum,
 }).nullable();
 
 export type Accionista = {
@@ -175,6 +198,7 @@ export const RawExtractionSchema = z.object({
   extraccion_nosis: ExtraccionNosis,
   accionistas_y_directorio: z.union([AccionistasYDirectorio, 
   z.array(z.any()).transform(() => null)]).nullable(),
+  informacion_complementaria: InformacionComplementaria.optional(),
 });
 
 export type RawExtraction = z.infer<typeof RawExtractionSchema>;
@@ -205,3 +229,79 @@ export const MarketAnalysisResultSchema = z.object({
 });
 
 export type MarketAnalysisResult = z.infer<typeof MarketAnalysisResultSchema>;
+// Texto tolerante: null/undefined → '' (el modelo a veces manda null en campos vacíos).
+const lenientString = z.preprocess(v => (v === null || v === undefined ? '' : v), z.string());
+
+export const CompanyHistorySchema = z.object({
+  memoria_disponible: z.boolean().catch(false),
+  core_business: lenientString,
+  historia: lenientString,
+  datos_relevantes: z.preprocess(v => v ?? [], z.array(z.string())),
+  proyecciones: z.preprocess(v => v ?? [], z.array(z.string())),
+  explicaciones_balance: z.preprocess(
+    v => v ?? [],
+    z.array(z.object({ tema: lenientString, explicacion: lenientString }))
+  ),
+});
+
+export type CompanyHistory = z.infer<typeof CompanyHistorySchema>;
+
+// ---------- Opinión de riesgo ----------
+
+export const RISK_DIMENSIONS = [
+  'nosis_bcra',
+  'endeudamiento',
+  'liquidez_solvencia',
+  'rentabilidad',
+  'ventas_post_balance',
+  'negocio_mercado',
+  'calidad_informacion',
+] as const;
+export type RiskDimension = (typeof RISK_DIMENSIONS)[number];
+
+export const SEVERIDADES = ['baja', 'media', 'alta', 'critica'] as const;
+export type SeveridadRiesgo = (typeof SEVERIDADES)[number];
+
+const stringArray = z.preprocess(
+  v => (Array.isArray(v) ? v.filter(x => typeof x === 'string' && x.trim() !== '') : []),
+  z.array(z.string())
+);
+
+const isKnownDimension = (d: unknown): boolean =>
+  typeof d === 'object' && d !== null && RISK_DIMENSIONS.includes((d as { dimension?: never }).dimension as RiskDimension);
+
+// Puntaje del modelo por dimensión: 1 (riesgo mínimo) a 100 (máximo); null si no hay datos.
+const dimensionScore = z.preprocess(v => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(100, Math.max(1, Math.round(n))) : null;
+}, z.number().nullable());
+
+export const RiskOpinionSchema = z.object({
+  postura: z.enum(['favorable', 'favorable_con_condiciones', 'desfavorable']).nullable().catch(null),
+  dictamen: lenientString,
+  lectura_integral: lenientString,
+  dimensiones: z.preprocess(
+    v => (Array.isArray(v) ? v.filter(isKnownDimension) : []),
+    z.array(z.object({
+      dimension: z.enum(RISK_DIMENSIONS),
+      puntaje: dimensionScore,
+      comentario: lenientString,
+    }))
+  ),
+  riesgos: z.preprocess(
+    v => v ?? [],
+    z.array(z.object({
+      titulo: lenientString,
+      severidad: z.enum(SEVERIDADES).catch('media'),
+      dimension: z.enum(RISK_DIMENSIONS).nullable().catch(null),
+      evidencia: lenientString,
+      mitigante: lenientString,
+    }))
+  ),
+  fortalezas: stringArray,
+  condiciones_sugeridas: stringArray,
+  informacion_faltante: stringArray,
+});
+
+export type RiskOpinion = z.infer<typeof RiskOpinionSchema>;

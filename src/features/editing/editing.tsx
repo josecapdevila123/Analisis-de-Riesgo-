@@ -47,7 +47,7 @@ const toInputString = (value: number | null | undefined) =>
     : new Intl.NumberFormat('es-AR', { maximumFractionDigits: 6, useGrouping: false }).format(value);
 
 const inputClass =
-  'bg-amber-50 border border-amber-400/70 rounded-sm px-1.5 py-0.5 font-mono text-[#141414] focus:outline-none focus:ring-2 focus:ring-amber-500';
+  'bg-brand-blue/5 border border-brand-blue/50 rounded-sm px-1.5 py-0.5 font-mono text-ink focus:outline-none focus:ring-2 focus:ring-brand-blue';
 
 type EditableNumberProps = {
   path: Path;
@@ -169,7 +169,7 @@ export function AddRowButton({ path, list, newItem, label = 'Agregar fila' }: {
     <button
       type="button"
       onClick={() => update(path, [...(list ?? []), newItem])}
-      className="mt-3 inline-flex items-center gap-1 text-xs font-bold uppercase text-amber-800 hover:text-amber-950 print:hidden"
+      className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-blue hover:text-ink print:hidden"
     >
       <Plus className="w-3.5 h-3.5" /> {label}
     </button>
@@ -188,5 +188,23 @@ export function RemoveRowButton({ path, list, index }: { path: Path; list: unkno
     >
       <Trash2 className="w-3.5 h-3.5" />
     </button>
+  );
+}
+
+// Booleano con "sin dato" (null): Sí / No / —.
+export function EditableBoolean({ path, value }: { path: Path; value: boolean | null | undefined }) {
+  const { editing, update } = useEdit();
+  const label = value === true ? 'Sí' : value === false ? 'No' : '—';
+  if (!editing) return <>{label}</>;
+  return (
+    <select
+      value={value === true ? 'si' : value === false ? 'no' : ''}
+      onChange={e => update(path, e.target.value === 'si' ? true : e.target.value === 'no' ? false : null)}
+      className={cn(inputClass, 'font-sans')}
+    >
+      <option value="">Sin dato</option>
+      <option value="si">Sí</option>
+      <option value="no">No</option>
+    </select>
   );
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { RawExtraction } from '../extraction/schemas';
-import { AddRowButton, EditableNumber, EditableText, Path, RemoveRowButton } from './editing';
+import { AddRowButton, EditableBoolean, EditableNumber, EditableSelect, EditableText, Path, RemoveRowButton } from './editing';
 
 // Datos extraídos que alimentan los ratios pero no se muestran en otras vistas.
 // Solo se renderiza en modo edición.
@@ -22,10 +22,13 @@ const BALANCE_FIELDS: Array<{ group: string; fields: FieldSpec[] }> = [
     { label: 'Gastos de Comercialización', path: [...ER, 'gastos_comercializacion'], required: true },
     { label: 'Resultado Inversiones Permanentes', path: [...ER, 'resultado_inversiones_permanentes'] },
     { label: 'Gastos Financieros', path: [...ER, 'gastos_financieros'] },
+    { label: 'RECPAM', path: [...ER, 'recpam'] },
+    { label: 'Impuesto a las Ganancias', path: [...ER, 'impuesto_ganancias'] },
   ]},
   { group: 'Flujo de efectivo', fields: [
     { label: 'Depreciación Bienes de Uso', path: [...EF, 'depreciacion_bienes_de_uso'] },
     { label: 'Flujo Neto Operativo', path: [...EF, 'flujo_neto_operativo'] },
+    { label: 'Pagos por Bienes de Uso (capex)', path: [...EF, 'pagos_bienes_de_uso'] },
   ]},
 ];
 
@@ -45,9 +48,9 @@ const get = (obj: unknown, path: Path): any =>
   path.reduce<any>((acc, k) => (acc == null ? undefined : acc[k]), obj);
 
 const Card = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className="bg-white border border-amber-500 rounded-sm mb-8 overflow-hidden">
-    <div className="bg-amber-50 border-b border-amber-500/30 px-4 py-3">
-      <h3 className="text-lg font-bold text-[#141414] uppercase tracking-widest">{title}</h3>
+  <div className="bg-white border border-brand-blue/60 rounded-sm mb-8 overflow-hidden">
+    <div className="bg-brand-blue/5 border-b border-brand-blue/30 px-4 py-3">
+      <h3 className="text-lg font-bold text-ink uppercase tracking-widest">{title}</h3>
     </div>
     <div className="p-4 overflow-x-auto">{children}</div>
   </div>
@@ -58,7 +61,7 @@ type DetalleList = Array<{ rubro: string; monto: number }>;
 const DetalleTable = ({ basePath, list, emptyItem }: { basePath: Path; list: DetalleList; emptyItem: object }) => (
   <>
     <table className="w-full text-sm font-mono">
-      <tbody className="divide-y divide-[#141414]/5">
+      <tbody className="divide-y divide-ink/5">
         {list.map((item, i) => (
           <tr key={i}>
             <td className="py-1 pr-2">
@@ -100,13 +103,13 @@ export function SourceDataEditor({ extraction }: { extraction: RawExtraction }) 
           </label>
         </div>
         <table className="w-full text-sm font-mono">
-          <thead className="bg-[#F0EFED] text-xs uppercase">
+          <thead className="bg-canvas text-xs uppercase">
             <tr>
               <th className="px-3 py-2 text-left">Concepto</th>
               {years.map(y => <th key={y.key} className="px-3 py-2 text-right">{y.label}</th>)}
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#141414]/5">
+          <tbody className="divide-y divide-ink/5">
             {BALANCE_FIELDS.map(({ group, fields }) => (
               <React.Fragment key={group}>
                 <tr><td colSpan={3} className="px-3 pt-4 pb-1 text-xs font-bold uppercase opacity-50">{group}</td></tr>
@@ -128,6 +131,35 @@ export function SourceDataEditor({ extraction }: { extraction: RawExtraction }) 
         </table>
       </Card>
 
+      <Card title="Información complementaria">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-sans">
+          <label className="flex items-center justify-between gap-3">
+            <span className="font-semibold">Balance en moneda homogénea (RT 6)</span>
+            <EditableBoolean path={['informacion_complementaria', 'balance_ajustado_por_inflacion']} value={extraction.informacion_complementaria?.balance_ajustado_por_inflacion} />
+          </label>
+          <label className="flex items-center justify-between gap-3">
+            <span className="font-semibold">Opinión del auditor</span>
+            <EditableSelect
+              path={['informacion_complementaria', 'opinion_auditor']}
+              value={extraction.informacion_complementaria?.opinion_auditor ?? 'favorable'}
+              options={['favorable', 'con_salvedades', 'adversa', 'abstencion']}
+            />
+          </label>
+          <label className="flex flex-col gap-1 md:col-span-2">
+            <span className="font-semibold">Detalle de la opinión del auditor</span>
+            <EditableText path={['informacion_complementaria', 'detalle_opinion_auditor']} value={extraction.informacion_complementaria?.detalle_opinion_auditor} />
+          </label>
+          <label className="flex items-center justify-between gap-3">
+            <span className="font-semibold">Deuda financiera en moneda extranjera (miles $)</span>
+            <EditableNumber path={['informacion_complementaria', 'deuda_financiera_moneda_extranjera']} value={extraction.informacion_complementaria?.deuda_financiera_moneda_extranjera} />
+          </label>
+          <label className="flex items-center justify-between gap-3">
+            <span className="font-semibold">% de ventas de exportación</span>
+            <EditableNumber path={['informacion_complementaria', 'porcentaje_ventas_exportacion']} value={extraction.informacion_complementaria?.porcentaje_ventas_exportacion} />
+          </label>
+        </div>
+      </Card>
+
       <Card title="Deuda bancaria">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {deudaYears.map(y => {
@@ -142,7 +174,7 @@ export function SourceDataEditor({ extraction }: { extraction: RawExtraction }) 
                       <EditableNumber path={[y.key, g.key, 'total']} value={deuda[g.key].total} required />
                     </div>
                     <table className="w-full text-sm font-mono">
-                      <tbody className="divide-y divide-[#141414]/5">
+                      <tbody className="divide-y divide-ink/5">
                         {deuda[g.key].items.map((item, i) => (
                           <tr key={i}>
                             <td className="py-1 pr-2"><EditableText path={[y.key, g.key, 'items', i, 'rubro']} value={item.rubro} /></td>
