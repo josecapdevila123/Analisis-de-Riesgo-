@@ -75,7 +75,7 @@ import { AnalysisFlow } from './components/AnalysisFlow';
 import { RiskPolicyView } from './components/RiskPolicyView';
 import { runRiskAssessment } from './features/risk/assessment';
 import { confirmarRubro, estadoPorton, perfilDelCaso, sectorInicial } from './features/risk/porton';
-import { RubroDisponible, SubSegmento, TipoDocumento } from './features/risk/policy';
+import { RubroDisponible, SECTOR_PROFILES, SubSegmento, TipoDocumento } from './features/risk/policy';
 import { PreChequeo } from './components/PreChequeo';
 import { armarPrechequeo } from './features/risk/prechequeo';
 import { indicadoresFinancieros } from './features/ratios/financieras';
@@ -396,6 +396,7 @@ export default function App() {
     setIsProcessing(true);
     setProcessingStage('processing');
     const newId = crypto.randomUUID();
+    archivosSesion.current.set(newId, currentFiles);
     const newResult: ExtractionResult = {
       id: newId,
       timestamp: new Date().toISOString(),
@@ -522,6 +523,9 @@ export default function App() {
       const sector = confirmarRubro(base, rubro, motivo, nota, user?.email ?? null, new Date(), subsegmento);
       setResults(prev => prev.map(r => (r.id === result.id ? { ...r, sector } : r)));
       saveCaseSector(result.id, sector);
+      if (SECTOR_PROFILES[rubro].modelo === 'financiera' && !result.extraction?.extraccion_financiera && archivosSesion.current.has(result.id)) {
+        extraerBloqueFinanciero(result, null);
+      }
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
     }
@@ -529,6 +533,9 @@ export default function App() {
 
   // ---------- Documentos sectoriales (declarados por el cliente) ----------
   const [extrayendoBloqueId, setExtrayendoBloqueId] = useState<string | null>(null);
+  // Archivos subidos en esta sesión, por caso (solo en memoria: se pierden al
+  // recargar). Permiten extraer el bloque financiero sin volver a subir el balance.
+  const archivosSesion = useRef(new Map<string, UploadedFile[]>());
 
   // Lista vigente de documentos por caso, fuera del ciclo de render: así la
   // lista que se guarda es siempre la misma que se muestra (nunca una vacía).
@@ -577,11 +584,14 @@ export default function App() {
 
   // Bloque financiero de los EECC a demanda: la app no guarda los archivos, así
   // que se vuelve a subir el balance y se lee solo ese bloque.
-  const extraerBloqueFinanciero = async (result: ExtractionResult, files: File[]) => {
+  // files = null: usa el balance que se subió en esta sesión.
+  const extraerBloqueFinanciero = async (result: ExtractionResult, files: File[] | null) => {
     if (!result.extraction) return;
+    const enSesion = archivosSesion.current.get(result.id);
+    if (!files && !enSesion) return;
     setExtrayendoBloqueId(result.id);
     try {
-      const bloque = await runFinancialBlockExtraction(await Promise.all(files.map(leerArchivo)));
+      const bloque = await runFinancialBlockExtraction(files ? await Promise.all(files.map(leerArchivo)) : enSesion!);
       const extraction = { ...result.extraction, extraccion_financiera: bloque };
       const editedAt = new Date().toISOString();
       const edits = { extraction, ratios: computeRatios(extraction), inconsistencias: runSanityChecks(extraction), crossCheck: runCrossCheck(extraction) };
@@ -1168,6 +1178,7 @@ export default function App() {
                         documentos={documentosActivos}
                         fechaCaso={activeResult.timestamp}
                         extrayendoBloque={extrayendoBloqueId === activeResult.id}
+                        balanceEnSesion={archivosSesion.current.has(activeResult.id)}
                         onCargarDocumento={(tipo, file) => storedResult && cargarDocumento(storedResult, tipo, file)}
                         onEditarDocumento={(id, ext) => storedResult && editarDocumento(storedResult, id, ext)}
                         onBorrarDocumento={id => storedResult && borrarDocumento(storedResult, id)}
