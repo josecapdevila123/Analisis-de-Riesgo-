@@ -29,6 +29,7 @@ Puntos clave:
 - Las llamadas a Gemini pasan por `callGemini`, que reintenta con espera creciente los errores 429/5xx y, si no alcanza, usa un modelo de respaldo. La configuración está en `src/lib/gemini.ts`.
 - **Schemas tolerantes:** `src/features/extraction/schemas.ts` convierte "N/A", "", null, NaN, etc. en `null` para que la validación no se caiga por variaciones del modelo.
 - **Persistencia:** `src/features/cases/useCases.ts`, en `users/{uid}/cases/{caseId}`. `extraction`, `ratios`, `inconsistencias`, `crossCheck` y `verification` se guardan como **strings JSON**. Al entrar por primera vez con el schema v2 se borran los casos v1 de ese usuario.
+- **Signos:** Gemini puede devolver costos, gastos y depreciación en negativo o en positivo. `calculations.ts` los normaliza con `Math.abs`; los resultados (valuación de BdC, inversiones permanentes, resultado neto) conservan su signo.
 - **Convenciones de datos:** los montos están en **miles de pesos**. Los ratios porcentuales se guardan como fracción (0,15) y se multiplican por 100 al mostrarse. Los porcentajes de participación accionaria y la situación BCRA van como número natural.
 
 ### Mapa de archivos
@@ -56,19 +57,20 @@ src/
 ```bash
 npm install
 npm run dev        # Vite en http://localhost:3000
-npm run lint       # tsc --noEmit (es el único chequeo que hay)
+npm run lint       # tsc --noEmit
+npm run test       # vitest run (tests de src/features/ratios)
 npm run build      # build de producción en dist/
 npm run preview    # sirve dist/
 ```
 
 - Variable requerida: `GEMINI_API_KEY` en `.env.local`. Vite la inyecta en el bundle mediante `define`.
 - La configuración de Firebase está en `firebase-applet-config.json`.
-- **No hay tests ni runner de tests configurado.**
+- Tests con Vitest en `src/features/ratios/*.test.ts`, sobre un balance de ejemplo en `__fixtures__/extraction.ts`. Por ahora solo cubren ratios, sanity checks y cruce Nosis.
 
 ## Reglas
 
-- **No cambiar fórmulas de ratios sin tests.** Esto incluye `calculations.ts`, los umbrales de `evaluateRatioStatus`, las palabras clave de rubros, `sanityChecks.ts` y `crossCheck.ts`. Si hay que tocarlas, primero se agregan tests que fijen el comportamiento actual (no hay runner todavía, así que el primer paso es sumar uno, por ejemplo Vitest) y después se hace el cambio. Un ratio mal calculado termina en una decisión de crédito.
-- **Correr `npm run lint` antes de cada commit.** Si falla, no se commitea.
+- **No cambiar fórmulas de ratios sin tests.** Esto incluye `calculations.ts`, los umbrales de `evaluateRatioStatus`, las palabras clave de rubros, `sanityChecks.ts` y `crossCheck.ts`. Primero se escribe o ajusta el test con el valor esperado calculado a mano, después se cambia la fórmula, y `npm run test` tiene que pasar. Un ratio mal calculado termina en una decisión de crédito.
+- **Correr `npm run lint` (y `npm run test` si se tocó `src/features/ratios`) antes de cada commit.** Si falla, no se commitea.
 - **Commits chicos y en español**: un cambio lógico por commit, con un mensaje en minúscula que describa qué cambia (por ejemplo: `fix extraccion nosis post cierre y moneda opcional`).
 - La IA interpreta y el código calcula. No mover cálculos numéricos a los prompts.
 - Si se cambia el schema de extracción, revisar juntos el prompt (`prompts/extraction.ts`), el schema Zod, `calculations.ts`, `ComparativeView`, `generatePDF.ts` y `editing/`.
