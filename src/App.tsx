@@ -17,7 +17,6 @@ import {
   Trash2,
   RefreshCw,
   Search,
-  LayoutDashboard,
   FileSpreadsheet,
   TrendingUp,
   TrendingDown,
@@ -35,7 +34,6 @@ import {
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import ReactMarkdown from 'react-markdown';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn, formatCurrencyThousands } from './lib/utils';
 import { generatePDF } from './features/pdf/generatePDF';
 import { runPipeline, CaseState } from './features/extraction/pipeline';
@@ -61,6 +59,7 @@ import {
 import { SourceDataEditor } from './features/editing/SourceDataEditor';
 import { BiBankLogo } from './components/BiBankLogo';
 import { CompanyHistoryView } from './components/CompanyHistoryView';
+import { NosisDebtBars } from './components/NosisDebtBars';
 import { RiskOpinionView } from './components/RiskOpinionView';
 import { RiskPolicyView } from './components/RiskPolicyView';
 import { runRiskAssessment } from './features/risk/assessment';
@@ -76,26 +75,26 @@ const ShareholderTable = ({ accionistas, level = 1, parentName = '', basePath }:
   return (
     <div className={`${level > 1 ? 'mt-8 mb-8 ml-4 md:ml-8 print:break-inside-avoid' : ''}`}>
       {level > 1 && (
-        <div className="flex items-center gap-2 mb-3 text-[#141414]">
+        <div className="flex items-center gap-2 mb-3 text-ink">
           <CornerDownRight className="w-4 h-4 opacity-50" />
           <h4 className="text-sm font-semibold">↳ Composición de {parentName}</h4>
         </div>
       )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left border-collapse">
-          <thead className={`${level === 1 ? 'bg-[#F0EFED]' : 'bg-slate-50'} text-[#141414] text-xs uppercase tracking-wider`}>
+          <thead className={`${level === 1 ? 'bg-canvas' : 'bg-slate-50'} text-ink text-xs uppercase tracking-wider`}>
             <tr>
-              <th className="px-4 py-3 font-semibold border-b border-[#141414]/20">Apellido y Nombre / Razón Social</th>
-              <th className="px-4 py-3 font-semibold border-b border-[#141414]/20">DNI / CUIT</th>
-              <th className="px-4 py-3 font-semibold border-b border-[#141414]/20 w-1/3">% Participación</th>
+              <th className="px-4 py-3 font-semibold border-b border-ink/20">Apellido y Nombre / Razón Social</th>
+              <th className="px-4 py-3 font-semibold border-b border-ink/20">DNI / CUIT</th>
+              <th className="px-4 py-3 font-semibold border-b border-ink/20 w-1/3">% Participación</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#141414]/10">
+          <tbody className="divide-y divide-ink/10">
             {accionistas.map((accionista, idx) => {
               const participacionNum = Number(accionista.participacion) || 0;
               return (
-                <tr key={idx} className="hover:bg-[#141414]/5 transition-colors">
-                  <td className="px-4 py-3 font-medium text-[#141414]">
+                <tr key={idx} className="hover:bg-ink/5 transition-colors">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {canEdit ? (
                       <div className="flex items-center gap-1">
                         <RemoveRowButton path={basePath!} list={accionistas} index={idx} />
@@ -103,7 +102,7 @@ const ShareholderTable = ({ accionistas, level = 1, parentName = '', basePath }:
                       </div>
                     ) : accionista.nombre}
                   </td>
-                  <td className="px-4 py-3 text-[#141414]/70">
+                  <td className="px-4 py-3 text-ink/70">
                     {canEdit ? <EditableText path={rowPath(idx, 'dni_cuit')} value={accionista.dni_cuit} /> : accionista.dni_cuit}
                   </td>
                   <td className="px-4 py-3">
@@ -113,10 +112,10 @@ const ShareholderTable = ({ accionistas, level = 1, parentName = '', basePath }:
                           <EditableNumber path={rowPath(idx, 'participacion')} value={accionista.participacion} inputClassName="w-20" />%
                         </span>
                       ) : (
-                        <span className="font-bold text-[#141414]">{participacionNum}%</span>
+                        <span className="font-bold text-ink">{participacionNum}%</span>
                       )}
                       <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden">
-                        <div className="bg-blue-600 h-full" style={{ width: `${participacionNum}%` }}></div>
+                        <div className="bg-ink h-full" style={{ width: `${participacionNum}%` }}></div>
                       </div>
                     </div>
                   </td>
@@ -125,9 +124,9 @@ const ShareholderTable = ({ accionistas, level = 1, parentName = '', basePath }:
             })}
           </tbody>
           <tfoot>
-            <tr className={`${level === 1 ? 'bg-[#F0EFED]' : 'bg-slate-50'} font-bold text-[#141414]`}>
-              <td className="px-4 py-3 border-t border-[#141414]/20" colSpan={2}>TOTAL</td>
-              <td className="px-4 py-3 border-t border-[#141414]/20">
+            <tr className={`${level === 1 ? 'bg-canvas' : 'bg-slate-50'} font-bold text-ink`}>
+              <td className="px-4 py-3 border-t border-ink/20" colSpan={2}>TOTAL</td>
+              <td className="px-4 py-3 border-t border-ink/20">
                 {accionistas.reduce((sum, a) => sum + (Number(a.participacion) || 0), 0).toFixed(2)}%
               </td>
             </tr>
@@ -589,14 +588,14 @@ export default function App() {
     if (!currentGroup) return null;
     
     return (
-      <details className="group/section ml-4 mb-4 border-l-2 border-[#141414]/10 pl-4">
-        <summary className="flex items-center justify-between cursor-pointer hover:bg-[#141414]/5 p-2 rounded select-none list-none transition-colors">
+      <details className="group/section ml-4 mb-4 border-l-2 border-ink/10 pl-4">
+        <summary className="flex items-center justify-between cursor-pointer hover:bg-ink/5 p-2 rounded select-none list-none transition-colors">
           <div className="flex items-center gap-2">
             <span className="text-xs">{title.includes("No") ? "🔹" : "🔹"}</span>
             <span className="font-bold uppercase text-sm">{title}</span>
           </div>
           <div className="flex items-center gap-4">
-            <span className="font-mono font-bold text-sm text-[#141414]">
+            <span className="font-mono font-bold text-sm text-ink">
               {formatCurrencyThousands(currentGroup.total)}
             </span>
             <ChevronRight className="w-4 h-4 transition-transform group-open/section:rotate-90 opacity-50" />
@@ -605,7 +604,7 @@ export default function App() {
         
         <div className="mt-2 space-y-1 pl-2">
           {/* Header for details */}
-          <div className="flex justify-between text-[10px] uppercase opacity-40 px-2 mb-2 border-b border-[#141414]/5 pb-1">
+          <div className="flex justify-between text-[10px] uppercase opacity-40 px-2 mb-2 border-b border-ink/5 pb-1">
             <span>Rubro</span>
             <div className="flex gap-8 font-mono">
               <span className="w-20 text-right">{anioActual}</span>
@@ -616,10 +615,10 @@ export default function App() {
           {Array.isArray(currentGroup.detalles) && currentGroup.detalles.map((item, idx) => {
             const prevItem = prevGroup?.detalles?.find(p => p.rubro === item.rubro);
             return (
-              <div key={idx} className="flex justify-between items-center text-xs hover:bg-[#141414]/5 p-2 rounded transition-colors">
-                <span className="font-medium text-[#141414]">{item.rubro}</span>
+              <div key={idx} className="flex justify-between items-center text-xs hover:bg-ink/5 p-2 rounded transition-colors">
+                <span className="font-medium text-ink">{item.rubro}</span>
                 <div className="flex gap-8 font-mono">
-                  <span className="w-20 text-right font-bold text-[#141414]">
+                  <span className="w-20 text-right font-bold text-ink">
                     {formatCurrencyThousands(item.monto)}
                   </span>
                   <span className="w-20 text-right opacity-50">
@@ -636,196 +635,181 @@ export default function App() {
 
   return (
     <EditProvider value={editContext}>
-    <div className="flex h-screen bg-[#E4E3E0] text-[#141414] font-sans selection:bg-[#141414] selection:text-[#E4E3E0]">
+    <div className="flex h-screen bg-white text-ink font-sans selection:bg-ink selection:text-white">
       {/* Sidebar */}
-      <aside className={cn("border-r border-[#141414] flex flex-col bg-[#E4E3E0] transition-all duration-300 relative overflow-hidden print:hidden", isHistorySidebarOpen ? "w-72" : "w-0 border-r-0")}>
+      <aside className={cn("flex flex-col bg-ink text-white transition-all duration-300 relative overflow-hidden print:hidden", isHistorySidebarOpen ? "w-72" : "w-0")}>
         <div className={cn("w-72 flex flex-col h-full transition-opacity duration-300 overflow-hidden", isHistorySidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none")}>
-          <div className="p-6 border-b border-[#141414]">
-            <div className="flex items-center justify-between mb-4">
+          <div className="px-6 pt-6 pb-5 border-b border-white/15">
+            <div className="flex items-center justify-between mb-6">
               <button onClick={() => setActiveResultId(null)} className="hover:opacity-80 transition-opacity" title="Ir al inicio">
-                <BiBankLogo className="h-10 w-auto" />
+                <BiBankLogo variant="light" className="h-9 w-auto" />
               </button>
-              <button 
+              <button
                 onClick={() => setIsHistorySidebarOpen(false)}
-                className="p-1 hover:bg-[#141414]/10 rounded transition-colors"
+                className="p-1 text-white/60 hover:text-white hover:bg-white/10 rounded transition-colors"
                 title="Ocultar historial"
               >
                 <PanelLeftClose className="w-5 h-5" />
               </button>
             </div>
-            <div className="flex items-center gap-3 mb-1">
-            <LayoutDashboard className="w-5 h-5" />
-            <h1 className="font-sans text-lg font-bold tracking-tight uppercase">Risk Analyst AI</h1>
-          </div>
-          <p className="text-[10px] uppercase tracking-widest opacity-50 font-sans mb-4">Legajo Técnico v2.0</p>
-          
-          {isAuthReady && (
-            <div className="pt-4 border-t border-[#141414]/20">
-              {user ? (
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 overflow-hidden">
-                    {user.photoURL ? (
-                      <img src={user.photoURL} alt="Profile" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-[#141414] text-[#E4E3E0] flex items-center justify-center text-[10px] font-bold">
-                        {user.email?.[0].toUpperCase()}
-                      </div>
-                    )}
-                    <span className="text-xs font-medium truncate opacity-70">{user.email}</span>
-                  </div>
-                  <button onClick={handleLogout} className="p-1 hover:bg-[#141414]/10 rounded transition-colors" title="Cerrar sesión">
-                    <LogOut className="w-4 h-4 opacity-50 hover:opacity-100" />
-                  </button>
-                </div>
-              ) : (
-                <button 
-                  onClick={handleLogin}
-                  className="w-full py-2 px-4 bg-[#141414] text-[#E4E3E0] text-xs font-bold uppercase hover:bg-[#141414]/80 transition-colors flex items-center justify-center gap-2"
-                >
-                  Iniciar sesión con Google
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+            <p className="font-display text-lg font-semibold leading-tight">Análisis de riesgo</p>
+            <p className="text-[11px] text-white/50 mt-0.5">Banca Empresas · Legajo técnico</p>
 
-        <div className="px-6 pt-4">
-          <button
-            onClick={() => setShowPolicy(v => !v)}
-            className={cn(
-              "w-full flex items-center gap-2 px-3 py-2 border border-[#141414] text-xs font-bold uppercase transition-all",
-              showPolicy ? "bg-[#141414] text-[#E4E3E0]" : "hover:bg-[#141414]/5"
-            )}
-          >
-            <Scale className="w-4 h-4" />
-            Política de riesgos
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-6 py-4">
-            <h2 className="text-[11px] font-sans font-semibold uppercase opacity-50 mb-4 tracking-wider flex items-center gap-2">
-              <History className="w-3 h-3" />
-              Historial de Casos
-            </h2>
-            
-            <div className="space-y-2">
-              {results.length === 0 ? (
-                <p className="text-xs opacity-40 italic py-4">No hay casos recientes.</p>
-              ) : (
-                results.map((result) => (
-                  <div
-                    key={result.id}
-                    onClick={() => setActiveResultId(result.id)}
-                    className={cn(
-                      "w-full text-left p-3 border border-[#141414] transition-all group relative overflow-hidden cursor-pointer",
-                      activeResultId === result.id ? "bg-[#141414] text-[#E4E3E0]" : "hover:bg-[#141414]/5"
-                    )}
-                  >
-                    <div className="flex justify-between items-start mb-1">
-                      <span className="text-[10px] font-mono opacity-50">{new Date(result.timestamp).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
-                      {result.status === 'completed' && <CheckCircle2 className="w-3 h-3 text-emerald-500" />}
-                      {result.status === 'processing' && <Loader2 className="w-3 h-3 animate-spin" />}
-                      {result.status === 'error' && <AlertCircle className="w-3 h-3 text-red-500" />}
+            {isAuthReady && (
+              <div className="mt-5 pt-4 border-t border-white/15">
+                {user ? (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      {user.photoURL ? (
+                        <img src={user.photoURL} alt="Profile" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-brand-green text-ink flex items-center justify-center text-[10px] font-bold">
+                          {user.email?.[0].toUpperCase()}
+                        </div>
+                      )}
+                      <span className="text-xs truncate text-white/70">{user.email}</span>
                     </div>
-                    <p className="text-xs font-medium truncate pr-6">
-                      {result.extraction?.company_profile?.name || `${result.fileNames.length} archivo(s)`}
-                    </p>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); removeResult(result.id); }}
-                      className="absolute right-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-red-500"
-                    >
-                      <Trash2 className="w-3 h-3" />
+                    <button onClick={handleLogout} className="p-1 text-white/50 hover:text-white hover:bg-white/10 rounded transition-colors" title="Cerrar sesión">
+                      <LogOut className="w-4 h-4" />
                     </button>
                   </div>
-                ))
+                ) : (
+                  <button
+                    onClick={handleLogin}
+                    className="w-full py-2.5 px-4 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition flex items-center justify-center gap-2"
+                  >
+                    Iniciar sesión con Google
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="px-6 pt-5">
+            <button
+              onClick={() => setShowPolicy(v => !v)}
+              className={cn(
+                "w-full flex items-center gap-2 px-3 py-2 rounded-full border text-xs font-semibold transition-all",
+                showPolicy ? "bg-brand-green border-brand-green text-ink" : "border-white/25 text-white hover:border-brand-green hover:text-brand-green"
               )}
+            >
+              <Scale className="w-4 h-4" />
+              Política de riesgos
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            <div className="px-6 py-5">
+              <h2 className="text-[11px] font-semibold uppercase text-white/50 mb-3 tracking-wider flex items-center gap-2">
+                <History className="w-3 h-3" />
+                Historial de casos
+              </h2>
+
+              <div className="space-y-1.5">
+                {results.length === 0 ? (
+                  <p className="text-xs text-white/40 italic py-4">No hay casos recientes.</p>
+                ) : (
+                  results.map((result) => (
+                    <div
+                      key={result.id}
+                      onClick={() => setActiveResultId(result.id)}
+                      className={cn(
+                        "w-full text-left pl-3 pr-3 py-2.5 border-l-2 transition-all group relative overflow-hidden cursor-pointer",
+                        activeResultId === result.id
+                          ? "border-brand-green bg-white/10 text-white"
+                          : "border-transparent text-white/75 hover:bg-white/5 hover:text-white"
+                      )}
+                    >
+                      <div className="flex justify-between items-start mb-0.5">
+                        <span className="text-[10px] font-mono text-white/45">{new Date(result.timestamp).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
+                        {result.status === 'completed' && <CheckCircle2 className="w-3 h-3 text-brand-green" />}
+                        {result.status === 'processing' && <Loader2 className="w-3 h-3 animate-spin" />}
+                        {result.status === 'error' && <AlertCircle className="w-3 h-3 text-red-400" />}
+                      </div>
+                      <p className="text-xs font-medium truncate pr-6">
+                        {result.extraction?.company_profile?.name || `${result.fileNames.length} archivo(s)`}
+                      </p>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeResult(result.id); }}
+                        className="absolute right-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-white/60 hover:text-red-400"
+                        title="Eliminar caso"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="p-6 border-t border-[#141414] bg-[#DCDAD6]">
-          <div className="flex items-center gap-2 text-[10px] font-mono opacity-60">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            SISTEMA ACTIVO
+          <div className="px-6 py-4 border-t border-white/15">
+            <div className="flex items-center gap-2 text-[10px] text-white/50 uppercase tracking-wider">
+              <div className="w-2 h-2 rounded-full bg-brand-green animate-pulse" />
+              Sistema activo
+            </div>
           </div>
-        </div>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="relative flex-1 flex flex-col overflow-hidden bg-[#F0EFED] print:hidden">
+      <main className="relative flex-1 flex flex-col overflow-hidden bg-canvas print:hidden">
         {/* Página de política de riesgos, por encima del contenido */}
         {showPolicy && (
-          <div className="absolute inset-x-0 top-16 bottom-0 z-30 overflow-y-auto bg-[#F0EFED] p-8">
+          <div className="absolute inset-x-0 top-16 bottom-0 z-30 overflow-y-auto bg-canvas p-8">
             <RiskPolicyView onClose={() => setShowPolicy(false)} />
           </div>
         )}
         {/* Header */}
-        <header className="h-16 border-b border-[#141414] flex items-center justify-between px-8 bg-[#E4E3E0]">
+        <header className="h-16 border-b border-ink/10 flex items-center justify-between px-8 bg-white">
           <div className="flex items-center gap-4">
             {!isHistorySidebarOpen && (
-              <button 
+              <button
                 onClick={() => setIsHistorySidebarOpen(true)}
-                className="p-2 hover:bg-[#141414]/10 rounded transition-colors"
+                className="p-2 hover:bg-ink/5 rounded-full transition-colors"
                 title="Mostrar historial"
               >
                 <PanelLeftOpen className="w-5 h-5" />
               </button>
             )}
-            <div className="h-8 w-[1px] bg-[#141414] opacity-20" />
             <div className="flex flex-col">
-              <span className="text-[10px] font-mono uppercase opacity-50">Módulo</span>
-              <span className="text-xs font-bold uppercase tracking-tighter">Dashboard de Riesgo</span>
+              <span className="text-[10px] uppercase tracking-wider text-ink/45">Módulo</span>
+              <span className="text-sm font-semibold">Dashboard de riesgo</span>
             </div>
           </div>
-          
-          <div className="flex items-center gap-4">
+
+          <div className="flex items-center gap-3">
             {activeResult?.extraction && (activeResult.status === 'completed' || activeResult.status === 'completed_partial') && (
               isEditing ? (
                 <>
-                  <button
-                    onClick={cancelEditing}
-                    disabled={isSavingEdits}
-                    className="flex items-center gap-2 px-4 py-2 border border-[#141414] text-xs font-bold uppercase hover:bg-[#141414]/10 transition-all disabled:opacity-50"
-                  >
+                  <button onClick={cancelEditing} disabled={isSavingEdits} className="flex items-center gap-2 px-4 py-2 rounded-full border border-ink/20 text-xs font-semibold text-ink hover:border-ink transition-all disabled:opacity-50">
                     <X className="w-4 h-4" />
                     Cancelar
                   </button>
-                  <button
-                    onClick={saveEdits}
-                    disabled={isSavingEdits}
-                    className="flex items-center gap-2 px-4 py-2 border border-amber-600 bg-amber-500 text-[#141414] text-xs font-bold uppercase hover:bg-amber-400 transition-all disabled:opacity-50"
-                  >
+                  <button onClick={saveEdits} disabled={isSavingEdits} className="flex items-center gap-2 px-4 py-2 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition disabled:opacity-50">
                     {isSavingEdits ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     Guardar cambios
                   </button>
                 </>
               ) : (
-                <button
-                  onClick={startEditing}
-                  className="flex items-center gap-2 px-4 py-2 border border-[#141414] text-xs font-bold uppercase hover:bg-[#141414] hover:text-[#E4E3E0] transition-all"
-                >
+                <button onClick={startEditing} className="flex items-center gap-2 px-4 py-2 rounded-full border border-ink/20 text-xs font-semibold text-ink hover:border-ink transition-all disabled:opacity-50">
                   <Pencil className="w-4 h-4" />
                   Editar valores
                 </button>
               )
             )}
             {activeResult && activeResult.status === 'completed' && !isEditing && (
-              <button 
-                onClick={() => downloadJson(activeResult)}
-                className="flex items-center gap-2 px-4 py-2 border border-[#141414] text-xs font-bold uppercase hover:bg-[#141414] hover:text-[#E4E3E0] transition-all"
-              >
+              <button onClick={() => downloadJson(activeResult)} className="flex items-center gap-2 px-4 py-2 rounded-full border border-ink/20 text-xs font-semibold text-ink hover:border-ink transition-all disabled:opacity-50">
                 <Download className="w-4 h-4" />
-                Exportar Datos
+                Exportar datos
               </button>
             )}
-            <button 
+            <button
               onClick={() => { setCurrentFiles([]); setActiveResultId(null); setShowPolicy(false); }}
-              className="flex items-center gap-2 px-4 py-2 border border-[#141414] text-xs font-bold uppercase hover:bg-[#141414] hover:text-[#E4E3E0] transition-all"
+              className="flex items-center gap-2 px-4 py-2 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition disabled:opacity-50"
             >
               <RefreshCw className="w-4 h-4" />
-              Nuevo Caso
+              Nuevo caso
             </button>
           </div>
         </header>
@@ -835,7 +819,7 @@ export default function App() {
           {!activeResultId && currentFiles.length === 0 ? (
             <div className="max-w-2xl mx-auto mt-12">
               <div className="mb-12 text-center">
-                <h2 className="text-5xl font-sans font-bold mb-4 tracking-tight">Análisis de Riesgo</h2>
+                <h2 className="text-5xl font-display font-semibold mb-4 tracking-tight">Análisis de riesgo</h2>
                 <p className="text-sm opacity-60 max-w-md mx-auto">
                   Análisis de estados contables, ventas post balance, estructura societaria, informes de deuda
                 </p>
@@ -844,13 +828,13 @@ export default function App() {
               <div 
                 {...getRootProps()} 
                 className={cn(
-                  "border-2 border-dashed border-[#141414] p-16 flex flex-col items-center justify-center transition-all bg-white/50",
+                  "border-2 border-dashed border-ink p-16 flex flex-col items-center justify-center transition-all bg-white/50",
                   !user ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-white",
-                  isDragActive && user ? "bg-[#141414]/5 scale-[0.99]" : ""
+                  isDragActive && user ? "bg-ink/5 scale-[0.99]" : ""
                 )}
               >
                 <input {...getInputProps()} disabled={!user} />
-                <div className="w-16 h-16 border border-[#141414] flex items-center justify-center mb-6">
+                <div className="w-16 h-16 border border-ink/15 flex items-center justify-center mb-6">
                   <Upload className="w-8 h-8" />
                 </div>
                 {user ? (
@@ -872,8 +856,8 @@ export default function App() {
                   { label: "Cruce", value: "Balance vs Nosis" },
                   { label: "Proyección", value: "Ventas & EBITDA" }
                 ].map((stat, i) => (
-                  <div key={i} className="border-t border-[#141414] pt-4">
-                    <p className="text-[10px] font-serif italic opacity-50 uppercase mb-1">{stat.label}</p>
+                  <div key={i} className="border-t border-ink pt-4">
+                    <p className="text-[10px] opacity-50 uppercase mb-1">{stat.label}</p>
                     <p className="text-sm font-bold uppercase">{stat.value}</p>
                   </div>
                 ))}
@@ -882,12 +866,12 @@ export default function App() {
           ) : !activeResultId && currentFiles.length > 0 ? (
             // File Staging Area
             <div className="max-w-2xl mx-auto">
-              <h3 className="text-xl font-serif italic mb-6">Documentos a Procesar</h3>
+              <h3 className="text-xl font-display font-semibold mb-6">Documentos a procesar</h3>
               <div className="grid gap-4 mb-8">
                 {currentFiles.map((file, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-4 bg-white border border-[#141414]">
+                  <div key={idx} className="flex items-center justify-between p-4 bg-white border border-ink/15">
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-[#E4E3E0] flex items-center justify-center">
+                      <div className="w-10 h-10 bg-white flex items-center justify-center">
                         <FileText className="w-5 h-5 opacity-50" />
                       </div>
                       <div>
@@ -904,7 +888,7 @@ export default function App() {
               <div className="flex justify-end gap-4">
                  <div 
                   {...getRootProps()} 
-                  className="px-6 py-3 border border-[#141414] text-xs font-bold uppercase hover:bg-[#E4E3E0] cursor-pointer flex items-center gap-2"
+                  className="px-6 py-3 border border-ink/15 text-xs font-bold uppercase hover:bg-white cursor-pointer flex items-center gap-2"
                 >
                   <input {...getInputProps()} />
                   <Upload className="w-4 h-4" />
@@ -912,7 +896,7 @@ export default function App() {
                 </div>
                 <button 
                   onClick={processFiles}
-                  className="px-8 py-3 bg-[#141414] text-[#E4E3E0] text-xs font-bold uppercase hover:bg-[#222] flex items-center gap-2"
+                  className="px-8 py-3 bg-ink text-white text-xs font-bold uppercase hover:bg-[#222] flex items-center gap-2"
                 >
                   <Search className="w-4 h-4" />
                   Procesar Documentos
@@ -924,10 +908,10 @@ export default function App() {
             <div className="h-full flex flex-col gap-8">
               {/* Dashboard Header Status */}
               {activeResult?.status === 'processing' && (
-                <div className="relative w-full min-h-[500px] flex items-center justify-center border border-[#141414] overflow-hidden bg-[#F0EFED]">
+                <div className="relative w-full min-h-[500px] flex items-center justify-center border border-ink/15 overflow-hidden bg-canvas">
                   <div className="absolute inset-0 z-0 bg-gradient-to-b from-transparent via-white/30 to-transparent animate-pulse"></div>
-                  <div className="relative z-10 bg-white/90 backdrop-blur-md p-10 border border-[#141414]/20 shadow-2xl max-w-lg w-full animate-in fade-in zoom-in-95 duration-500">
-                    <h3 className="text-2xl font-sans font-bold text-[#141414] mb-6 tracking-tight text-center">Procesando con IA</h3>
+                  <div className="relative z-10 bg-white/90 backdrop-blur-md p-10 border border-ink/20 shadow-2xl max-w-lg w-full animate-in fade-in zoom-in-95 duration-500">
+                    <h3 className="text-2xl font-sans font-bold text-ink mb-6 tracking-tight text-center">Procesando con IA</h3>
                     <ol className="space-y-3">
                       {(() => {
                         const stages: Array<{ key: CaseState | 'verifying-2'; label: string }> = [
@@ -949,11 +933,11 @@ export default function App() {
                               {isDone ? (
                                 <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
                               ) : isActive ? (
-                                <Loader2 className="w-5 h-5 text-[#141414] animate-spin shrink-0" />
+                                <Loader2 className="w-5 h-5 text-ink animate-spin shrink-0" />
                               ) : (
-                                <div className="w-5 h-5 rounded-full border-2 border-[#141414]/20 shrink-0" />
+                                <div className="w-5 h-5 rounded-full border-2 border-ink/20 shrink-0" />
                               )}
-                              <span className={cn('font-medium', isDone ? 'text-[#141414]/50' : isActive ? 'text-[#141414]' : 'text-[#141414]/40')}>
+                              <span className={cn('font-medium', isDone ? 'text-ink/50' : isActive ? 'text-ink' : 'text-ink/40')}>
                                 {stage.label}
                               </span>
                             </li>
@@ -976,7 +960,7 @@ export default function App() {
               {(activeResult?.status === 'completed' || activeResult?.status === 'completed_partial') && activeResult.extraction && (
                 <>
                   {isEditing && (
-                    <div className="border-l-4 border-amber-500 bg-amber-50 p-3 text-sm text-amber-900 flex items-center gap-2 print:hidden">
+                    <div className="border-l-4 border-brand-blue bg-brand-blue/5 p-3 text-sm text-ink flex items-center gap-2 print:hidden">
                       <Pencil className="w-4 h-4 shrink-0" />
                       <span>
                         <strong>Modo edición.</strong> Los campos resaltados son editables; ratios, chequeos de consistencia y cruce con Nosis se recalculan al instante. En "Balance y Ratios" están también los datos de origen.
@@ -989,7 +973,7 @@ export default function App() {
                     </div>
                   )}
                   {!isEditing && activeResult.editedAt && (
-                    <div className="border-l-4 border-[#141414]/40 bg-white p-3 text-xs text-[#141414]/80 print:hidden">
+                    <div className="border-l-4 border-ink/40 bg-white p-3 text-xs text-ink/80 print:hidden">
                       Valores editados manualmente el {new Date(activeResult.editedAt).toLocaleString('es-AR')}. El resumen ejecutivo y el análisis de mercado se generaron con los valores originales.
                     </div>
                   )}
@@ -1019,19 +1003,19 @@ export default function App() {
                     </div>
                   )}
                   {marketAnalysisBusyId === activeResult.id && !activeResult.marketAnalysis && (
-                    <div className="border-l-4 border-blue-500 bg-blue-50 p-3 text-xs text-blue-900 flex items-center gap-2 print:hidden">
+                    <div className="border-l-4 border-brand-blue bg-brand-blue/5 p-3 text-xs text-ink flex items-center gap-2 print:hidden">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Generando análisis de mercado en segundo plano...
                     </div>
                   )}
                   {companyHistoryBusyId === activeResult.id && !activeResult.companyHistory && (
-                    <div className="border-l-4 border-blue-500 bg-blue-50 p-3 text-xs text-blue-900 flex items-center gap-2 print:hidden">
+                    <div className="border-l-4 border-brand-blue bg-brand-blue/5 p-3 text-xs text-ink flex items-center gap-2 print:hidden">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Leyendo la Memoria para historia y actividad de la empresa...
                     </div>
                   )}
                   {riskBusyId === activeResult.id && (
-                    <div className="border-l-4 border-blue-500 bg-blue-50 p-3 text-xs text-blue-900 flex items-center gap-2 print:hidden">
+                    <div className="border-l-4 border-brand-blue bg-brand-blue/5 p-3 text-xs text-ink flex items-center gap-2 print:hidden">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Generando la opinión de riesgo integral (último paso)...
                     </div>
@@ -1046,9 +1030,9 @@ export default function App() {
                           onClick={() => setActiveTab(tab)}
                           className={cn(
                             "text-left px-4 py-3 text-sm font-medium transition-colors border-l-2 shrink-0",
-                            activeTab === tab 
-                              ? "border-[#141414] bg-[#141414]/5 text-[#141414]" 
-                              : "border-transparent text-[#141414]/60 hover:bg-[#141414]/5 hover:text-[#141414]"
+                            activeTab === tab
+                              ? "border-brand-green bg-white text-ink font-semibold"
+                              : "border-transparent text-ink/60 hover:bg-white/60 hover:text-ink"
                           )}
                         >
                           {tab}
@@ -1061,11 +1045,8 @@ export default function App() {
                   <div className="flex-1 min-w-0 space-y-8">
                     
                     {/* Institutional Header */}
-                  <div className="bg-white border border-[#141414] p-6 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-                      <BiBankLogo className="h-24 w-auto grayscale" />
-                    </div>
-                    <h1 className="text-2xl font-sans font-bold uppercase mb-2 relative z-10">
+                  <div className="bg-white border border-ink/15 p-6 relative overflow-hidden">
+                    <h1 className="text-2xl font-display font-semibold mb-2 relative z-10">
                       <EditableText
                         path={['company_profile', 'name']}
                         value={activeResult.extraction?.company_profile?.name}
@@ -1073,17 +1054,17 @@ export default function App() {
                         inputClassName="text-xl font-bold uppercase"
                       />
                     </h1>
-                    <div className="flex flex-wrap items-center gap-4 text-xs font-mono opacity-60 border-t border-[#141414]/10 pt-2 relative z-10">
+                    <div className="flex flex-wrap items-center gap-4 text-xs font-mono opacity-60 border-t border-ink/10 pt-2 relative z-10">
                       <span>
                         <strong className="font-bold">CUIT:</strong>{' '}
                         <EditableText path={['company_profile', 'cuit']} value={activeResult.extraction?.company_profile?.cuit} display={activeResult.extraction?.company_profile?.cuit || "N/A"} inputClassName="w-40 inline-block" />
                       </span>
-                      <span className="h-3 w-[1px] bg-[#141414]/20" />
+                      <span className="h-3 w-[1px] bg-ink/20" />
                       <span>
                         <strong className="font-bold">ACTIVIDAD:</strong>{' '}
                         <EditableText path={['company_profile', 'activity']} value={activeResult.extraction?.company_profile?.activity} display={activeResult.extraction?.company_profile?.activity || "No especificada"} inputClassName="w-64 inline-block" />
                       </span>
-                      <span className="h-3 w-[1px] bg-[#141414]/20" />
+                      <span className="h-3 w-[1px] bg-ink/20" />
                       <span className="italic text-[#000000] opacity-100">Valores expresados en miles de pesos</span>
                     </div>
                   </div>
@@ -1094,14 +1075,14 @@ export default function App() {
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         
                         {/* Análisis High Thinking AI */}
-                        <div className="w-full bg-white border border-[#141414] p-6 mb-8 font-sans">
-                          <h3 className="text-lg font-bold mb-4 uppercase text-[#141414]">Resumen</h3>
+                        <div className="w-full bg-white border border-ink/15 p-6 mb-8 font-sans">
+                          <h3 className="text-lg font-bold mb-4 uppercase text-ink">Resumen</h3>
                           {activeResult.verification?.executive_summary ? (
-                            <div className="text-justify text-[#141414] prose prose-sm max-w-none prose-p:mb-4 last:prose-p:mb-0">
+                            <div className="text-left text-ink prose prose-sm max-w-none prose-p:mb-4 last:prose-p:mb-0">
                               <ReactMarkdown>{stripRiskConclusion(activeResult.verification.executive_summary)}</ReactMarkdown>
                             </div>
                           ) : (
-                            <p className="text-sm text-[#141414]/60 italic">
+                            <p className="text-sm text-ink/60 italic">
                               El resumen ejecutivo no se pudo generar para este caso.
                             </p>
                           )}
@@ -1110,19 +1091,19 @@ export default function App() {
                         {/* Opinión de riesgos: única fuente del dictamen */}
                         <button
                           onClick={() => setActiveTab('Opinión de riesgos')}
-                          className="w-full text-left bg-white border border-[#141414] p-5 mb-8 flex items-center justify-between gap-6 hover:bg-[#141414]/5 transition-colors"
+                          className="w-full text-left bg-white border border-ink/15 p-5 mb-8 flex items-center justify-between gap-6 hover:bg-ink/5 transition-colors"
                         >
                           <div className="min-w-0">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#141414]/60 mb-1">Opinión de riesgos</p>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-ink/60 mb-1">Opinión de riesgos</p>
                             {activeResult.riskAssessment ? (
                               <>
-                                <p className="text-xl font-bold text-[#141414]">
+                                <p className="text-xl font-bold text-ink">
                                   {activeResult.riskAssessment.puntaje.final}/100 · {CATEGORY_LABEL[activeResult.riskAssessment.puntaje.categoria]}
                                 </p>
-                                <p className="text-sm text-[#141414]/70 mt-1 line-clamp-2">{activeResult.riskAssessment.opinion.dictamen}</p>
+                                <p className="text-sm text-ink/70 mt-1 line-clamp-2">{activeResult.riskAssessment.opinion.dictamen}</p>
                               </>
                             ) : (
-                              <p className="text-sm text-[#141414]/60">
+                              <p className="text-sm text-ink/60">
                                 {riskBusyId === activeResult.id ? 'Generando la opinión de riesgo...' : 'Este caso todavía no tiene opinión de riesgo.'}
                               </p>
                             )}
@@ -1131,13 +1112,13 @@ export default function App() {
                         </button>
 
                         {/* Patrimonial Summary Table (Quick View) */}
-                        <div className="bg-[#F0EFED] p-6 border border-[#141414] mb-8">
-                          <h3 className="text-base font-bold uppercase tracking-widest mb-4 opacity-70 text-[#141414]">Resumen Patrimonial {activeResult.extraction?.company_profile?.anio_actual || ''} (Vista Rápida)</h3>
+                        <div className="bg-canvas p-6 border border-ink/15 mb-8">
+                          <h3 className="text-base font-bold uppercase tracking-widest mb-4 opacity-70 text-ink">Resumen Patrimonial {activeResult.extraction?.company_profile?.anio_actual || ''} (Vista Rápida)</h3>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
                             <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Total Activo</p>
+                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Total Activo</p>
                               <div className="flex items-baseline">
-                                <p className="text-xl font-bold font-mono text-[#141414]">
+                                <p className="text-xl font-bold font-mono text-ink">
                                   <EditableNumber
                                     path={['ejercicio_actual', 'estado_situacion_patrimonial', 'total_activo']}
                                     value={activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_activo}
@@ -1152,9 +1133,9 @@ export default function App() {
                               </div>
                             </div>
                             <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Total Pasivo</p>
+                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Total Pasivo</p>
                               <div className="flex items-baseline">
-                                <p className="text-xl font-bold font-mono text-[#141414]">
+                                <p className="text-xl font-bold font-mono text-ink">
                                   <EditableNumber
                                     path={['ejercicio_actual', 'estado_situacion_patrimonial', 'total_pasivo']}
                                     value={activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_pasivo}
@@ -1169,9 +1150,9 @@ export default function App() {
                               </div>
                             </div>
                             <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Patrimonio Neto</p>
+                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Patrimonio Neto</p>
                               <div className="flex items-baseline">
-                                <p className="text-xl font-bold font-mono text-[#141414]">
+                                <p className="text-xl font-bold font-mono text-ink">
                                   <EditableNumber
                                     path={['ejercicio_actual', 'estado_situacion_patrimonial', 'patrimonio_neto']}
                                     value={activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.patrimonio_neto}
@@ -1186,11 +1167,11 @@ export default function App() {
                               </div>
                             </div>
                             <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Resultado Final</p>
+                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Resultado Final</p>
                               <div className="flex items-baseline">
                                 <p className={cn(
                                   "text-xl font-bold font-mono",
-                                  (activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto || 0) >= 0 ? "text-[#141414]" : "text-red-600"
+                                  (activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto || 0) >= 0 ? "text-ink" : "text-red-600"
                                 )}>
                                   <EditableNumber
                                     path={['ejercicio_actual', 'estado_resultados', 'resultado_neto']}
@@ -1209,18 +1190,18 @@ export default function App() {
                         </div>
 
                   {/* Nuevas Tarjetas KPI (Fila Superior) */}
-                  <h3 className="text-lg font-bold mb-4 uppercase text-[#141414]">Ratios</h3>
+                  <h3 className="text-lg font-bold mb-4 uppercase text-ink">Ratios</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                     {/* Tarjeta 1: VENTAS */}
-                    <div className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
+                    <div className="bg-white border border-ink/15 p-4 relative overflow-hidden group hover:shadow-lg transition-all">
                       <div className="absolute top-4 right-4">
                           <StatusBadge status={evaluateVariation(calculateVariation(
                             activeResult.extraction?.ejercicio_actual?.estado_resultados?.ventas_netas || 0,
                             activeResult.extraction?.ejercicio_anterior?.estado_resultados?.ventas_netas || 0
                           ))} />
                         </div>
-                        <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">VENTAS (EN MILES)</p>
-                      <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
+                        <p className="text-[10px] font-sans font-bold text-ink uppercase mb-2">VENTAS (EN MILES)</p>
+                      <p className="text-3xl font-bold font-sans mb-2 text-ink">
                         <EditableNumber
                           path={['ejercicio_actual', 'estado_resultados', 'ventas_netas']}
                           value={activeResult.extraction?.ejercicio_actual?.estado_resultados?.ventas_netas}
@@ -1238,15 +1219,15 @@ export default function App() {
                     </div>
 
                     {/* Tarjeta 2: EBITDA */}
-                    <div className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
+                    <div className="bg-white border border-ink/15 p-4 relative overflow-hidden group hover:shadow-lg transition-all">
                       <div className="absolute top-4 right-4">
                           <StatusBadge status={evaluateVariation(calculateVariation(
                             (activeResult.ratios?.ebitda.actual ?? 0),
                             (activeResult.ratios?.ebitda.anterior ?? 0)
                           ))} />
                         </div>
-                        <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">EBITDA (EN MILES)</p>
-                      <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
+                        <p className="text-[10px] font-sans font-bold text-ink uppercase mb-2">EBITDA (EN MILES)</p>
+                      <p className="text-3xl font-bold font-sans mb-2 text-ink">
                         {formatCurrencyThousands((activeResult.ratios?.ebitda.actual ?? null))}
                       </p>
                       <div className="flex items-center text-xs font-sans font-bold text-gray-600 leading-tight">
@@ -1259,19 +1240,19 @@ export default function App() {
                     </div>
 
                     {/* Tarjeta 3: DEUDA BANCARIA TOTAL */}
-                    <div className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
+                    <div className="bg-white border border-ink/15 p-4 relative overflow-hidden group hover:shadow-lg transition-all">
                       <div className="absolute top-4 right-4">
                           <StatusBadge status={activeResult.ratios?.deuda_ebitda.status ?? null} />
                         </div>
-                        <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">DEUDA BANCARIA TOTAL (EN MILES)</p>
-                      <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
+                        <p className="text-[10px] font-sans font-bold text-ink uppercase mb-2">DEUDA BANCARIA TOTAL (EN MILES)</p>
+                      <p className="text-3xl font-bold font-sans mb-2 text-ink">
                         {formatCurrencyThousands(activeResult.ratios?.deuda_bancaria_total.actual ?? null)}
                       </p>
                       <p className="text-xs font-sans font-bold text-gray-600 leading-tight">Total sistema financiero</p>
                     </div>
 
                     {/* Tarjeta 4: DEUDA CORTO PLAZO */}
-                    <div className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
+                    <div className="bg-white border border-ink/15 p-4 relative overflow-hidden group hover:shadow-lg transition-all">
                       <div className="absolute top-4 right-4">
                           {(() => {
                             const deudaCPActual = activeResult.extraction?.deuda_bancaria_actual?.corriente?.total ?? null;
@@ -1279,18 +1260,18 @@ export default function App() {
                             return <StatusBadge status={evaluateVariation(calculateVariation(deudaCPActual || 0, deudaCPAnterior || 0))} />;
                           })()}
                         </div>
-                        <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">DEUDA CORTO PLAZO (EN MILES)</p>
+                        <p className="text-[10px] font-sans font-bold text-ink uppercase mb-2">DEUDA CORTO PLAZO (EN MILES)</p>
                       {(() => {
                         const deudaCPActual = activeResult.extraction?.deuda_bancaria_actual?.corriente?.total ?? null;
                         const deudaCPAnterior = activeResult.extraction?.deuda_bancaria_anterior?.corriente?.total ?? null;
                         
                         if (deudaCPActual === null) {
-                          return <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">-</p>;
+                          return <p className="text-3xl font-bold font-sans mb-2 text-ink">-</p>;
                         }
 
                         return (
                           <>
-                            <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
+                            <p className="text-3xl font-bold font-sans mb-2 text-ink">
                               <EditableNumber
                                 path={['deuda_bancaria_actual', 'corriente', 'total']}
                                 value={deudaCPActual}
@@ -1311,16 +1292,16 @@ export default function App() {
                   </div>
 
                   {/* Report Generation Button */}
-                  <div className="flex flex-col items-center justify-center py-8 border-t border-[#141414]/10">
+                  <div className="flex flex-col items-center justify-center py-8 border-t border-ink/10">
                     <button 
                       onClick={() => generatePDF(activeResult)}
-                      className="bg-[#141414] text-white px-8 py-4 text-sm font-bold uppercase tracking-widest hover:bg-[#222] transition-all flex items-center gap-3 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+                      className="bg-brand-green text-ink px-8 py-4 rounded-full text-sm font-semibold hover:brightness-95 transition flex items-center gap-3 shadow-sm"
                     >
                       <FileSpreadsheet className="w-5 h-5" />
-                      GENERAR REPORTE PARA COMITÉ
+                      Generar informe para comité
                     </button>
-                    <p className="text-[10px] font-mono opacity-50 mt-3 uppercase tracking-wider">
-                      Incluye Opinión de Riesgos, Ratios, Historia, Mercado y Nosis
+                    <p className="text-xs text-ink/50 mt-3">
+                      Incluye opinión de riesgos, ratios, historia, Nosis, post balance y mercado
                     </p>
                   </div>
                   
@@ -1343,13 +1324,13 @@ export default function App() {
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {/* Post-Closing Analysis Section (Moved Inside) */}
                       {activeResult.extraction?.analisis_post_cierre && (isEditing || (activeResult.extraction.analisis_post_cierre.total_ventas_post_cierre ?? 0) > 0) ? (
-                        <div className="bg-white border border-[#141414] p-6 font-sans">
+                        <div className="bg-white border border-ink/15 p-6 font-sans">
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                            <h3 className="text-lg font-semibold text-[#141414]">EVOLUCIÓN DE VENTAS POST BALANCE (COMPARATIVO INTERANUAL)</h3>
+                            <h3 className="text-lg font-semibold text-ink">EVOLUCIÓN DE VENTAS POST BALANCE (COMPARATIVO INTERANUAL)</h3>
                             
                             <div className="flex flex-col items-end gap-2">
                               <label className="flex items-center gap-2 cursor-pointer">
-                                <span className="text-xs font-bold uppercase text-[#141414]/70">Ver en moneda constante (Último mes)</span>
+                                <span className="text-xs font-bold uppercase text-ink/70">Ver en moneda constante (Último mes)</span>
                                 <div className="relative">
                                   <input 
                                     type="checkbox" 
@@ -1357,7 +1338,7 @@ export default function App() {
                                     checked={isInflationAdjusted}
                                     onChange={(e) => setIsInflationAdjusted(e.target.checked)}
                                   />
-                                  <div className={`block w-10 h-6 rounded-full transition-colors ${isInflationAdjusted ? 'bg-[#141414]' : 'bg-gray-300'}`}></div>
+                                  <div className={`block w-10 h-6 rounded-full transition-colors ${isInflationAdjusted ? 'bg-ink' : 'bg-gray-300'}`}></div>
                                   <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${isInflationAdjusted ? 'transform translate-x-4' : ''}`}></div>
                                 </div>
                               </label>
@@ -1365,21 +1346,21 @@ export default function App() {
                               {isInflationAdjusted && (
                                 <div className="flex items-center gap-3 text-xs animate-in fade-in slide-in-from-top-2">
                                   <div className="flex items-center gap-1">
-                                    <span className="text-[#141414]/70">% Interanual:</span>
+                                    <span className="text-ink/70">% Interanual:</span>
                                     <input 
                                       type="number" 
                                       value={inflationInteranual}
                                       onChange={(e) => setInflationInteranual(Number(e.target.value))}
-                                      className="w-16 px-1 py-0.5 border border-[#141414]/20 rounded text-right"
+                                      className="w-16 px-1 py-0.5 border border-ink/20 rounded text-right"
                                     />
                                   </div>
                                   <div className="flex items-center gap-1">
-                                    <span className="text-[#141414]/70">% Mensual Promedio:</span>
+                                    <span className="text-ink/70">% Mensual Promedio:</span>
                                     <input 
                                       type="number" 
                                       value={inflationMensual}
                                       onChange={(e) => setInflationMensual(Number(e.target.value))}
-                                      className="w-16 px-1 py-0.5 border border-[#141414]/20 rounded text-right"
+                                      className="w-16 px-1 py-0.5 border border-ink/20 rounded text-right"
                                     />
                                   </div>
                                 </div>
@@ -1389,15 +1370,15 @@ export default function App() {
                           
                           <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left border-collapse">
-                              <thead className="bg-[#F0EFED] text-[#141414] text-xs uppercase tracking-wider">
+                              <thead className="bg-canvas text-ink text-xs uppercase tracking-wider">
                                 <tr>
-                                  <th className="px-4 py-3 font-semibold border-b border-[#141414]/20">Mes</th>
-                                  <th className={`px-4 py-3 font-semibold border-b border-[#141414]/20 text-right transition-colors ${isInflationAdjusted ? 'bg-amber-50/50' : ''}`}>Año Actual ($)</th>
-                                  <th className={`px-4 py-3 font-semibold border-b border-[#141414]/20 text-right transition-colors ${isInflationAdjusted ? 'bg-amber-50/50' : ''}`}>Año Anterior ($)</th>
-                                  <th className="px-4 py-3 font-semibold border-b border-[#141414]/20 text-right">Var. (%)</th>
+                                  <th className="px-4 py-3 font-semibold border-b border-ink/20">Mes</th>
+                                  <th className={`px-4 py-3 font-semibold border-b border-ink/20 text-right transition-colors ${isInflationAdjusted ? 'bg-brand-blue/5' : ''}`}>Año Actual ($)</th>
+                                  <th className={`px-4 py-3 font-semibold border-b border-ink/20 text-right transition-colors ${isInflationAdjusted ? 'bg-brand-blue/5' : ''}`}>Año Anterior ($)</th>
+                                  <th className="px-4 py-3 font-semibold border-b border-ink/20 text-right">Var. (%)</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-[#141414]/10">
+                              <tbody className="divide-y divide-ink/10">
                                 {(() => {
                                   const rawVentas = activeResult.extraction.analisis_post_cierre.detalle_ventas_mensuales;
                                   const ventasMensuales = Array.isArray(rawVentas) ? rawVentas : [];
@@ -1423,8 +1404,8 @@ export default function App() {
                                     const varPct = montoAnterior ? ((montoActual - montoAnterior) / montoAnterior) * 100 : null;
 
                                     return (
-                                      <tr key={idx} className="hover:bg-[#141414]/5 transition-colors">
-                                        <td className="px-4 py-3 font-medium text-[#141414]">
+                                      <tr key={idx} className="hover:bg-ink/5 transition-colors">
+                                        <td className="px-4 py-3 font-medium text-ink">
                                           {isEditing ? (
                                             <div className="flex items-center gap-1">
                                               <RemoveRowButton path={ventasPath} list={ventasMensuales} index={idx} />
@@ -1486,13 +1467,13 @@ export default function App() {
                                   const totalVar = totalAnterior > 0 ? ((totalActual - totalAnterior) / totalAnterior) * 100 : null;
 
                                   return (
-                                    <tr className="bg-[#F0EFED] font-bold text-[#141414]">
-                                      <td className="px-4 py-3 border-t border-[#141414]/20">TOTAL ACUMULADO</td>
-                                      <td className="px-4 py-3 border-t border-[#141414]/20 text-right font-mono">{formatCurrencyThousands(totalActual)}</td>
-                                      <td className="px-4 py-3 border-t border-[#141414]/20 text-right font-mono">
+                                    <tr className="bg-canvas font-bold text-ink">
+                                      <td className="px-4 py-3 border-t border-ink/20">TOTAL ACUMULADO</td>
+                                      <td className="px-4 py-3 border-t border-ink/20 text-right font-mono">{formatCurrencyThousands(totalActual)}</td>
+                                      <td className="px-4 py-3 border-t border-ink/20 text-right font-mono">
                                         {totalAnterior > 0 ? formatCurrencyThousands(totalAnterior) : <span className="text-xs opacity-50 italic font-normal">Sin información</span>}
                                       </td>
-                                      <td className={`px-4 py-3 border-t border-[#141414]/20 text-right font-mono ${totalVar !== null && totalVar >= 0 ? 'text-emerald-600' : ''} ${totalVar !== null && totalVar < 0 ? 'text-red-600' : ''}`}>
+                                      <td className={`px-4 py-3 border-t border-ink/20 text-right font-mono ${totalVar !== null && totalVar >= 0 ? 'text-emerald-600' : ''} ${totalVar !== null && totalVar < 0 ? 'text-red-600' : ''}`}>
                                         {totalVar !== null ? (
                                           <div className="flex items-center justify-end gap-1">
                                             {totalVar >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
@@ -1522,41 +1503,41 @@ export default function App() {
                           )}
                           
                           {isEditing ? (
-                            <div className="mt-4 text-xs border-t border-[#141414]/10 pt-2">
+                            <div className="mt-4 text-xs border-t border-ink/10 pt-2">
                               <span className="font-bold uppercase opacity-60">Nota</span>
                               <EditableText path={['analisis_post_cierre', 'notas_relevantes']} value={activeResult.extraction.analisis_post_cierre.notas_relevantes} multiline />
                             </div>
                           ) : activeResult.extraction.analisis_post_cierre.notas_relevantes && (
-                            <div className="mt-2 text-xs opacity-70 italic border-t border-[#141414]/10 pt-2">
+                            <div className="mt-2 text-xs opacity-70 italic border-t border-ink/10 pt-2">
                               Nota: {activeResult.extraction.analisis_post_cierre.notas_relevantes}
                             </div>
                           )}
                         </div>
                       ) : (
-                        <div className="bg-white border border-[#141414] p-12 text-center text-[#141414]/60 font-mono text-sm">
+                        <div className="bg-white border border-ink/15 p-12 text-center text-ink/60 font-mono text-sm">
                           No hay información post balance disponible.
                         </div>
                       )}
 
                       {/* Deuda Bancaria Asumida Post Balance */}
                       {Array.isArray(activeResult.extraction?.analisis_post_cierre?.deuda_bancaria_post_balance_detalle) && (isEditing || activeResult.extraction.analisis_post_cierre.deuda_bancaria_post_balance_detalle.length > 0) && (
-                        <div className="bg-white border border-[#141414] p-6 mt-8">
-                          <h3 className="text-lg font-semibold text-[#141414] mb-6">DEUDA BANCARIA ASUMIDA POST BALANCE</h3>
+                        <div className="bg-white border border-ink/15 p-6 mt-8">
+                          <h3 className="text-lg font-semibold text-ink mb-6">DEUDA BANCARIA ASUMIDA POST BALANCE</h3>
                           
                           <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left border-collapse">
-                              <thead className="bg-[#F0EFED] text-[#141414] text-xs uppercase tracking-wider">
+                              <thead className="bg-canvas text-ink text-xs uppercase tracking-wider">
                                 <tr>
-                                  <th className="px-4 py-3 font-semibold border-b border-[#141414]/20">ENTIDAD BANCARIA / ACREEDOR</th>
-                                  <th className="px-4 py-3 font-semibold border-b border-[#141414]/20 text-right">MONTO ASUMIDO</th>
+                                  <th className="px-4 py-3 font-semibold border-b border-ink/20">ENTIDAD BANCARIA / ACREEDOR</th>
+                                  <th className="px-4 py-3 font-semibold border-b border-ink/20 text-right">MONTO ASUMIDO</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-[#141414]/10">
+                              <tbody className="divide-y divide-ink/10">
                                 {activeResult.extraction.analisis_post_cierre.deuda_bancaria_post_balance_detalle.map((item, idx, list) => {
                                   const deudaPath: Path = ['analisis_post_cierre', 'deuda_bancaria_post_balance_detalle'];
                                   return (
-                                    <tr key={idx} className="hover:bg-[#141414]/5 transition-colors">
-                                      <td className="px-4 py-3 font-medium text-[#141414]">
+                                    <tr key={idx} className="hover:bg-ink/5 transition-colors">
+                                      <td className="px-4 py-3 font-medium text-ink">
                                         {isEditing ? (
                                           <div className="flex items-center gap-1">
                                             <RemoveRowButton path={deudaPath} list={list} index={idx} />
@@ -1577,7 +1558,7 @@ export default function App() {
                                 })}
                               </tbody>
                               <tfoot>
-                                <tr className="bg-[#F0EFED] font-bold text-[#141414]">
+                                <tr className="bg-canvas font-bold text-ink">
                                   <td className="px-4 py-3 text-right">TOTAL DEUDA POST BALANCE:</td>
                                   <td className="px-4 py-3 text-right font-mono">
                                     {formatCurrencyThousands(
@@ -1604,8 +1585,8 @@ export default function App() {
                   {activeTab === 'Proyecciones' && (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {/* Sales Analysis */}
-                    <div className="lg:col-span-2 bg-white border border-[#141414] p-6">
-                      <div className="flex items-center gap-2 mb-6 border-b border-[#141414]/10 pb-4">
+                    <div className="lg:col-span-2 bg-white border border-ink/15 p-6">
+                      <div className="flex items-center gap-2 mb-6 border-b border-ink/10 pb-4">
                         <TrendingUp className="w-5 h-5" />
                         <h3 className="font-sans font-bold text-lg">Análisis de Ventas & Proyección</h3>
                       </div>
@@ -1613,14 +1594,14 @@ export default function App() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div>
                           <h4 className="text-xs font-bold uppercase mb-3 flex items-center gap-2">
-                            <div className="w-2 h-2 bg-[#141414] rounded-full" />
+                            <div className="w-2 h-2 bg-ink rounded-full" />
                             Evolución Histórica
                           </h4>
                           <p className="text-sm leading-relaxed opacity-80">
                             {'No disponible en esta versión.'}
                           </p>
                         </div>
-                        <div className="bg-[#F0EFED] p-4 border border-[#141414]/10">
+                        <div className="bg-canvas p-4 border border-ink/10">
                           <h4 className="text-xs font-bold uppercase mb-3 flex items-center gap-2 text-emerald-700">
                             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
                             Proyección IA
@@ -1638,31 +1619,31 @@ export default function App() {
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {/* Nosis Section */}
                   {activeResult.extraction?.extraccion_nosis && (
-                    <div className="border border-[#141414] bg-white mt-8">
-                      <div className="flex items-center justify-between p-4 border-b border-[#141414]/10 bg-[#F0EFED] select-none">
+                    <div className="border border-ink/15 bg-white mt-8">
+                      <div className="flex items-center justify-between p-4 border-b border-ink/10 bg-canvas select-none">
                         <div className="flex items-center gap-2">
                           <span className="text-lg">📑</span>
                           <span className="text-lg font-bold uppercase tracking-wider">PESTAÑA NOSIS (ANTECEDENTES Y BCRA)</span>
                         </div>
                       </div>
                       
-                      <div className="p-6 bg-[#FAFAFA]">
+                      <div className="p-6 bg-panel">
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                             <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Score Crediticio</p>
-                              <p className="text-xl font-bold font-mono text-[#141414]">
+                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Score Crediticio</p>
+                              <p className="text-xl font-bold font-mono text-ink">
                                 <EditableNumber path={['extraccion_nosis', 'score_crediticio']} value={activeResult.extraction?.extraccion_nosis?.score_crediticio} />
                               </p>
                             </div>
                             <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Peor Situación BCRA</p>
-                              <p className="text-xl font-bold font-mono text-[#141414]">
+                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Peor Situación BCRA</p>
+                              <p className="text-xl font-bold font-mono text-ink">
                                 Categoría <EditableNumber path={['extraccion_nosis', 'situacion_bcra_peor_estado']} value={activeResult.extraction?.extraccion_nosis?.situacion_bcra_peor_estado} inputClassName="w-16" />
                               </p>
                             </div>
                             <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Cheques Rechazados</p>
-                              <p className="text-xl font-bold font-mono text-[#141414]">
+                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Cheques Rechazados</p>
+                              <p className="text-xl font-bold font-mono text-ink">
                                 <EditableNumber path={['extraccion_nosis', 'cheques_rechazados_cantidad']} value={activeResult.extraction?.extraccion_nosis?.cheques_rechazados_cantidad} inputClassName="w-20" /> cheques
                               </p>
                               <p className="text-xs opacity-70 mt-1">
@@ -1675,8 +1656,8 @@ export default function App() {
                               </p>
                             </div>
                             <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Deuda Total Nosis</p>
-                              <p className="text-xl font-bold font-mono text-[#141414]">
+                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Deuda Total Nosis</p>
+                              <p className="text-xl font-bold font-mono text-ink">
                                 <EditableNumber
                                   path={['extraccion_nosis', 'deuda_financiera_total_nosis']}
                                   value={activeResult.extraction?.extraccion_nosis?.deuda_financiera_total_nosis}
@@ -1688,7 +1669,7 @@ export default function App() {
                           </div>
 
                           {/* Antecedentes: alimentan las señales automáticas de la Opinión de riesgos */}
-                          <h4 className="text-xs font-bold uppercase mb-4 opacity-70 border-b border-[#141414]/10 pb-2">Antecedentes</h4>
+                          <h4 className="text-xs font-bold uppercase mb-4 opacity-70 border-b border-ink/10 pb-2">Antecedentes</h4>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 mb-8 text-sm">
                             {([
                               ['Peor situación 24 meses', 'peor_situacion_24_meses'],
@@ -1718,18 +1699,18 @@ export default function App() {
                             </div>
                           </div>
 
-                          <h4 className="text-xs font-bold uppercase mb-4 opacity-70 border-b border-[#141414]/10 pb-2">Detalle de Entidades</h4>
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                          <h4 className="text-xs font-bold uppercase mb-4 opacity-70 border-b border-ink/10 pb-2">Detalle de Entidades</h4>
+                          <div className="grid grid-cols-1 2xl:grid-cols-[1fr_340px] gap-8 items-start">
                             <div className="overflow-x-auto">
                               <table className="w-full text-sm font-mono border-collapse">
                                 <thead>
-                                  <tr className="border-b border-[#141414]">
+                                  <tr className="border-b border-ink">
                                     <th className="text-left py-2 font-bold uppercase text-xs opacity-60">Entidad</th>
                                     <th className="text-center py-2 font-bold uppercase text-xs opacity-60">Situación</th>
                                     <th className="text-right py-2 font-bold uppercase text-xs opacity-60 w-1/3">Monto / Participación</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-[#141414]/10">
+                                <tbody className="divide-y divide-ink/10">
                                   {(() => {
                                     const rawEntidades = activeResult.extraction?.extraccion_nosis?.detalle_entidades;
                                     const entidades = Array.isArray(rawEntidades) ? rawEntidades : [];
@@ -1740,7 +1721,7 @@ export default function App() {
                                     return entidades.map((entidad, i) => {
                                       const participacion = totalReferencia > 0 ? (((entidad.monto ?? 0) / totalReferencia) * 100).toFixed(1) : "0.0";
                                       return (
-                                        <tr key={i} className="hover:bg-[#141414]/5 transition-colors">
+                                        <tr key={i} className="hover:bg-ink/5 transition-colors">
                                           <td className="py-3 font-bold">
                                             {isEditing ? (
                                               <div className="flex items-center gap-1">
@@ -1749,7 +1730,7 @@ export default function App() {
                                               </div>
                                             ) : entidad.entidad}
                                           </td>
-                                          <td className="py-3 text-center font-bold text-[#141414]">
+                                          <td className="py-3 text-center font-bold text-ink">
                                             <EditableNumber path={['extraccion_nosis', 'detalle_entidades', i, 'situacion']} value={entidad.situacion} inputClassName="w-14 text-center" />
                                           </td>
                                           <td className="py-3">
@@ -1760,10 +1741,10 @@ export default function App() {
                                                   <span className="text-xs opacity-60">({participacion}%)</span>
                                                 </span>
                                               ) : (
-                                                <span className="font-bold text-[#141414]">{formatCurrencyThousands(entidad.monto)} ({participacion}%)</span>
+                                                <span className="font-bold text-ink">{formatCurrencyThousands(entidad.monto)} ({participacion}%)</span>
                                               )}
                                               <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden">
-                                                <div className="bg-blue-600 h-full" style={{ width: `${participacion}%` }}></div>
+                                                <div className="bg-ink h-full" style={{ width: `${participacion}%` }}></div>
                                               </div>
                                             </div>
                                           </td>
@@ -1781,42 +1762,9 @@ export default function App() {
                               />
                             </div>
                             
-                            {/* Pie Chart */}
+                            {/* Deuda por entidad: barras ordenadas (reemplaza al donut) */}
                             {Array.isArray(activeResult.extraction?.extraccion_nosis?.detalle_entidades) && activeResult.extraction?.extraccion_nosis.detalle_entidades.length > 0 && (
-                              <div className="h-64 flex flex-col items-center justify-center bg-white border border-[#141414]/10 p-4 rounded">
-                                <h5 className="text-xs font-bold uppercase opacity-70 mb-2">Composición de Deuda</h5>
-                                <PieChart width={400} height={200}>
-                                    <Pie
-                                      data={activeResult.extraction?.extraccion_nosis.detalle_entidades.map(e => ({ name: e?.entidad || 'Desconocido', value: Number(e?.monto) || 0 }))}
-                                      cx="50%"
-                                      cy="50%"
-                                      innerRadius={50}
-                                      outerRadius={70}
-                                      paddingAngle={2}
-                                      dataKey="value"
-                                      label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, name }) => {
-                                        const RADIAN = Math.PI / 180;
-                                        const radius = outerRadius * 1.2;
-                                        const x = cx + radius * Math.cos(-(midAngle ?? 0) * RADIAN);
-                                        const y = cy + radius * Math.sin(-(midAngle ?? 0) * RADIAN);
-                                        return (
-                                          <text x={x} y={y} fill="#141414" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize="10" fontWeight="bold">
-                                            {name} ({((percent ?? 0) * 100).toFixed(0)}%)
-                                          </text>
-                                        );
-                                      }}
-                                    >
-                                      {activeResult.extraction?.extraccion_nosis.detalle_entidades.map((entry, index) => {
-                                        const COLORS = ['#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#1e40af', '#1d4ed8', '#1e3a8a'];
-                                        return <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />;
-                                      })}
-                                    </Pie>
-                                    <Tooltip 
-                                      formatter={(value) => formatCurrencyThousands(Number(value))}
-                                      contentStyle={{ backgroundColor: '#141414', color: '#E4E3E0', border: 'none', borderRadius: '4px', fontSize: '12px' }}
-                                    />
-                                  </PieChart>
-                              </div>
+                              <NosisDebtBars entidades={activeResult.extraction.extraccion_nosis.detalle_entidades} />
                             )}
                           </div>
                         </div>
@@ -1826,7 +1774,7 @@ export default function App() {
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
                     
                         {/* Cross Check Section */}
-                    <div className="lg:col-span-1 bg-[#141414] text-[#E4E3E0] p-6 border border-[#141414] flex flex-col">
+                    <div className="lg:col-span-1 bg-ink text-white p-6 border border-ink/15 flex flex-col">
                       <div className="flex items-center gap-2 mb-6 border-b border-white/20 pb-4">
                         <Scale className="w-5 h-5" />
                         <h3 className="font-sans font-bold text-lg">Cruce de Deuda</h3>
@@ -1883,8 +1831,8 @@ export default function App() {
                   {activeTab === 'Accionistas y Directorio' && (
                     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 font-sans">
                       {/* Bloque 1: COMPOSICIÓN ACCIONARIA */}
-                      <div className="bg-white border border-[#141414] p-6">
-                        <h3 className="text-lg font-semibold text-[#141414] mb-6">COMPOSICIÓN SOCIAL / ACCIONISTAS</h3>
+                      <div className="bg-white border border-ink/15 p-6">
+                        <h3 className="text-lg font-semibold text-ink mb-6">COMPOSICIÓN SOCIAL / ACCIONISTAS</h3>
                         
                         <ShareholderTable 
                           basePath={['accionistas_y_directorio', 'accionistas']}
@@ -1911,13 +1859,13 @@ export default function App() {
                       </div>
 
                       {/* Bloque 2: DIRECTORIO Y MANAGEMENT */}
-                      <div className="bg-white border border-[#141414] p-6 mt-8">
+                      <div className="bg-white border border-ink/15 p-6 mt-8">
                         <h3 className="text-base font-semibold text-black mb-6">ÓRGANO DE ADMINISTRACIÓN / DIRECTORIO</h3>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {isEditing ? (
                             (activeResult.extraction?.accionistas_y_directorio?.directorio ?? []).map((miembro, idx, list) => (
-                              <div key={idx} className="p-4 border border-amber-400/60 bg-[#FAFAFA] rounded-sm flex flex-col gap-2">
+                              <div key={idx} className="p-4 border border-brand-blue/50 bg-panel rounded-sm flex flex-col gap-2">
                                 <div className="flex items-center gap-1">
                                   <EditableText path={['accionistas_y_directorio', 'directorio', idx, 'cargo']} value={miembro.cargo} />
                                   <RemoveRowButton path={['accionistas_y_directorio', 'directorio']} list={list} index={idx} />
@@ -1927,32 +1875,32 @@ export default function App() {
                             ))
                           ) : Array.isArray(activeResult.extraction?.accionistas_y_directorio?.directorio) && activeResult.extraction?.accionistas_y_directorio.directorio.length > 0 ? (
                             activeResult.extraction?.accionistas_y_directorio.directorio.map((miembro, idx) => (
-                              <div key={idx} className="p-4 border border-[#141414]/10 bg-[#FAFAFA] rounded-sm hover:border-[#141414]/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-[#141414]/50 mb-1">{miembro.cargo}</p>
-                                <p className="font-medium text-[#141414]">{miembro.nombre}</p>
+                              <div key={idx} className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
+                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">{miembro.cargo}</p>
+                                <p className="font-medium text-ink">{miembro.nombre}</p>
                               </div>
                             ))
                           ) : (
                             <>
-                              <div className="p-4 border border-[#141414]/10 bg-[#FAFAFA] rounded-sm hover:border-[#141414]/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-[#141414]/50 mb-1">Presidente</p>
-                                <p className="font-medium text-[#141414]">Juan Ignacio Pérez</p>
+                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
+                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Presidente</p>
+                                <p className="font-medium text-ink">Juan Ignacio Pérez</p>
                               </div>
-                              <div className="p-4 border border-[#141414]/10 bg-[#FAFAFA] rounded-sm hover:border-[#141414]/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-[#141414]/50 mb-1">Vicepresidente</p>
-                                <p className="font-medium text-[#141414]">María Laura Gómez</p>
+                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
+                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Vicepresidente</p>
+                                <p className="font-medium text-ink">María Laura Gómez</p>
                               </div>
-                              <div className="p-4 border border-[#141414]/10 bg-[#FAFAFA] rounded-sm hover:border-[#141414]/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-[#141414]/50 mb-1">Director Titular</p>
-                                <p className="font-medium text-[#141414]">Carlos Alberto Ruiz</p>
+                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
+                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Director Titular</p>
+                                <p className="font-medium text-ink">Carlos Alberto Ruiz</p>
                               </div>
-                              <div className="p-4 border border-[#141414]/10 bg-[#FAFAFA] rounded-sm hover:border-[#141414]/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-[#141414]/50 mb-1">Director Suplente</p>
-                                <p className="font-medium text-[#141414]">Ana Clara Fernández</p>
+                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
+                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Director Suplente</p>
+                                <p className="font-medium text-ink">Ana Clara Fernández</p>
                               </div>
-                              <div className="p-4 border border-[#141414]/10 bg-[#FAFAFA] rounded-sm hover:border-[#141414]/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-[#141414]/50 mb-1">Síndico Titular</p>
-                                <p className="font-medium text-[#141414]">Estudio Contable López & Asoc.</p>
+                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
+                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Síndico Titular</p>
+                                <p className="font-medium text-ink">Estudio Contable López & Asoc.</p>
                               </div>
                             </>
                           )}
@@ -1969,13 +1917,13 @@ export default function App() {
 
                   {activeTab === 'Mercado' && (
                     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 font-sans">
-                      <div className="w-full bg-white border border-[#141414] p-10 font-sans text-justify leading-relaxed">
+                      <div className="w-full bg-white border border-ink/15 p-10 font-sans text-left leading-relaxed">
                         {activeResult.marketAnalysis ? (
-                          <div className="prose prose-sm md:prose-base max-w-none print:max-w-none print:w-full prose-headings:font-sans prose-headings:font-semibold prose-headings:text-gray-800 prose-p:text-justify prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline">
+                          <div className="prose prose-sm md:prose-base max-w-none print:max-w-none print:w-full prose-headings:font-display prose-headings:font-semibold prose-headings:text-gray-800 prose-p:text-left prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline">
                             <ReactMarkdown>{activeResult.marketAnalysis}</ReactMarkdown>
                           </div>
                         ) : (
-                          <div className="text-center text-[#141414]/60 font-mono text-sm py-8">
+                          <div className="text-center text-ink/60 font-mono text-sm py-8">
                             No se generó análisis de mercado para este reporte.
                           </div>
                         )}
@@ -2020,7 +1968,7 @@ export default function App() {
             <thead>
               <tr>
                 <td>
-                  <div className="flex justify-between items-center border-b-2 border-[#141414] pb-4 mb-8">
+                  <div className="flex justify-between items-center border-b-2 border-ink pb-4 mb-8">
                     <div className="text-sm font-bold uppercase tracking-wider">Fecha de generación: {new Date().toLocaleDateString()}</div>
                     <BiBankLogo className="h-8 w-auto" />
                   </div>
@@ -2038,27 +1986,27 @@ export default function App() {
                       <div className="space-y-8 ">
                         
                         {/* Análisis High Thinking AI */}
-                        <div className="w-full bg-white border border-[#141414] p-6 mb-8 font-sans">
-                          <h3 className="text-lg font-bold mb-4 uppercase text-[#141414]">Resumen</h3>
+                        <div className="w-full bg-white border border-ink/15 p-6 mb-8 font-sans">
+                          <h3 className="text-lg font-bold mb-4 uppercase text-ink">Resumen</h3>
                           {activeResult.verification?.executive_summary ? (
-                            <div className="text-justify text-[#141414] prose prose-sm max-w-none prose-p:mb-4 last:prose-p:mb-0">
+                            <div className="text-left text-ink prose prose-sm max-w-none prose-p:mb-4 last:prose-p:mb-0">
                               <ReactMarkdown>{stripRiskConclusion(activeResult.verification.executive_summary)}</ReactMarkdown>
                             </div>
                           ) : (
-                            <p className="text-sm text-[#141414]/60 italic">
+                            <p className="text-sm text-ink/60 italic">
                               El resumen ejecutivo no se pudo generar para este caso.
                             </p>
                           )}
                         </div>
 
                         {/* Patrimonial Summary Table (Quick View) */}
-                        <div className="bg-[#F0EFED] p-6 border border-[#141414] mb-8">
-                          <h3 className="text-base font-bold uppercase tracking-widest mb-4 opacity-70 text-[#141414]">Resumen Patrimonial {activeResult.extraction?.company_profile?.anio_actual || ''} (Vista Rápida)</h3>
+                        <div className="bg-canvas p-6 border border-ink/15 mb-8">
+                          <h3 className="text-base font-bold uppercase tracking-widest mb-4 opacity-70 text-ink">Resumen Patrimonial {activeResult.extraction?.company_profile?.anio_actual || ''} (Vista Rápida)</h3>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
                             <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Total Activo</p>
+                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Total Activo</p>
                               <div className="flex items-baseline">
-                                <p className="text-xl font-bold font-mono text-[#141414]">
+                                <p className="text-xl font-bold font-mono text-ink">
                                   {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_activo)}
                                 </p>
                                 <VariationBadge variation={calculateVariation(
@@ -2068,9 +2016,9 @@ export default function App() {
                               </div>
                             </div>
                             <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Total Pasivo</p>
+                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Total Pasivo</p>
                               <div className="flex items-baseline">
-                                <p className="text-xl font-bold font-mono text-[#141414]">
+                                <p className="text-xl font-bold font-mono text-ink">
                                   {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.total_pasivo)}
                                 </p>
                                 <VariationBadge variation={calculateVariation(
@@ -2080,9 +2028,9 @@ export default function App() {
                               </div>
                             </div>
                             <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Patrimonio Neto</p>
+                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Patrimonio Neto</p>
                               <div className="flex items-baseline">
-                                <p className="text-xl font-bold font-mono text-[#141414]">
+                                <p className="text-xl font-bold font-mono text-ink">
                                   {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_situacion_patrimonial?.patrimonio_neto)}
                                 </p>
                                 <VariationBadge variation={calculateVariation(
@@ -2092,11 +2040,11 @@ export default function App() {
                               </div>
                             </div>
                             <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Resultado Final</p>
+                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Resultado Final</p>
                               <div className="flex items-baseline">
                                 <p className={cn(
                                   "text-xl font-bold font-mono",
-                                  (activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto || 0) >= 0 ? "text-[#141414]" : "text-red-600"
+                                  (activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto || 0) >= 0 ? "text-ink" : "text-red-600"
                                 )}>
                                   {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_resultados?.resultado_neto)}
                                 </p>
@@ -2110,18 +2058,18 @@ export default function App() {
                         </div>
 
                   {/* Nuevas Tarjetas KPI (Fila Superior) */}
-                  <h3 className="text-lg font-bold mb-4 uppercase text-[#141414]">Ratios</h3>
+                  <h3 className="text-lg font-bold mb-4 uppercase text-ink">Ratios</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                     {/* Tarjeta 1: VENTAS */}
-                    <div className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
+                    <div className="bg-white border border-ink/15 p-4 relative overflow-hidden group hover:shadow-lg transition-all">
                       <div className="absolute top-4 right-4">
                           <StatusBadge status={evaluateVariation(calculateVariation(
                             activeResult.extraction?.ejercicio_actual?.estado_resultados?.ventas_netas || 0,
                             activeResult.extraction?.ejercicio_anterior?.estado_resultados?.ventas_netas || 0
                           ))} />
                         </div>
-                        <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">VENTAS (EN MILES)</p>
-                      <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
+                        <p className="text-[10px] font-sans font-bold text-ink uppercase mb-2">VENTAS (EN MILES)</p>
+                      <p className="text-3xl font-bold font-sans mb-2 text-ink">
                         {formatCurrencyThousands(activeResult.extraction?.ejercicio_actual?.estado_resultados?.ventas_netas)}
                       </p>
                       <div className="flex items-center text-xs font-sans font-bold text-gray-600 leading-tight">
@@ -2134,15 +2082,15 @@ export default function App() {
                     </div>
 
                     {/* Tarjeta 2: EBITDA */}
-                    <div className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
+                    <div className="bg-white border border-ink/15 p-4 relative overflow-hidden group hover:shadow-lg transition-all">
                       <div className="absolute top-4 right-4">
                           <StatusBadge status={evaluateVariation(calculateVariation(
                             (activeResult.ratios?.ebitda.actual ?? 0),
                             (activeResult.ratios?.ebitda.anterior ?? 0)
                           ))} />
                         </div>
-                        <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">EBITDA (EN MILES)</p>
-                      <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
+                        <p className="text-[10px] font-sans font-bold text-ink uppercase mb-2">EBITDA (EN MILES)</p>
+                      <p className="text-3xl font-bold font-sans mb-2 text-ink">
                         {formatCurrencyThousands((activeResult.ratios?.ebitda.actual ?? null))}
                       </p>
                       <div className="flex items-center text-xs font-sans font-bold text-gray-600 leading-tight">
@@ -2155,19 +2103,19 @@ export default function App() {
                     </div>
 
                     {/* Tarjeta 3: DEUDA BANCARIA TOTAL */}
-                    <div className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
+                    <div className="bg-white border border-ink/15 p-4 relative overflow-hidden group hover:shadow-lg transition-all">
                       <div className="absolute top-4 right-4">
                           <StatusBadge status={activeResult.ratios?.deuda_ebitda.status ?? null} />
                         </div>
-                        <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">DEUDA BANCARIA TOTAL (EN MILES)</p>
-                      <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
+                        <p className="text-[10px] font-sans font-bold text-ink uppercase mb-2">DEUDA BANCARIA TOTAL (EN MILES)</p>
+                      <p className="text-3xl font-bold font-sans mb-2 text-ink">
                         {formatCurrencyThousands(activeResult.ratios?.deuda_bancaria_total.actual ?? null)}
                       </p>
                       <p className="text-xs font-sans font-bold text-gray-600 leading-tight">Total sistema financiero</p>
                     </div>
 
                     {/* Tarjeta 4: DEUDA CORTO PLAZO */}
-                    <div className="bg-white border border-[#141414] p-4 relative overflow-hidden group hover:shadow-lg transition-all">
+                    <div className="bg-white border border-ink/15 p-4 relative overflow-hidden group hover:shadow-lg transition-all">
                       <div className="absolute top-4 right-4">
                           {(() => {
                             const deudaCPActual = activeResult.extraction?.deuda_bancaria_actual?.corriente?.total ?? null;
@@ -2175,18 +2123,18 @@ export default function App() {
                             return <StatusBadge status={evaluateVariation(calculateVariation(deudaCPActual || 0, deudaCPAnterior || 0))} />;
                           })()}
                         </div>
-                        <p className="text-[10px] font-sans font-bold text-[#141414] uppercase mb-2">DEUDA CORTO PLAZO (EN MILES)</p>
+                        <p className="text-[10px] font-sans font-bold text-ink uppercase mb-2">DEUDA CORTO PLAZO (EN MILES)</p>
                       {(() => {
                         const deudaCPActual = activeResult.extraction?.deuda_bancaria_actual?.corriente?.total ?? null;
                         const deudaCPAnterior = activeResult.extraction?.deuda_bancaria_anterior?.corriente?.total ?? null;
                         
                         if (deudaCPActual === null) {
-                          return <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">-</p>;
+                          return <p className="text-3xl font-bold font-sans mb-2 text-ink">-</p>;
                         }
 
                         return (
                           <>
-                            <p className="text-3xl font-bold font-sans mb-2 text-[#141414]">
+                            <p className="text-3xl font-bold font-sans mb-2 text-ink">
                               {formatCurrencyThousands(deudaCPActual)}
                             </p>
                             {deudaCPAnterior !== null && (
@@ -2225,8 +2173,8 @@ export default function App() {
 
                     <div className="space-y-8  font-sans">
                       {/* Bloque 1: COMPOSICIÓN ACCIONARIA */}
-                      <div className="bg-white border border-[#141414] p-6">
-                        <h3 className="text-lg font-semibold text-[#141414] mb-6">COMPOSICIÓN SOCIAL / ACCIONISTAS</h3>
+                      <div className="bg-white border border-ink/15 p-6">
+                        <h3 className="text-lg font-semibold text-ink mb-6">COMPOSICIÓN SOCIAL / ACCIONISTAS</h3>
                         
                         <ShareholderTable 
                           accionistas={
@@ -2250,38 +2198,38 @@ export default function App() {
                       </div>
 
                       {/* Bloque 2: DIRECTORIO Y MANAGEMENT */}
-                      <div className="bg-white border border-[#141414] p-6 mt-8">
+                      <div className="bg-white border border-ink/15 p-6 mt-8">
                         <h3 className="text-base font-semibold text-black mb-6">ÓRGANO DE ADMINISTRACIÓN / DIRECTORIO</h3>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {Array.isArray(activeResult.extraction?.accionistas_y_directorio?.directorio) && activeResult.extraction?.accionistas_y_directorio.directorio.length > 0 ? (
                             activeResult.extraction?.accionistas_y_directorio.directorio.map((miembro, idx) => (
-                              <div key={idx} className="p-4 border border-[#141414]/10 bg-[#FAFAFA] rounded-sm hover:border-[#141414]/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-[#141414]/50 mb-1">{miembro.cargo}</p>
-                                <p className="font-medium text-[#141414]">{miembro.nombre}</p>
+                              <div key={idx} className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
+                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">{miembro.cargo}</p>
+                                <p className="font-medium text-ink">{miembro.nombre}</p>
                               </div>
                             ))
                           ) : (
                             <>
-                              <div className="p-4 border border-[#141414]/10 bg-[#FAFAFA] rounded-sm hover:border-[#141414]/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-[#141414]/50 mb-1">Presidente</p>
-                                <p className="font-medium text-[#141414]">Juan Ignacio Pérez</p>
+                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
+                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Presidente</p>
+                                <p className="font-medium text-ink">Juan Ignacio Pérez</p>
                               </div>
-                              <div className="p-4 border border-[#141414]/10 bg-[#FAFAFA] rounded-sm hover:border-[#141414]/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-[#141414]/50 mb-1">Vicepresidente</p>
-                                <p className="font-medium text-[#141414]">María Laura Gómez</p>
+                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
+                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Vicepresidente</p>
+                                <p className="font-medium text-ink">María Laura Gómez</p>
                               </div>
-                              <div className="p-4 border border-[#141414]/10 bg-[#FAFAFA] rounded-sm hover:border-[#141414]/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-[#141414]/50 mb-1">Director Titular</p>
-                                <p className="font-medium text-[#141414]">Carlos Alberto Ruiz</p>
+                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
+                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Director Titular</p>
+                                <p className="font-medium text-ink">Carlos Alberto Ruiz</p>
                               </div>
-                              <div className="p-4 border border-[#141414]/10 bg-[#FAFAFA] rounded-sm hover:border-[#141414]/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-[#141414]/50 mb-1">Director Suplente</p>
-                                <p className="font-medium text-[#141414]">Ana Clara Fernández</p>
+                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
+                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Director Suplente</p>
+                                <p className="font-medium text-ink">Ana Clara Fernández</p>
                               </div>
-                              <div className="p-4 border border-[#141414]/10 bg-[#FAFAFA] rounded-sm hover:border-[#141414]/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-[#141414]/50 mb-1">Síndico Titular</p>
-                                <p className="font-medium text-[#141414]">Estudio Contable López & Asoc.</p>
+                              <div className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
+                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">Síndico Titular</p>
+                                <p className="font-medium text-ink">Estudio Contable López & Asoc.</p>
                               </div>
                             </>
                           )}
@@ -2305,8 +2253,8 @@ export default function App() {
                     <h2 className="text-2xl font-bold mb-6 border-b border-gray-300 pb-2 print:break-after-avoid uppercase tracking-tight">Mercado</h2>
 
                     {activeResult.marketAnalysis ? (
-                      <div className="w-full bg-white border border-[#141414] p-10 font-sans text-justify leading-relaxed">
-                        <div className="prose prose-sm md:prose-base max-w-none print:max-w-none print:w-full prose-headings:font-sans prose-headings:font-semibold prose-headings:text-gray-800 prose-p:text-justify prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline">
+                      <div className="w-full bg-white border border-ink/15 p-10 font-sans text-left leading-relaxed">
+                        <div className="prose prose-sm md:prose-base max-w-none print:max-w-none print:w-full prose-headings:font-display prose-headings:font-semibold prose-headings:text-gray-800 prose-p:text-left prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline">
                           <ReactMarkdown>{activeResult.marketAnalysis}</ReactMarkdown>
                         </div>
                       </div>
@@ -2324,13 +2272,13 @@ export default function App() {
                       <div className="space-y-8 ">
                         {/* Post-Closing Analysis Section (Moved Inside) */}
                       {activeResult.extraction?.analisis_post_cierre && activeResult.extraction.analisis_post_cierre.total_ventas_post_cierre > 0 ? (
-                        <div className="bg-white border border-[#141414] p-6 font-sans">
+                        <div className="bg-white border border-ink/15 p-6 font-sans">
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                            <h3 className="text-lg font-semibold text-[#141414]">EVOLUCIÓN DE VENTAS POST BALANCE (COMPARATIVO INTERANUAL)</h3>
+                            <h3 className="text-lg font-semibold text-ink">EVOLUCIÓN DE VENTAS POST BALANCE (COMPARATIVO INTERANUAL)</h3>
                             
                             <div className="flex flex-col items-end gap-2">
                               <label className="flex items-center gap-2 cursor-pointer">
-                                <span className="text-xs font-bold uppercase text-[#141414]/70">Ver en moneda constante (Último mes)</span>
+                                <span className="text-xs font-bold uppercase text-ink/70">Ver en moneda constante (Último mes)</span>
                                 <div className="relative">
                                   <input 
                                     type="checkbox" 
@@ -2338,7 +2286,7 @@ export default function App() {
                                     checked={isInflationAdjusted}
                                     onChange={(e) => setIsInflationAdjusted(e.target.checked)}
                                   />
-                                  <div className={`block w-10 h-6 rounded-full transition-colors ${isInflationAdjusted ? 'bg-[#141414]' : 'bg-gray-300'}`}></div>
+                                  <div className={`block w-10 h-6 rounded-full transition-colors ${isInflationAdjusted ? 'bg-ink' : 'bg-gray-300'}`}></div>
                                   <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${isInflationAdjusted ? 'transform translate-x-4' : ''}`}></div>
                                 </div>
                               </label>
@@ -2346,21 +2294,21 @@ export default function App() {
                               {isInflationAdjusted && (
                                 <div className="flex items-center gap-3 text-xs animate-in fade-in slide-in-from-top-2">
                                   <div className="flex items-center gap-1">
-                                    <span className="text-[#141414]/70">% Interanual:</span>
+                                    <span className="text-ink/70">% Interanual:</span>
                                     <input 
                                       type="number" 
                                       value={inflationInteranual}
                                       onChange={(e) => setInflationInteranual(Number(e.target.value))}
-                                      className="w-16 px-1 py-0.5 border border-[#141414]/20 rounded text-right"
+                                      className="w-16 px-1 py-0.5 border border-ink/20 rounded text-right"
                                     />
                                   </div>
                                   <div className="flex items-center gap-1">
-                                    <span className="text-[#141414]/70">% Mensual Promedio:</span>
+                                    <span className="text-ink/70">% Mensual Promedio:</span>
                                     <input 
                                       type="number" 
                                       value={inflationMensual}
                                       onChange={(e) => setInflationMensual(Number(e.target.value))}
-                                      className="w-16 px-1 py-0.5 border border-[#141414]/20 rounded text-right"
+                                      className="w-16 px-1 py-0.5 border border-ink/20 rounded text-right"
                                     />
                                   </div>
                                 </div>
@@ -2370,15 +2318,15 @@ export default function App() {
                           
                           <div className="">
                             <table className="w-full text-sm text-left border-collapse">
-                              <thead className="bg-[#F0EFED] text-[#141414] text-xs uppercase tracking-wider">
+                              <thead className="bg-canvas text-ink text-xs uppercase tracking-wider">
                                 <tr>
-                                  <th className="px-4 py-3 font-semibold border-b border-[#141414]/20">Mes</th>
-                                  <th className={`px-4 py-3 font-semibold border-b border-[#141414]/20 text-right transition-colors ${isInflationAdjusted ? 'bg-amber-50/50' : ''}`}>Año Actual ($)</th>
-                                  <th className={`px-4 py-3 font-semibold border-b border-[#141414]/20 text-right transition-colors ${isInflationAdjusted ? 'bg-amber-50/50' : ''}`}>Año Anterior ($)</th>
-                                  <th className="px-4 py-3 font-semibold border-b border-[#141414]/20 text-right">Var. (%)</th>
+                                  <th className="px-4 py-3 font-semibold border-b border-ink/20">Mes</th>
+                                  <th className={`px-4 py-3 font-semibold border-b border-ink/20 text-right transition-colors ${isInflationAdjusted ? 'bg-brand-blue/5' : ''}`}>Año Actual ($)</th>
+                                  <th className={`px-4 py-3 font-semibold border-b border-ink/20 text-right transition-colors ${isInflationAdjusted ? 'bg-brand-blue/5' : ''}`}>Año Anterior ($)</th>
+                                  <th className="px-4 py-3 font-semibold border-b border-ink/20 text-right">Var. (%)</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-[#141414]/10">
+                              <tbody className="divide-y divide-ink/10">
                                 {(() => {
                                   const rawVentas = activeResult.extraction.analisis_post_cierre.detalle_ventas_mensuales;
                                   const ventasMensuales = Array.isArray(rawVentas) ? rawVentas : [];
@@ -2402,8 +2350,8 @@ export default function App() {
                                     const varPct = montoAnterior ? ((montoActual - montoAnterior) / montoAnterior) * 100 : null;
 
                                     return (
-                                      <tr key={idx} className="hover:bg-[#141414]/5 transition-colors">
-                                        <td className="px-4 py-3 font-medium text-[#141414]">{venta.mes}</td>
+                                      <tr key={idx} className="hover:bg-ink/5 transition-colors">
+                                        <td className="px-4 py-3 font-medium text-ink">{venta.mes}</td>
                                         <td className="px-4 py-3 text-right font-mono">{formatCurrencyThousands(montoActual)}</td>
                                         <td className="px-4 py-3 text-right font-mono">
                                           {montoAnterior ? formatCurrencyThousands(montoAnterior) : <span className="text-xs opacity-50 italic">Sin información</span>}
@@ -2454,13 +2402,13 @@ export default function App() {
                                   const totalVar = totalAnterior > 0 ? ((totalActual - totalAnterior) / totalAnterior) * 100 : null;
 
                                   return (
-                                    <tr className="bg-[#F0EFED] font-bold text-[#141414]">
-                                      <td className="px-4 py-3 border-t border-[#141414]/20">TOTAL ACUMULADO</td>
-                                      <td className="px-4 py-3 border-t border-[#141414]/20 text-right font-mono">{formatCurrencyThousands(totalActual)}</td>
-                                      <td className="px-4 py-3 border-t border-[#141414]/20 text-right font-mono">
+                                    <tr className="bg-canvas font-bold text-ink">
+                                      <td className="px-4 py-3 border-t border-ink/20">TOTAL ACUMULADO</td>
+                                      <td className="px-4 py-3 border-t border-ink/20 text-right font-mono">{formatCurrencyThousands(totalActual)}</td>
+                                      <td className="px-4 py-3 border-t border-ink/20 text-right font-mono">
                                         {totalAnterior > 0 ? formatCurrencyThousands(totalAnterior) : <span className="text-xs opacity-50 italic font-normal">Sin información</span>}
                                       </td>
-                                      <td className={`px-4 py-3 border-t border-[#141414]/20 text-right font-mono ${totalVar !== null && totalVar >= 0 ? 'text-emerald-600' : ''} ${totalVar !== null && totalVar < 0 ? 'text-red-600' : ''}`}>
+                                      <td className={`px-4 py-3 border-t border-ink/20 text-right font-mono ${totalVar !== null && totalVar >= 0 ? 'text-emerald-600' : ''} ${totalVar !== null && totalVar < 0 ? 'text-red-600' : ''}`}>
                                         {totalVar !== null ? (
                                           <div className="flex items-center justify-end gap-1">
                                             {totalVar >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
@@ -2484,40 +2432,40 @@ export default function App() {
                           )}
                           
                           {activeResult.extraction.analisis_post_cierre.notas_relevantes && (
-                            <div className="mt-2 text-xs opacity-70 italic border-t border-[#141414]/10 pt-2">
+                            <div className="mt-2 text-xs opacity-70 italic border-t border-ink/10 pt-2">
                               Nota: {activeResult.extraction.analisis_post_cierre.notas_relevantes}
                             </div>
                           )}
                         </div>
                       ) : (
-                        <div className="bg-white border border-[#141414] p-12 text-center text-[#141414]/60 font-mono text-sm">
+                        <div className="bg-white border border-ink/15 p-12 text-center text-ink/60 font-mono text-sm">
                           No hay información post balance disponible.
                         </div>
                       )}
 
                       {/* Deuda Bancaria Asumida Post Balance */}
                       {Array.isArray(activeResult.extraction?.analisis_post_cierre?.deuda_bancaria_post_balance_detalle) && activeResult.extraction.analisis_post_cierre.deuda_bancaria_post_balance_detalle.length > 0 && (
-                        <div className="bg-white border border-[#141414] p-6 mt-8">
-                          <h3 className="text-lg font-semibold text-[#141414] mb-6">DEUDA BANCARIA ASUMIDA POST BALANCE</h3>
+                        <div className="bg-white border border-ink/15 p-6 mt-8">
+                          <h3 className="text-lg font-semibold text-ink mb-6">DEUDA BANCARIA ASUMIDA POST BALANCE</h3>
                           
                           <div className="">
                             <table className="w-full text-sm text-left border-collapse">
-                              <thead className="bg-[#F0EFED] text-[#141414] text-xs uppercase tracking-wider">
+                              <thead className="bg-canvas text-ink text-xs uppercase tracking-wider">
                                 <tr>
-                                  <th className="px-4 py-3 font-semibold border-b border-[#141414]/20">ENTIDAD BANCARIA / ACREEDOR</th>
-                                  <th className="px-4 py-3 font-semibold border-b border-[#141414]/20 text-right">MONTO ASUMIDO</th>
+                                  <th className="px-4 py-3 font-semibold border-b border-ink/20">ENTIDAD BANCARIA / ACREEDOR</th>
+                                  <th className="px-4 py-3 font-semibold border-b border-ink/20 text-right">MONTO ASUMIDO</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-[#141414]/10">
+                              <tbody className="divide-y divide-ink/10">
                                 {activeResult.extraction.analisis_post_cierre.deuda_bancaria_post_balance_detalle.map((item: any, idx: number) => (
-                                  <tr key={idx} className="hover:bg-[#141414]/5 transition-colors">
-                                    <td className="px-4 py-3 font-medium text-[#141414]">{item.entidad}</td>
+                                  <tr key={idx} className="hover:bg-ink/5 transition-colors">
+                                    <td className="px-4 py-3 font-medium text-ink">{item.entidad}</td>
                                     <td className="px-4 py-3 text-right font-mono font-bold">{formatCurrencyThousands(item.monto, item.moneda)}</td>
                                   </tr>
                                 ))}
                               </tbody>
                               <tfoot>
-                                <tr className="bg-[#F0EFED] font-bold text-[#141414]">
+                                <tr className="bg-canvas font-bold text-ink">
                                   <td className="px-4 py-3 text-right">TOTAL DEUDA POST BALANCE:</td>
                                   <td className="px-4 py-3 text-right font-mono">
                                     {formatCurrencyThousands(
@@ -2542,8 +2490,8 @@ export default function App() {
 
                       <div className="space-y-8 ">
                         {/* Sales Analysis */}
-                    <div className="lg:col-span-2 bg-white border border-[#141414] p-6">
-                      <div className="flex items-center gap-2 mb-6 border-b border-[#141414]/10 pb-4">
+                    <div className="lg:col-span-2 bg-white border border-ink/15 p-6">
+                      <div className="flex items-center gap-2 mb-6 border-b border-ink/10 pb-4">
                         <TrendingUp className="w-5 h-5" />
                         <h3 className="font-sans font-bold text-lg">Análisis de Ventas & Proyección</h3>
                       </div>
@@ -2551,14 +2499,14 @@ export default function App() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div>
                           <h4 className="text-xs font-bold uppercase mb-3 flex items-center gap-2">
-                            <div className="w-2 h-2 bg-[#141414] rounded-full" />
+                            <div className="w-2 h-2 bg-ink rounded-full" />
                             Evolución Histórica
                           </h4>
                           <p className="text-sm leading-relaxed opacity-80">
                             {'No disponible en esta versión.'}
                           </p>
                         </div>
-                        <div className="bg-[#F0EFED] p-4 border border-[#141414]/10">
+                        <div className="bg-canvas p-4 border border-ink/10">
                           <h4 className="text-xs font-bold uppercase mb-3 flex items-center gap-2 text-emerald-700">
                             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
                             Proyección IA
@@ -2589,31 +2537,31 @@ export default function App() {
                       <div className="space-y-8 ">
                         {/* Nosis Section */}
                   {activeResult.extraction?.extraccion_nosis && (
-                    <div className="border border-[#141414] bg-white mt-8">
-                      <div className="flex items-center justify-between p-4 border-b border-[#141414]/10 bg-[#F0EFED] select-none">
+                    <div className="border border-ink/15 bg-white mt-8">
+                      <div className="flex items-center justify-between p-4 border-b border-ink/10 bg-canvas select-none">
                         <div className="flex items-center gap-2">
                           <span className="text-lg">📑</span>
                           <span className="text-lg font-bold uppercase tracking-wider">PESTAÑA NOSIS (ANTECEDENTES Y BCRA)</span>
                         </div>
                       </div>
                       
-                      <div className="p-6 bg-[#FAFAFA]">
+                      <div className="p-6 bg-panel">
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                             <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Score Crediticio</p>
-                              <p className="text-xl font-bold font-mono text-[#141414]">
+                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Score Crediticio</p>
+                              <p className="text-xl font-bold font-mono text-ink">
                                 {activeResult.extraction?.extraccion_nosis?.score_crediticio}
                               </p>
                             </div>
                             <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Peor Situación BCRA</p>
-                              <p className="text-xl font-bold font-mono text-[#141414]">
+                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Peor Situación BCRA</p>
+                              <p className="text-xl font-bold font-mono text-ink">
                                 Categoría {activeResult.extraction?.extraccion_nosis?.situacion_bcra_peor_estado}
                               </p>
                             </div>
                             <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Cheques Rechazados</p>
-                              <p className="text-xl font-bold font-mono text-[#141414]">
+                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Cheques Rechazados</p>
+                              <p className="text-xl font-bold font-mono text-ink">
                                 {activeResult.extraction?.extraccion_nosis?.cheques_rechazados_cantidad} cheques
                               </p>
                               <p className="text-xs opacity-70 mt-1">
@@ -2621,8 +2569,8 @@ export default function App() {
                               </p>
                             </div>
                             <div>
-                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-[#141414]">Deuda Total Nosis</p>
-                              <p className="text-xl font-bold font-mono text-[#141414]">
+                              <p className="text-[13px] font-bold uppercase opacity-50 mb-1 text-ink">Deuda Total Nosis</p>
+                              <p className="text-xl font-bold font-mono text-ink">
                                 {formatCurrencyThousands(activeResult.extraction?.extraccion_nosis?.deuda_financiera_total_nosis)}
                               </p>
                               <p className="text-[10px] opacity-50 mt-1">(Expresado en miles)</p>
@@ -2631,18 +2579,18 @@ export default function App() {
 
                           {false && null}
 
-                          <h4 className="text-xs font-bold uppercase mb-4 opacity-70 border-b border-[#141414]/10 pb-2">Detalle de Entidades</h4>
+                          <h4 className="text-xs font-bold uppercase mb-4 opacity-70 border-b border-ink/10 pb-2">Detalle de Entidades</h4>
                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
                             <div className="">
                               <table className="w-full text-sm font-mono border-collapse">
                                 <thead>
-                                  <tr className="border-b border-[#141414]">
+                                  <tr className="border-b border-ink">
                                     <th className="text-left py-2 font-bold uppercase text-xs opacity-60">Entidad</th>
                                     <th className="text-center py-2 font-bold uppercase text-xs opacity-60">Situación</th>
                                     <th className="text-right py-2 font-bold uppercase text-xs opacity-60 w-1/3">Monto / Participación</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-[#141414]/10">
+                                <tbody className="divide-y divide-ink/10">
                                   {(() => {
                                     const rawEntidades = activeResult.extraction?.extraccion_nosis?.detalle_entidades;
                                     const entidades = Array.isArray(rawEntidades) ? rawEntidades : [];
@@ -2653,14 +2601,14 @@ export default function App() {
                                     return entidades.map((entidad, i) => {
                                       const participacion = totalReferencia > 0 ? (((entidad.monto ?? 0) / totalReferencia) * 100).toFixed(1) : "0.0";
                                       return (
-                                        <tr key={i} className="hover:bg-[#141414]/5 transition-colors">
+                                        <tr key={i} className="hover:bg-ink/5 transition-colors">
                                           <td className="py-3 font-bold">{entidad.entidad}</td>
-                                          <td className="py-3 text-center font-bold text-[#141414]">{entidad.situacion}</td>
+                                          <td className="py-3 text-center font-bold text-ink">{entidad.situacion}</td>
                                           <td className="py-3">
                                             <div className="flex flex-col gap-1 items-end">
-                                              <span className="font-bold text-[#141414]">{formatCurrencyThousands(entidad.monto)} ({participacion}%)</span>
+                                              <span className="font-bold text-ink">{formatCurrencyThousands(entidad.monto)} ({participacion}%)</span>
                                               <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden">
-                                                <div className="bg-blue-600 h-full" style={{ width: `${participacion}%` }}></div>
+                                                <div className="bg-ink h-full" style={{ width: `${participacion}%` }}></div>
                                               </div>
                                             </div>
                                           </td>
@@ -2672,42 +2620,9 @@ export default function App() {
                               </table>
                             </div>
                             
-                            {/* Pie Chart */}
+                            {/* Deuda por entidad: barras ordenadas (reemplaza al donut) */}
                             {Array.isArray(activeResult.extraction?.extraccion_nosis?.detalle_entidades) && activeResult.extraction?.extraccion_nosis.detalle_entidades.length > 0 && (
-                              <div className="h-64 flex flex-col items-center justify-center bg-white border border-[#141414]/10 p-4 rounded">
-                                <h5 className="text-xs font-bold uppercase opacity-70 mb-2">Composición de Deuda</h5>
-                                <PieChart width={400} height={200}>
-                                    <Pie
-                                      data={activeResult.extraction?.extraccion_nosis.detalle_entidades.map(e => ({ name: e?.entidad || 'Desconocido', value: Number(e?.monto) || 0 }))}
-                                      cx="50%"
-                                      cy="50%"
-                                      innerRadius={50}
-                                      outerRadius={70}
-                                      paddingAngle={2}
-                                      dataKey="value"
-                                      label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, name }) => {
-                                        const RADIAN = Math.PI / 180;
-                                        const radius = outerRadius * 1.2;
-                                        const x = cx + radius * Math.cos(-(midAngle ?? 0) * RADIAN);
-                                        const y = cy + radius * Math.sin(-(midAngle ?? 0) * RADIAN);
-                                        return (
-                                          <text x={x} y={y} fill="#141414" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize="10" fontWeight="bold">
-                                            {name} ({((percent ?? 0) * 100).toFixed(0)}%)
-                                          </text>
-                                        );
-                                      }}
-                                    >
-                                      {activeResult.extraction?.extraccion_nosis.detalle_entidades.map((entry, index) => {
-                                        const COLORS = ['#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#1e40af', '#1d4ed8', '#1e3a8a'];
-                                        return <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />;
-                                      })}
-                                    </Pie>
-                                    <Tooltip 
-                                      formatter={(value) => formatCurrencyThousands(Number(value))}
-                                      contentStyle={{ backgroundColor: '#141414', color: '#E4E3E0', border: 'none', borderRadius: '4px', fontSize: '12px' }}
-                                    />
-                                  </PieChart>
-                              </div>
+                              <NosisDebtBars entidades={activeResult.extraction.extraccion_nosis.detalle_entidades} />
                             )}
                           </div>
                         </div>
@@ -2717,7 +2632,7 @@ export default function App() {
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
                     
                         {/* Cross Check Section */}
-                    <div className="lg:col-span-1 bg-[#141414] text-[#E4E3E0] p-6 border border-[#141414] flex flex-col">
+                    <div className="lg:col-span-1 bg-ink text-white p-6 border border-ink/15 flex flex-col">
                       <div className="flex items-center gap-2 mb-6 border-b border-white/20 pb-4">
                         <Scale className="w-5 h-5" />
                         <h3 className="font-sans font-bold text-lg">Cruce de Deuda</h3>

@@ -29,7 +29,7 @@ export const StatusBadge = ({ status, label }: { status: Status; label: string }
   const Icon = STATUS_ICON[status];
   return (
     <span
-      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm text-xs font-bold uppercase tracking-wider text-[#141414] whitespace-nowrap"
+      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm text-xs font-bold uppercase tracking-wider text-ink whitespace-nowrap"
       style={{ backgroundColor: tint(STATUS[status], 0.18) }}
     >
       <Icon className="w-3.5 h-3.5" style={{ color: STATUS[status] }} />

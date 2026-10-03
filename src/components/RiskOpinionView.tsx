@@ -64,16 +64,16 @@ const RiskGauge = ({ score }: { score: number }) => {
       {[0, 25, 50, 75, 100].map(v => {
         const p = point(v, R + STROKE / 2 + 9);
         return (
-          <text key={v} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" fontSize="8" fill="#14141499" fontFamily="JetBrains Mono, monospace">
+          <text key={v} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" fontSize="8" fill="#00000099" fontFamily="Inter, sans-serif">
             {v}
           </text>
         );
       })}
-      <line x1={CX} y1={CY} x2={needle.x} y2={needle.y} stroke="#141414" strokeWidth="3" strokeLinecap="round" />
-      <circle cx={tip.x} cy={tip.y} r="4" fill="#141414" stroke="#fff" strokeWidth="2" />
-      <circle cx={CX} cy={CY} r="6" fill="#141414" />
+      <line x1={CX} y1={CY} x2={needle.x} y2={needle.y} stroke="#000000" strokeWidth="3" strokeLinecap="round" />
+      <circle cx={tip.x} cy={tip.y} r="4" fill="#000000" stroke="#fff" strokeWidth="2" />
+      <circle cx={CX} cy={CY} r="6" fill="#000000" />
       {/* Número debajo del eje para que la aguja nunca lo tape */}
-      <text x={CX} y={CY + 44} textAnchor="middle" fontSize="40" fontWeight="700" fill="#141414" fontFamily="Poppins, sans-serif">
+      <text x={CX} y={CY + 44} textAnchor="middle" fontSize="40" fontWeight="700" fill="#000000" fontFamily="Poppins, sans-serif">
         {score}
       </text>
     </svg>
@@ -85,7 +85,7 @@ const RiskGauge = ({ score }: { score: number }) => {
 const ScoreBar = ({ value }: { value: number }) => {
   const status = CATEGORY_STATUS[categoryOf(value)];
   return (
-    <div className="relative h-3 w-full rounded-sm bg-[#141414]/[0.06] overflow-hidden">
+    <div className="relative h-3 w-full rounded-sm bg-ink/[0.06] overflow-hidden">
       {/* marcas de banda en 25/50/75 */}
       {[25, 50, 75].map(t => (
         <div key={t} className="absolute top-0 bottom-0 w-px bg-white" style={{ left: `${t}%` }} />
@@ -104,8 +104,8 @@ const Card = ({ title, icon: Icon, children, className }: {
   children: React.ReactNode;
   className?: string;
 }) => (
-  <div className={cn('bg-white border border-[#141414] p-6', className)}>
-    <h3 className="flex items-center gap-2 text-base font-bold uppercase tracking-widest mb-5 text-[#141414]">
+  <div className={cn('bg-white border border-ink/15 p-6', className)}>
+    <h3 className="flex items-center gap-2 text-base font-bold uppercase tracking-widest mb-5 text-ink">
       {Icon && <Icon className="w-4 h-4 opacity-60" />}
       {title}
     </h3>
@@ -128,7 +128,7 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
     <button
       onClick={onGenerate}
       disabled={!canGenerate || isGenerating}
-      className="inline-flex items-center gap-2 px-4 py-2 border border-[#141414] text-xs font-bold uppercase hover:bg-[#141414] hover:text-[#E4E3E0] transition-all disabled:opacity-40 disabled:pointer-events-none"
+      className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-ink/20 text-xs font-semibold text-ink hover:border-ink transition-all disabled:opacity-40 disabled:pointer-events-none"
     >
       {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
       {label}
@@ -137,16 +137,16 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
 
   if (!assessment) {
     return (
-      <div className="bg-white border border-[#141414] p-12 text-center font-sans space-y-4">
+      <div className="bg-white border border-ink/15 p-12 text-center font-sans space-y-4">
         {isGenerating ? (
-          <p className="inline-flex items-center gap-2 text-sm font-mono text-[#141414]/70">
+          <p className="inline-flex items-center gap-2 text-sm font-mono text-ink/70">
             <Loader2 className="w-4 h-4 animate-spin" />
             Integrando ratios, Memoria, mercado, post balance, deuda y Nosis...
           </p>
         ) : (
           <>
             <ShieldQuestion className="w-10 h-10 mx-auto opacity-30" />
-            <p className="text-sm text-[#141414]/70">Este caso todavía no tiene opinión de riesgo.</p>
+            <p className="text-sm text-ink/70">Este caso todavía no tiene opinión de riesgo.</p>
             {generateButton('Generar opinión de riesgo')}
           </>
         )}
@@ -179,24 +179,24 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
       )}
 
       {/* Encabezado: puntaje + dictamen */}
-      <div className="bg-white border border-[#141414] relative overflow-hidden">
+      <div className="bg-white border border-ink/15 relative overflow-hidden">
         <div className="absolute left-0 top-0 bottom-0 w-2" style={{ backgroundColor: STATUS[status] }} />
         <div className="grid grid-cols-1 @2xl:grid-cols-[minmax(220px,280px)_1fr] gap-6 p-6 pl-8 items-center">
           <div className="flex flex-col items-center">
             <RiskGauge score={puntaje.final} />
             <div className="-mt-1 flex flex-col items-center gap-2">
               <StatusBadge status={status} label={CATEGORY_LABEL[puntaje.categoria]} />
-              <span className="text-[10px] font-mono uppercase tracking-wider text-[#141414]/50">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-ink/50">
                 Escala 1 (mínimo) – 100 (máximo)
               </span>
             </div>
           </div>
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-3">
-              <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-[#141414]/60">Opinión de riesgo</h3>
+              <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-ink/60">Opinión de riesgo</h3>
               {postura && (
                 <span
-                  className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#141414] border"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold uppercase tracking-wider text-ink border"
                   style={{ borderColor: STATUS[postura.status], backgroundColor: tint(STATUS[postura.status], 0.12) }}
                 >
                   <postura.icon className="w-4 h-4" style={{ color: STATUS[postura.status] }} />
@@ -204,9 +204,9 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
                 </span>
               )}
             </div>
-            <p className="text-base leading-relaxed font-medium text-[#141414]">{opinion.dictamen}</p>
+            <p className="text-base leading-relaxed font-medium text-ink">{opinion.dictamen}</p>
             {puntaje.piso && puntaje.ponderado !== null && puntaje.piso.piso > puntaje.ponderado && (
-              <p className="text-xs text-[#141414]/70 flex items-start gap-1.5">
+              <p className="text-xs text-ink/70 flex items-start gap-1.5">
                 <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                 El promedio de las dimensiones da {puntaje.ponderado}; el puntaje sube a {puntaje.final} por regla automática: <strong>{puntaje.piso.motivo}</strong>.
               </p>
@@ -229,20 +229,20 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
             {dimensiones.map(({ dim, puntaje: p, comentario }) => (
               <div key={dim} className="group" title={comentario}>
                 <div className="flex items-baseline justify-between gap-3 mb-1.5">
-                  <span className="text-sm font-semibold text-[#141414]">
+                  <span className="text-sm font-semibold text-ink">
                     {DIMENSIONS[dim].label}
-                    <span className="ml-2 text-[10px] font-mono text-[#141414]/40">peso {DIMENSIONS[dim].weight}%</span>
+                    <span className="ml-2 text-[10px] font-mono text-ink/40">peso {DIMENSIONS[dim].weight}%</span>
                   </span>
-                  <span className="text-sm font-mono font-bold text-[#141414] tabular-nums">
+                  <span className="text-sm font-mono font-bold text-ink tabular-nums">
                     {p === null ? 'Sin datos' : p}
                   </span>
                 </div>
                 {p === null ? (
-                  <div className="h-3 w-full rounded-sm border border-dashed border-[#141414]/20" />
+                  <div className="h-3 w-full rounded-sm border border-dashed border-ink/20" />
                 ) : (
                   <ScoreBar value={p} />
                 )}
-                {comentario && <p className="text-xs text-[#141414]/60 mt-1.5 leading-relaxed">{comentario}</p>}
+                {comentario && <p className="text-xs text-ink/60 mt-1.5 leading-relaxed">{comentario}</p>}
               </div>
             ))}
           </div>
@@ -252,22 +252,22 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
         <div className="space-y-8">
           <Card title="Pérdida esperada">
             {pce_proxy === null ? (
-              <p className="text-sm text-[#141414]/50 italic">Sin score Nosis.</p>
+              <p className="text-sm text-ink/50 italic">Sin score Nosis.</p>
             ) : (
               <>
                 <div className="flex items-baseline gap-2 mb-3">
-                  <span className="text-4xl font-bold text-[#141414] tabular-nums">{pce_proxy}</span>
-                  <span className="text-sm text-[#141414]/50">/ 100</span>
+                  <span className="text-4xl font-bold text-ink tabular-nums">{pce_proxy}</span>
+                  <span className="text-sm text-ink/50">/ 100</span>
                 </div>
                 <ScoreBar value={pce_proxy} />
-                <p className="text-[11px] text-[#141414]/60 mt-3 leading-relaxed">
+                <p className="text-[11px] text-ink/60 mt-3 leading-relaxed">
                   Proxy transitorio basado en el score Nosis (1–999, más alto = mejor pagador). Índice relativo, no es un porcentaje de pérdida.
                 </p>
               </>
             )}
           </Card>
           <div className="space-y-2">
-            <p className="text-[10px] font-mono text-[#141414]/50 uppercase tracking-wider">
+            <p className="text-[10px] font-mono text-ink/50 uppercase tracking-wider">
               Generada el {new Date(assessment.generado).toLocaleString('es-AR')}
             </p>
             {generateButton('Regenerar opinión')}
@@ -277,29 +277,29 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
 
       {/* Lectura integral */}
       <Card title="Lectura integral" icon={FileSearch}>
-        <p className="text-sm leading-relaxed text-justify text-[#141414] whitespace-pre-line">{opinion.lectura_integral}</p>
+        <p className="text-sm leading-relaxed text-left text-ink whitespace-pre-line">{opinion.lectura_integral}</p>
       </Card>
 
       {/* Riesgos detectados */}
       <Card title="Riesgos detectados" icon={AlertTriangle}>
         {opinion.riesgos.length === 0 ? (
-          <p className="text-sm text-[#141414]/50 italic">No se detectaron riesgos relevantes.</p>
+          <p className="text-sm text-ink/50 italic">No se detectaron riesgos relevantes.</p>
         ) : (
           <div className="grid grid-cols-1 @3xl:grid-cols-2 gap-4">
             {opinion.riesgos.map((r, i) => {
               const st = SEVERIDAD_STATUS[r.severidad];
               return (
-                <div key={i} className="border border-[#141414]/15 border-l-4 p-4 space-y-2" style={{ borderLeftColor: STATUS[st] }}>
+                <div key={i} className="border border-ink/15 border-l-4 p-4 space-y-2" style={{ borderLeftColor: STATUS[st] }}>
                   <div className="flex items-start justify-between gap-3">
-                    <h4 className="text-sm font-bold text-[#141414] leading-snug">{r.titulo}</h4>
+                    <h4 className="text-sm font-bold text-ink leading-snug">{r.titulo}</h4>
                     <StatusBadge status={st} label={SEVERIDAD_LABEL[r.severidad]} />
                   </div>
                   {r.dimension && (
-                    <p className="text-[10px] font-mono uppercase tracking-wider text-[#141414]/40">{DIMENSIONS[r.dimension].label}</p>
+                    <p className="text-[10px] font-mono uppercase tracking-wider text-ink/40">{DIMENSIONS[r.dimension].label}</p>
                   )}
-                  <p className="text-sm text-[#141414]/80 leading-relaxed">{r.evidencia}</p>
+                  <p className="text-sm text-ink/80 leading-relaxed">{r.evidencia}</p>
                   {r.mitigante && (
-                    <p className="text-xs text-[#141414]/70 flex items-start gap-1.5 pt-1">
+                    <p className="text-xs text-ink/70 flex items-start gap-1.5 pt-1">
                       <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: STATUS.good }} />
                       <span><strong>Mitigante:</strong> {r.mitigante}</span>
                     </p>
@@ -314,18 +314,18 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
       {/* Señales automáticas */}
       <Card title="Señales automáticas (reglas fijas)" icon={Cpu}>
         {senales.length === 0 ? (
-          <p className="text-sm text-[#141414]/50 italic">Ninguna regla de alerta se disparó.</p>
+          <p className="text-sm text-ink/50 italic">Ninguna regla de alerta se disparó.</p>
         ) : (
           <table className="w-full text-sm">
-            <tbody className="divide-y divide-[#141414]/10">
+            <tbody className="divide-y divide-ink/10">
               {senales.map(s => (
                 <tr key={s.id}>
                   <td className="py-2.5 pr-3 align-top w-32"><StatusBadge status={SEVERIDAD_STATUS[s.severidad]} label={SEVERIDAD_LABEL[s.severidad]} /></td>
                   <td className="py-2.5 pr-3 align-top !text-left">
-                    <span className="font-semibold text-[#141414]">{s.titulo}</span>
-                    <span className="block text-xs text-[#141414]/60 mt-0.5">{s.detalle}</span>
+                    <span className="font-semibold text-ink">{s.titulo}</span>
+                    <span className="block text-xs text-ink/60 mt-0.5">{s.detalle}</span>
                   </td>
-                  <td className="py-2.5 align-top text-xs font-mono text-[#141414]/50 whitespace-nowrap">
+                  <td className="py-2.5 align-top text-xs font-mono text-ink/50 whitespace-nowrap">
                     {s.piso !== null ? `piso ${s.piso}` : ''}
                   </td>
                 </tr>
@@ -340,10 +340,10 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
           <ItemList items={opinion.fortalezas} empty="Sin fortalezas destacadas." icon={CheckCircle2} color={STATUS.good} />
         </Card>
         <Card title="Condiciones sugeridas" icon={ListChecks}>
-          <ItemList items={opinion.condiciones_sugeridas} empty="Sin condiciones sugeridas." icon={ListChecks} color="#141414" />
+          <ItemList items={opinion.condiciones_sugeridas} empty="Sin condiciones sugeridas." icon={ListChecks} color="#000000" />
         </Card>
         <Card title="Información faltante" icon={FileSearch}>
-          <ItemList items={opinion.informacion_faltante} empty="No falta información relevante." icon={Info} color="#14141480" />
+          <ItemList items={opinion.informacion_faltante} empty="No falta información relevante." icon={Info} color="#00000080" />
         </Card>
       </div>
     </div>
@@ -357,11 +357,11 @@ const ItemList = ({ items, empty, icon: Icon, color }: {
   color: string;
 }) =>
   items.length === 0 ? (
-    <p className="text-sm text-[#141414]/50 italic">{empty}</p>
+    <p className="text-sm text-ink/50 italic">{empty}</p>
   ) : (
     <ul className="space-y-3">
       {items.map((item, i) => (
-        <li key={i} className="flex items-start gap-2 text-sm text-[#141414] leading-relaxed">
+        <li key={i} className="flex items-start gap-2 text-sm text-ink leading-relaxed">
           <Icon className="w-4 h-4 mt-0.5 shrink-0" style={{ color }} />
           {item}
         </li>

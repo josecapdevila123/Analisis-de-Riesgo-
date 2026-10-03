@@ -68,13 +68,13 @@ interface TableProps {
 }
 
 export const Table = ({ title, data }: TableProps) => (
-  <div className="bg-white border border-[#141414] rounded-sm mb-8 overflow-hidden max-w-full print:break-inside-avoid shadow-sm">
-    <div className="bg-[#FAFAFA] border-b border-[#141414]/10 px-4 py-3">
-      <h3 className="text-lg font-bold text-[#141414] uppercase tracking-widest">{title}</h3>
+  <div className="bg-white border border-ink/15 rounded-sm mb-8 overflow-hidden max-w-full print:break-inside-avoid shadow-sm">
+    <div className="bg-panel border-b border-ink/10 px-4 py-3">
+      <h3 className="text-lg font-bold text-ink uppercase tracking-widest">{title}</h3>
     </div>
     <div className="overflow-x-auto">
       <table className="w-full text-sm text-left font-mono">
-        <thead className="bg-[#F0EFED] text-[#141414] uppercase text-xs border-b border-[#141414]/10">
+        <thead className="bg-canvas text-ink uppercase text-xs border-b border-ink/10">
           <tr>
             <th className="px-4 py-3 text-left w-2/5 font-bold tracking-wider">CONCEPTO</th>
             <th className="px-4 py-3 text-right font-bold tracking-wider">AÑO ANTERIOR</th>
@@ -82,12 +82,12 @@ export const Table = ({ title, data }: TableProps) => (
             <th className="px-4 py-3 text-right font-bold tracking-wider">VARIACIÓN (%)</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-[#141414]/5 bg-white">
+        <tbody className="divide-y divide-ink/5 bg-white">
           {data.map((row, index) => (
-            <tr key={index} className="hover:bg-[#141414]/5 transition-colors">
-              <td className="px-4 py-3 font-semibold text-[#141414] text-left">{row.concepto}</td>
-              <td className="px-4 py-3 text-right text-[#141414]/70"><ValueCell value={row.anio_anterior} path={row.path_anterior} nullable={row.nullable} /></td>
-              <td className="px-4 py-3 text-right text-[#141414] font-bold"><ValueCell value={row.anio_actual} path={row.path_actual} nullable={row.nullable} /></td>
+            <tr key={index} className="hover:bg-ink/5 transition-colors">
+              <td className="px-4 py-3 font-semibold text-ink text-left">{row.concepto}</td>
+              <td className="px-4 py-3 text-right text-ink/70"><ValueCell value={row.anio_anterior} path={row.path_anterior} nullable={row.nullable} /></td>
+              <td className="px-4 py-3 text-right text-ink font-bold"><ValueCell value={row.anio_actual} path={row.path_actual} nullable={row.nullable} /></td>
               <td className="px-4 py-3 text-right font-medium">{variationCell(row.anio_actual, row.anio_anterior)}</td>
             </tr>
           ))}
@@ -273,17 +273,17 @@ export function ComparativeView({ extraction, ratios }: ComparativeViewProps) {
   return (
     <div className="font-['Poppins']">
       <div className="flex justify-end mb-6">
-        <div className="inline-flex bg-[#F0EFED] p-1 rounded-sm border border-[#141414]/10">
+        <div className="inline-flex bg-canvas p-1 rounded-sm border border-ink/10">
           <button
             onClick={() => setIsVerticalAnalysis(false)}
-            className={`px-4 py-2 text-sm font-bold uppercase tracking-wider transition-colors ${!isVerticalAnalysis ? 'bg-white shadow-sm text-[#141414]' : 'text-[#141414]/50 hover:text-[#141414]'}`}
+            className={`px-4 py-2 text-sm font-bold uppercase tracking-wider transition-colors ${!isVerticalAnalysis ? 'bg-white shadow-sm text-ink' : 'text-ink/50 hover:text-ink'}`}
           >
             $ Valores Absolutos
           </button>
           <button
             onClick={() => setIsVerticalAnalysis(true)}
             disabled={editing}
-            className={`px-4 py-2 text-sm font-bold uppercase tracking-wider transition-colors ${isVerticalAnalysis ? 'bg-white shadow-sm text-[#141414]' : 'text-[#141414]/50 hover:text-[#141414]'}`}
+            className={`px-4 py-2 text-sm font-bold uppercase tracking-wider transition-colors ${isVerticalAnalysis ? 'bg-white shadow-sm text-ink' : 'text-ink/50 hover:text-ink'}`}
           >
             % Análisis Vertical
           </button>

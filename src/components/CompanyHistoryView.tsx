@@ -8,17 +8,17 @@ interface CompanyHistoryViewProps {
 }
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className="bg-white border border-[#141414] p-6">
-    <h3 className="text-base font-bold uppercase tracking-widest mb-4 text-[#141414]">{title}</h3>
+  <div className="bg-white border border-ink/15 p-6">
+    <h3 className="text-base font-bold uppercase tracking-widest mb-4 text-ink">{title}</h3>
     {children}
   </div>
 );
 
 const BulletList = ({ items, empty }: { items: string[]; empty: string }) =>
   items.length === 0 ? (
-    <p className="text-sm text-[#141414]/50 italic">{empty}</p>
+    <p className="text-sm text-ink/50 italic">{empty}</p>
   ) : (
-    <ul className="space-y-2 text-sm text-[#141414] list-disc pl-5 marker:text-[#141414]/40">
+    <ul className="space-y-2 text-sm text-ink list-disc pl-5 marker:text-ink/40">
       {items.map((item, i) => <li key={i} className="leading-relaxed">{item}</li>)}
     </ul>
   );
@@ -26,7 +26,7 @@ const BulletList = ({ items, empty }: { items: string[]; empty: string }) =>
 export function CompanyHistoryView({ history, isGenerating }: CompanyHistoryViewProps) {
   if (!history) {
     return (
-      <div className="bg-white border border-[#141414] p-12 text-center text-[#141414]/60 font-mono text-sm">
+      <div className="bg-white border border-ink/15 p-12 text-center text-ink/60 font-mono text-sm">
         {isGenerating ? (
           <span className="inline-flex items-center gap-2">
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -49,16 +49,16 @@ export function CompanyHistoryView({ history, isGenerating }: CompanyHistoryView
       )}
 
       {/* Lo más importante: de qué vive la empresa */}
-      <div className="bg-[#141414] text-[#E4E3E0] border border-[#141414] p-8">
+      <div className="bg-ink text-white border border-ink/15 p-8">
         <h3 className="text-xs font-bold uppercase tracking-[0.2em] mb-4 opacity-70">Core business</h3>
-        <p className="text-base leading-relaxed text-justify whitespace-pre-line">
+        <p className="text-base leading-relaxed text-left whitespace-pre-line">
           {history.core_business || 'Sin información sobre la actividad en los documentos.'}
         </p>
       </div>
 
       <Section title="Historia">
-        <p className="text-sm leading-relaxed text-justify text-[#141414] whitespace-pre-line">
-          {history.historia || <span className="text-[#141414]/50 italic">Sin datos históricos en los documentos.</span>}
+        <p className="text-sm leading-relaxed text-left text-ink whitespace-pre-line">
+          {history.historia || <span className="text-ink/50 italic">Sin datos históricos en los documentos.</span>}
         </p>
       </Section>
 
@@ -73,13 +73,13 @@ export function CompanyHistoryView({ history, isGenerating }: CompanyHistoryView
 
       <Section title="Explicaciones sobre el balance">
         {history.explicaciones_balance.length === 0 ? (
-          <p className="text-sm text-[#141414]/50 italic">El Directorio no explica variaciones del balance.</p>
+          <p className="text-sm text-ink/50 italic">El Directorio no explica variaciones del balance.</p>
         ) : (
-          <dl className="divide-y divide-[#141414]/10">
+          <dl className="divide-y divide-ink/10">
             {history.explicaciones_balance.map((item, i) => (
               <div key={i} className="py-3 grid grid-cols-1 md:grid-cols-[220px_1fr] gap-1 md:gap-6">
-                <dt className="text-sm font-bold text-[#141414]">{item.tema}</dt>
-                <dd className="text-sm text-[#141414]/80 leading-relaxed">{item.explicacion}</dd>
+                <dt className="text-sm font-bold text-ink">{item.tema}</dt>
+                <dd className="text-sm text-ink/80 leading-relaxed">{item.explicacion}</dd>
               </div>
             ))}
           </dl>

@@ -56,6 +56,15 @@ src/
     prompts/                   Prompts de extracción, verificación y mercado
 ```
 
+## Marca (manual de BiBank)
+
+- **Tokens en `src/index.css`** (`@theme`): `ink` (#000), `brand-green` (#35EEC8), `brand-blue`, `brand-magenta`, `canvas`, `panel`. Usar las clases de token (`text-ink/60`, `bg-brand-green`), nunca hex sueltos.
+- **Tipografía:** Inter es la base (UI, texto, tablas, números con cifras tabulares); Poppins (`font-display`) para títulos grandes. Texto alineado a la izquierda: nunca justificado ni centrado en párrafos.
+- **El verde institucional es identidad, no estado.** Va en el logo, en las acciones principales (botones pill verdes con texto negro) y en los acentos. Para "sano / alerta / crítico" se usa la paleta de estados de `components/riskColors.tsx`, siempre con ícono y etiqueta.
+- **Azul de marca = modo edición** y avisos informativos; el ámbar queda solo para advertencias.
+- **Logo:** `components/BiBankLogo.tsx` (variantes `dark` / `light`, `full` / `icon`). No recolorear ni deformar; respetar la zona de seguridad.
+- **PDF:** `features/pdf/pdfFonts.ts` incrusta Inter y Poppins (`src/assets/fonts`, licencia OFL) en un chunk aparte que solo se descarga al generar el informe; si falla, usa Helvetica.
+
 ## Comandos
 
 ```bash

@@ -48,9 +48,9 @@ const get = (obj: unknown, path: Path): any =>
   path.reduce<any>((acc, k) => (acc == null ? undefined : acc[k]), obj);
 
 const Card = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className="bg-white border border-amber-500 rounded-sm mb-8 overflow-hidden">
-    <div className="bg-amber-50 border-b border-amber-500/30 px-4 py-3">
-      <h3 className="text-lg font-bold text-[#141414] uppercase tracking-widest">{title}</h3>
+  <div className="bg-white border border-brand-blue/60 rounded-sm mb-8 overflow-hidden">
+    <div className="bg-brand-blue/5 border-b border-brand-blue/30 px-4 py-3">
+      <h3 className="text-lg font-bold text-ink uppercase tracking-widest">{title}</h3>
     </div>
     <div className="p-4 overflow-x-auto">{children}</div>
   </div>
@@ -61,7 +61,7 @@ type DetalleList = Array<{ rubro: string; monto: number }>;
 const DetalleTable = ({ basePath, list, emptyItem }: { basePath: Path; list: DetalleList; emptyItem: object }) => (
   <>
     <table className="w-full text-sm font-mono">
-      <tbody className="divide-y divide-[#141414]/5">
+      <tbody className="divide-y divide-ink/5">
         {list.map((item, i) => (
           <tr key={i}>
             <td className="py-1 pr-2">
@@ -103,13 +103,13 @@ export function SourceDataEditor({ extraction }: { extraction: RawExtraction }) 
           </label>
         </div>
         <table className="w-full text-sm font-mono">
-          <thead className="bg-[#F0EFED] text-xs uppercase">
+          <thead className="bg-canvas text-xs uppercase">
             <tr>
               <th className="px-3 py-2 text-left">Concepto</th>
               {years.map(y => <th key={y.key} className="px-3 py-2 text-right">{y.label}</th>)}
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#141414]/5">
+          <tbody className="divide-y divide-ink/5">
             {BALANCE_FIELDS.map(({ group, fields }) => (
               <React.Fragment key={group}>
                 <tr><td colSpan={3} className="px-3 pt-4 pb-1 text-xs font-bold uppercase opacity-50">{group}</td></tr>
@@ -174,7 +174,7 @@ export function SourceDataEditor({ extraction }: { extraction: RawExtraction }) 
                       <EditableNumber path={[y.key, g.key, 'total']} value={deuda[g.key].total} required />
                     </div>
                     <table className="w-full text-sm font-mono">
-                      <tbody className="divide-y divide-[#141414]/5">
+                      <tbody className="divide-y divide-ink/5">
                         {deuda[g.key].items.map((item, i) => (
                           <tr key={i}>
                             <td className="py-1 pr-2"><EditableText path={[y.key, g.key, 'items', i, 'rubro']} value={item.rubro} /></td>
