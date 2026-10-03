@@ -67,6 +67,7 @@ import { ProyeccionesGuardadas } from './features/projections/types';
 import { RATIO_BLOCKS as SHARED_RATIO_BLOCKS } from './features/ratios/blocks';
 import { RiskOpinionView } from './components/RiskOpinionView';
 import { SistemaFinancieroView } from './components/SistemaFinancieroView';
+import { AccionistasView } from './components/AccionistasView';
 import { AnalysisFlow } from './components/AnalysisFlow';
 import { RiskPolicyView } from './components/RiskPolicyView';
 import { runRiskAssessment } from './features/risk/assessment';
@@ -1390,54 +1391,7 @@ export default function App() {
                   )}
 
                   {activeTab === 'Accionistas y Directorio' && (
-                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 font-sans">
-                      {/* Bloque 1: COMPOSICIÓN ACCIONARIA */}
-                      <div className="bg-white border border-ink/15 p-6">
-                        <h3 className="text-lg font-semibold text-ink mb-6">COMPOSICIÓN SOCIAL / ACCIONISTAS</h3>
-                        
-                        {!isEditing && !(activeResult.extraction?.accionistas_y_directorio?.accionistas?.length) && (
-                          <p className="text-sm text-ink/50">No se encontró la composición accionaria en la documentación. Se puede cargar a mano con "Editar valores".</p>
-                        )}
-                        <ShareholderTable 
-                          basePath={['accionistas_y_directorio', 'accionistas']}
-                          accionistas={activeResult.extraction?.accionistas_y_directorio?.accionistas ?? []}
-                        />
-                      </div>
-
-                      {/* Bloque 2: DIRECTORIO Y MANAGEMENT */}
-                      <div className="bg-white border border-ink/15 p-6 mt-8">
-                        <h3 className="text-base font-semibold text-black mb-6">ÓRGANO DE ADMINISTRACIÓN / DIRECTORIO</h3>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {isEditing ? (
-                            (activeResult.extraction?.accionistas_y_directorio?.directorio ?? []).map((miembro, idx, list) => (
-                              <div key={idx} className="p-4 border border-brand-blue/50 bg-panel rounded-sm flex flex-col gap-2">
-                                <div className="flex items-center gap-1">
-                                  <EditableText path={['accionistas_y_directorio', 'directorio', idx, 'cargo']} value={miembro.cargo} />
-                                  <RemoveRowButton path={['accionistas_y_directorio', 'directorio']} list={list} index={idx} />
-                                </div>
-                                <EditableText path={['accionistas_y_directorio', 'directorio', idx, 'nombre']} value={miembro.nombre} />
-                              </div>
-                            ))
-                          ) : Array.isArray(activeResult.extraction?.accionistas_y_directorio?.directorio) && activeResult.extraction?.accionistas_y_directorio.directorio.length > 0 ? (
-                            activeResult.extraction?.accionistas_y_directorio.directorio.map((miembro, idx) => (
-                              <div key={idx} className="p-4 border border-ink/10 bg-panel rounded-sm hover:border-ink/30 transition-colors">
-                                <p className="text-[13px] uppercase tracking-wider text-ink/50 mb-1">{miembro.cargo}</p>
-                                <p className="font-medium text-ink">{miembro.nombre}</p>
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-sm text-ink/50 col-span-full">No se encontró el directorio en la documentación. Se puede cargar a mano con "Editar valores".</p>
-                          )}
-                        </div>
-                        <AddRowButton
-                          path={['accionistas_y_directorio', 'directorio']}
-                          list={activeResult.extraction?.accionistas_y_directorio?.directorio}
-                          newItem={{ cargo: '', nombre: '' }}
-                          label="Agregar miembro"
-                        />
-                      </div>
-                    </div>
+                    <AccionistasView datos={activeResult.extraction?.accionistas_y_directorio ?? null} />
                   )}
 
                   {activeTab === 'Mercado' && (
