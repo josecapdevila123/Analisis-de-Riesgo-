@@ -124,7 +124,7 @@ function Statement({ title, sections, extraction, ratios, base, vertical, badge 
   };
 
   return (
-    <section className="bg-white border border-ink/15">
+    <section className="bg-white border border-ink/15 flex flex-col">
       <header className="flex items-center justify-between gap-3 px-5 py-4 border-b border-ink/10">
         <h3 className="font-display text-base font-semibold">{title}</h3>
         {badge}
@@ -218,7 +218,8 @@ export function BalanceRatiosView({ extraction, ratios }: { extraction: RawExtra
         </div>
       </div>
 
-      <div className="grid grid-cols-1 @4xl:grid-cols-2 gap-6 items-start">
+      {/* Dos columnas solo con espacio suficiente; misma altura para que los bordes inferiores coincidan */}
+      <div className="grid grid-cols-1 @5xl:grid-cols-2 gap-6 items-stretch">
         <Statement
           title="Situación patrimonial"
           sections={ESP}
@@ -246,14 +247,15 @@ export function BalanceRatiosView({ extraction, ratios }: { extraction: RawExtra
         </p>
       </div>
 
-      <div className="grid grid-cols-1 @4xl:grid-cols-2 gap-6 items-start">
+      {/* Columnas tipo mampostería: cada columna apila sus tarjetas sin huecos */}
+      <div className="columns-1 @5xl:columns-2 gap-x-6">
         {RATIO_BLOCKS.map(block => {
           const rows = block.ratios.filter(spec => ratios[spec.key]);
           const conteo = (['critical', 'alert', 'healthy'] as RatioStatus[])
             .map(st => ({ st, n: rows.filter(r => ratios[r.key].status === st).length }))
             .filter(c => c.n > 0);
           return (
-            <section key={block.bloque} className="bg-white border border-ink/15">
+            <section key={block.bloque} className="bg-white border border-ink/15 mb-6 break-inside-avoid">
               <header className="px-5 py-4 border-b border-ink/10 flex items-start justify-between gap-3">
                 <div>
                   <h3 className="font-display text-base font-semibold">{block.bloque}</h3>
