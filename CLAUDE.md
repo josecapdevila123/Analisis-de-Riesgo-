@@ -5,7 +5,7 @@
 Herramienta interna de **análisis de riesgo crediticio para BiBank**. El analista sube los estados contables de una empresa (PDF o imágenes), más el informe Nosis y documentación post balance si la tiene, y la app:
 
 1. **Extrae** con Gemini los datos del balance, el estado de resultados, la deuda bancaria, las ventas post cierre, el informe Nosis/BCRA y los accionistas y directorio.
-2. **Calcula 23 ratios en código**, sin IA (`src/features/ratios/calculations.ts`), además de chequeos de consistencia contable y un cruce de deuda Balance vs Nosis.
+2. **Calcula 27 ratios en código**, sin IA (`src/features/ratios/calculations.ts`), además de chequeos de consistencia contable y un cruce de deuda Balance vs Nosis.
 3. **Verifica y redacta** con Gemini: interpreta los ratios ya calculados, explica las inconsistencias y genera el resumen ejecutivo.
 4. Genera en paralelo un **análisis de mercado** del sector y la **historia y actividad de la empresa**, leída de la Memoria del balance.
 5. Como último paso, da una **opinión de riesgo integral** con puntaje 1–100 (1 = riesgo mínimo).
@@ -31,7 +31,7 @@ Puntos clave:
 - **Los números los calcula el código, no la IA.** El prompt de verificación le prohíbe a Gemini recalcular o proponer otros valores.
 - Las llamadas a Gemini pasan por `callGemini`, que reintenta con espera creciente los errores 429/5xx y, si no alcanza, usa un modelo de respaldo. La configuración está en `src/lib/gemini.ts`.
 - **Schemas tolerantes:** `src/features/extraction/schemas.ts` convierte "N/A", "", null, NaN, etc. en `null` para que la validación no se caiga por variaciones del modelo.
-- **Persistencia:** `src/features/cases/useCases.ts`, en `users/{uid}/cases/{caseId}`. `extraction`, `ratios`, `inconsistencias`, `crossCheck` y `verification` se guardan como **strings JSON**. Al entrar por primera vez con el schema v2 se borran los casos v1 de ese usuario.
+- **Persistencia:** `src/features/cases/useCases.ts`, en `users/{uid}/cases/{caseId}`. `extraction`, `ratios`, `inconsistencias`, `crossCheck` y `verification` se guardan como **strings JSON**. Al cargar un caso, ratios, sanity checks y cruce Nosis **se recalculan** desde la extracción: los casos viejos siempre usan las fórmulas y la política vigentes. Al entrar por primera vez con el schema v2 se borran los casos v1 de ese usuario.
 - **Signos:** Gemini puede devolver costos, gastos y depreciación en negativo o en positivo. `calculations.ts` los normaliza con `Math.abs`; los resultados (valuación de BdC, inversiones permanentes, resultado neto) conservan su signo.
 - **Convenciones de datos:** los montos están en **miles de pesos**. Los ratios porcentuales se guardan como fracción (0,15) y se multiplican por 100 al mostrarse. Los porcentajes de participación accionaria y la situación BCRA van como número natural.
 
@@ -45,7 +45,8 @@ src/
   components/ComparativeView   Tablas comparativas año anterior / actual (las usa también el PDF)
   features/
     extraction/                pipeline, geminiClient, schemas (Zod)
-    ratios/                    calculations (23 ratios), sanityChecks, crossCheck
+    ratios/                    calculations (27 ratios: incluye DSCR, deuda neta/EBITDA, calidad de la ganancia), sanityChecks, crossCheck
+    risk/                      policy (umbrales), signals (reglas), score (puntaje y PCE), assessment (opinión integral)
     cases/useCases.ts          CRUD de casos en Firestore
     auth/useAuth.ts            Login con Google
     editing/                   Edición de valores en el dashboard (EditProvider, inputs, SourceDataEditor)
@@ -72,7 +73,8 @@ npm run preview    # sirve dist/
 
 ## Reglas
 
-- **El puntaje de riesgo no lo decide solo el modelo.** Las reglas de `risk/signals.ts` (umbrales y pisos), los pesos de `risk/score.ts` y el proxy de pérdida esperada siguen la misma regla que las fórmulas: se cambian con tests.
+- **Política de riesgos: `src/features/risk/policy.ts` es la fuente única** de semáforos de ratios, reglas con severidad y piso, pesos, bandas y tramos de pérdida esperada. La usan `calculations.ts`, `signals.ts`, `score.ts` y la página "Política de riesgos" de la app (`components/RiskPolicyView.tsx`). Nunca hardcodear un umbral fuera de ese archivo. Hoy es una propuesta inicial a validar con el área de Riesgos; cambiarla sigue la regla de fórmulas: con tests.
+- **La Opinión de riesgos es la única fuente del dictamen.** El resumen ejecutivo (verificación) no da conclusión ni calificación; los resúmenes viejos se muestran sin su párrafo de "Conclusión" (`risk/summary.ts`).
 - **No cambiar fórmulas de ratios sin tests.** Esto incluye `calculations.ts`, los umbrales de `evaluateRatioStatus`, las palabras clave de rubros, `sanityChecks.ts` y `crossCheck.ts`. Primero se escribe o ajusta el test con el valor esperado calculado a mano, después se cambia la fórmula, y `npm run test` tiene que pasar. Un ratio mal calculado termina en una decisión de crédito.
 - **Correr `npm run lint` (y `npm run test` si se tocó `src/features/ratios`) antes de cada commit.** Si falla, no se commitea.
 - **Commits chicos y en español**: un cambio lógico por commit, con un mensaje en minúscula que describa qué cambia (por ejemplo: `fix extraccion nosis post cierre y moneda opcional`).
