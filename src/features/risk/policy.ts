@@ -473,3 +473,36 @@ export const RATIO_LABEL_CORTO: Partial<Record<RatioKey, string>> = {
   anticipos_ventas: 'Anticipos de clientes / ventas',
   pn_activo: 'PN / activo',
 };
+
+// ---------- Sugerencia de rubro (determinística, sobre la actividad) ----------
+// Se busca sobre el texto en minúscula y sin acentos. "fuertes" decide; las
+// "debiles" ("servicio", "venta") solo cuentan si no hubo ninguna fuerte.
+// "excluir": frases que anulan una coincidencia (ej. "obra social").
+// El analista siempre confirma: esto es solo una sugerencia.
+export const SUGERENCIA_RUBRO: {
+  prioridad: Array<Exclude<RubroDisponible, 'generico'>>;
+  reglas: Record<Exclude<RubroDisponible, 'generico'>, { fuertes: string[]; debiles?: string[]; excluir?: string[] }>;
+} = {
+  prioridad: ['construccion', 'agro', 'industria', 'comercio', 'servicios'],
+  reglas: {
+    construccion: {
+      fuertes: ['construccion', 'obra', 'obras', 'edific', 'vial', 'ingenieria civil'],
+      excluir: ['obra social', 'obras sociales', 'mano de obra'],
+    },
+    agro: {
+      fuertes: ['agricol', 'ganader', 'cereal', 'grano', 'oleagin', 'hacienda', 'tambo', 'cultivo', 'semilla', 'forraj', 'frutic'],
+    },
+    industria: {
+      fuertes: ['fabricacion', 'elaboracion', 'manufactur', 'industri'],
+    },
+    comercio: {
+      fuertes: ['por mayor', 'mayorista', 'por menor', 'minorista', 'comercializ', 'distribu', 'comercio'],
+      debiles: ['venta'],
+      excluir: ['distribucion de energia', 'distribucion de gas', 'distribucion electrica', 'distribucion de agua'],
+    },
+    servicios: {
+      fuertes: [],
+      debiles: ['servicio'],
+    },
+  },
+};
