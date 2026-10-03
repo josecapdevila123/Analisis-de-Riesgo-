@@ -8,6 +8,7 @@ import { CATEGORY_LABEL, DIMENSIONS, RiskCategory, SEVERIDAD_LABEL, categoryOf }
 import { RiskDimension, SeveridadRiesgo } from '../extraction/schemas';
 import { stripRiskConclusion } from '../risk/summary';
 import { RATIO_ASSUMPTIONS } from '../risk/policy';
+import { RATIO_BLOCKS as SHARED_RATIO_BLOCKS, RatioKind as SharedRatioKind } from '../ratios/blocks';
 
 // ============================================================================
 // Informe de riesgo para comité (jsPDF). Orden: portada con el dictamen →
@@ -87,7 +88,7 @@ const fmtNum = (v: number, dec = 2) => v.toLocaleString('es-AR', { minimumFracti
 const money = (v: number | null | undefined, currency = 'ARS') =>
   v === null || v === undefined ? '-' : formatCurrencyThousands(v, currency);
 
-type RatioKind = 'x' | 'pct' | 'dias' | 'monto';
+type RatioKind = SharedRatioKind;
 const fmtRatio = (v: number | null | undefined, kind: RatioKind): string => {
   if (v === null || v === undefined || !Number.isFinite(v)) return '-';
   if (kind === 'pct') return `${fmtNum(v * 100, 1)}%`;
@@ -106,44 +107,8 @@ const fmtRatioVariation = (actual: number | null, anterior: number | null, varia
   return `${variacionPct > 0 ? '+' : ''}${fmtNum(variacionPct, 1)}%`;
 };
 
-const RATIO_BLOCKS: Array<{ bloque: string; ratios: Array<{ key: RatioKey; name: string; kind: RatioKind }> }> = [
-  { bloque: 'Capacidad de pago', ratios: [
-    { key: 'dscr', name: 'DSCR (servicio de deuda)', kind: 'x' },
-    { key: 'deuda_neta_ebitda', name: 'Deuda neta / EBITDA', kind: 'x' },
-    { key: 'cobertura_intereses', name: 'Cobertura de intereses', kind: 'x' },
-    { key: 'calidad_ganancia', name: 'Calidad de la ganancia (FCO / EBITDA)', kind: 'pct' },
-  ]},
-  { bloque: 'Liquidez', ratios: [
-    { key: 'liquidez_corriente', name: 'Liquidez corriente', kind: 'x' },
-    { key: 'liquidez_acida', name: 'Prueba ácida', kind: 'x' },
-    { key: 'liquidez_inmediata', name: 'Liquidez inmediata', kind: 'x' },
-    { key: 'capital_de_trabajo', name: 'Capital de trabajo', kind: 'monto' },
-    { key: 'ktno', name: 'KTNO', kind: 'monto' },
-  ]},
-  { bloque: 'Rentabilidad', ratios: [
-    { key: 'margen_bruto', name: 'Margen bruto', kind: 'pct' },
-    { key: 'margen_ebitda', name: 'Margen EBITDA', kind: 'pct' },
-    { key: 'margen_neto', name: 'Margen neto', kind: 'pct' },
-    { key: 'roe', name: 'ROE', kind: 'pct' },
-    { key: 'roa', name: 'ROA', kind: 'pct' },
-  ]},
-  { bloque: 'Endeudamiento y solvencia', ratios: [
-    { key: 'deuda_bancaria_total', name: 'Deuda bancaria total', kind: 'monto' },
-    { key: 'deuda_ebitda', name: 'Deuda / EBITDA', kind: 'x' },
-    { key: 'deuda_financiera_pn', name: 'Deuda financiera / PN', kind: 'x' },
-    { key: 'endeudamiento', name: 'Pasivo / PN', kind: 'x' },
-    { key: 'solvencia', name: 'Solvencia (PN / pasivo)', kind: 'x' },
-    { key: 'deuda_dias_ventas', name: 'Deuda en días de venta', kind: 'dias' },
-    { key: 'autofinanciamiento', name: 'Autofinanciamiento', kind: 'pct' },
-  ]},
-  { bloque: 'Eficiencia operativa', ratios: [
-    { key: 'dias_de_cobro', name: 'Días de cobro', kind: 'dias' },
-    { key: 'dias_de_stock', name: 'Días de stock', kind: 'dias' },
-    { key: 'dias_de_pago', name: 'Días de pago', kind: 'dias' },
-    { key: 'ciclo_conversion_caja', name: 'Ciclo de conversión de caja', kind: 'dias' },
-    { key: 'indice_inmovilizacion', name: 'Índice de inmovilización', kind: 'pct' },
-  ]},
-];
+// Bloques compartidos con la app (src/features/ratios/blocks.ts).
+const RATIO_BLOCKS = SHARED_RATIO_BLOCKS;
 
 // ---------- Página ----------
 

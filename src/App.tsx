@@ -61,6 +61,8 @@ import { BiBankLogo } from './components/BiBankLogo';
 import { CompanyHistoryView } from './components/CompanyHistoryView';
 import { NosisDebtBars } from './components/NosisDebtBars';
 import { ExecutiveSummaryView } from './components/ExecutiveSummaryView';
+import { BalanceRatiosView } from './components/BalanceRatiosView';
+import { RATIO_BLOCKS as SHARED_RATIO_BLOCKS } from './features/ratios/blocks';
 import { RiskOpinionView } from './components/RiskOpinionView';
 import { RiskPolicyView } from './components/RiskPolicyView';
 import { runRiskAssessment } from './features/risk/assessment';
@@ -503,44 +505,11 @@ export default function App() {
 
   type RatioFormat = 'pct' | 'num';
   type RatioSpec = { key: RatioKey; name: string; format: RatioFormat };
-  const RATIO_BLOCKS: Array<{ bloque: string; ratios: RatioSpec[] }> = [
-    { bloque: 'Capacidad de Pago', ratios: [
-      { key: 'dscr', name: 'DSCR (servicio de deuda)', format: 'num' },
-      { key: 'deuda_neta_ebitda', name: 'Deuda Neta / EBITDA', format: 'num' },
-      { key: 'cobertura_intereses', name: 'Cobertura Intereses', format: 'num' },
-      { key: 'calidad_ganancia', name: 'Calidad de la Ganancia (FCO / EBITDA)', format: 'pct' },
-    ]},
-    { bloque: 'Liquidez', ratios: [
-      { key: 'liquidez_corriente', name: 'Liquidez Corriente', format: 'num' },
-      { key: 'liquidez_acida', name: 'Prueba Ácida', format: 'num' },
-      { key: 'liquidez_inmediata', name: 'Liquidez Inmediata', format: 'num' },
-      { key: 'capital_de_trabajo', name: 'Capital de Trabajo', format: 'num' },
-      { key: 'ktno', name: 'KTNO', format: 'num' },
-    ]},
-    { bloque: 'Rentabilidad', ratios: [
-      { key: 'margen_bruto', name: 'Margen Bruto', format: 'pct' },
-      { key: 'margen_ebitda', name: 'Margen EBITDA', format: 'pct' },
-      { key: 'margen_neto', name: 'Margen Neto', format: 'pct' },
-      { key: 'roe', name: 'ROE', format: 'pct' },
-      { key: 'roa', name: 'ROA', format: 'pct' },
-    ]},
-    { bloque: 'Endeudamiento', ratios: [
-      { key: 'endeudamiento', name: 'Endeudamiento Total', format: 'num' },
-      { key: 'solvencia', name: 'Solvencia', format: 'num' },
-      { key: 'deuda_ebitda', name: 'Deuda / EBITDA', format: 'num' },
-      { key: 'deuda_bancaria_total', name: 'Deuda Bancaria Total', format: 'num' },
-      { key: 'deuda_dias_ventas', name: 'Deuda en Días de Venta', format: 'num' },
-      { key: 'deuda_financiera_pn', name: 'Deuda Financiera / PN', format: 'num' },
-      { key: 'autofinanciamiento', name: 'Autofinanciamiento', format: 'pct' },
-    ]},
-    { bloque: 'Eficiencia Operativa', ratios: [
-      { key: 'dias_de_cobro', name: 'Días de Cobro', format: 'num' },
-      { key: 'dias_de_pago', name: 'Días de Pago', format: 'num' },
-      { key: 'dias_de_stock', name: 'Días de Stock', format: 'num' },
-      { key: 'ciclo_conversion_caja', name: 'Ciclo Conv. Caja', format: 'num' },
-      { key: 'indice_inmovilizacion', name: 'Índice Inmovilización', format: 'pct' },
-    ]},
-  ];
+  // Bloques compartidos (src/features/ratios/blocks.ts); el layout de impresión usa formato simple.
+  const RATIO_BLOCKS: Array<{ bloque: string; ratios: RatioSpec[] }> = SHARED_RATIO_BLOCKS.map(b => ({
+    bloque: b.bloque,
+    ratios: b.ratios.map(r => ({ key: r.key, name: r.name, format: r.kind === 'pct' ? 'pct' : 'num' })),
+  }));
 
   const formatRatioCell = (value: number | null, format: RatioFormat): number | string | null => {
     if (value === null || !Number.isFinite(value)) return null;
@@ -1087,13 +1056,8 @@ export default function App() {
 
                     {activeTab === 'Balance y Ratios' && (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <ComparativeView extraction={activeResult.extraction} ratios={activeResult.ratios} />
+                        {activeResult.ratios && <BalanceRatiosView extraction={activeResult.extraction} ratios={activeResult.ratios} />}
                         {isEditing && activeResult.extraction && <SourceDataEditor extraction={activeResult.extraction} />}
-                        {RATIO_BLOCKS.map(block => {
-                          const rows = buildBlockRows(block);
-                          if (rows.length === 0) return null;
-                          return <Table key={block.bloque} title={block.bloque} data={rows} />;
-                        })}
                       </div>
                     )}
 
