@@ -84,7 +84,7 @@ import { runFinancialBlockExtraction, runSectorDocExtraction } from './features/
 import { SectorBanner } from './components/SectorBanner';
 import { PerfilAviso } from './components/PerfilAviso';
 import { EditorBloques, PROSA } from './components/EditorBloques';
-import { BloqueTexto, historiaABloques, markdownABloques } from './features/textos/bloques';
+import { BloqueTexto, bloquesAMarkdown, historiaABloques, markdownABloques } from './features/textos/bloques';
 import { PanelCalculo, ProveedorCalculo } from './components/CalculoRatio';
 import { explicarRatio } from './features/ratios/explicacion';
 import { HistorialEmpresas } from './components/HistorialEmpresas';
@@ -1664,10 +1664,11 @@ export default function App() {
                   <div className="mb-12 print:break-before-page">
                     <h2 className="text-2xl font-bold mb-6 border-b border-gray-300 pb-2 print:break-after-avoid uppercase tracking-tight">Mercado</h2>
 
-                    {activeResult.marketAnalysis ? (
+                    {/* Si el analista editó el mercado, se imprime su versión (igual que el PDF). */}
+                    {(activeResult.mercadoEditado ? bloquesAMarkdown(activeResult.mercadoEditado) : activeResult.marketAnalysis) ? (
                       <div className="w-full bg-white border border-ink/15 p-10 font-sans text-left leading-relaxed">
-                        <div className="prose prose-sm md:prose-base max-w-none print:max-w-none print:w-full prose-headings:font-display prose-headings:font-semibold prose-headings:text-gray-800 prose-p:text-left prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline">
-                          <ReactMarkdown>{activeResult.marketAnalysis}</ReactMarkdown>
+                        <div className={PROSA}>
+                          <ReactMarkdown>{activeResult.mercadoEditado ? bloquesAMarkdown(activeResult.mercadoEditado) : activeResult.marketAnalysis}</ReactMarkdown>
                         </div>
                       </div>
                     ) : (
