@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronDown, FileUp, Loader2, Pencil, Trash2, XCircle } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, FileUp, Loader2, Pencil, Trash2, X, XCircle } from 'lucide-react';
 import { AddRowButton, EditableBoolean, EditableNumber, EditableSelect, EditableText, EditProvider, Path, RemoveRowButton, setIn } from '../features/editing/editing';
 import { Prechequeo } from '../features/risk/prechequeo';
 import { CATEGORIAS_HECHO, DocumentoSectorial, documentoDesactualizado, ESTADOS_OBRA, ExtraccionDocumento, MAX_DOCUMENTOS_POR_CASO, ReporteMora, TENENCIAS, TipoDocumentoSectorial, TRAMOS_MORA } from '../features/sectorDocs/tipos';
@@ -7,7 +7,7 @@ import { AnalisisDocumento, KpiDoc } from '../features/sectorDocs/analisis';
 import { DOCUMENTOS_SECTORIALES, TipoDocumento } from '../features/risk/policy';
 import { RatioStatus } from '../features/ratios/calculations';
 import { RatioKind } from '../features/ratios/blocks';
-import { StatusBadge, Status } from './riskColors';
+import { STATUS, StatusBadge, Status } from './riskColors';
 import { RatioLink } from './CalculoRatio';
 
 // Pre-chequeo antes de generar la opinión (todos los rubros). No bloquea nada:
@@ -66,7 +66,7 @@ export function PreChequeo(p: Props) {
             <ul className="space-y-1.5 text-sm">
               {pc.base.map(i => (
                 <li key={i.id} className="flex items-center gap-2">
-                  {i.ok ? <CheckCircle2 className="w-4 h-4 text-ink shrink-0" /> : <XCircle className="w-4 h-4 text-ink/35 shrink-0" />}
+                  <MarcaBase ok={i.ok} />
                   <span className={i.ok ? '' : 'text-ink/60'}>{i.label}</span>
                   <span className="text-xs text-ink/45">· {i.detalle}</span>
                 </li>
@@ -367,5 +367,20 @@ function EditorReporteMora({ reporte, onCambio }: { reporte: ReporteMora; onCamb
         )}
       </div>
     </EditProvider>
+  );
+}
+
+// Documentación base: lo que está, en el verde del manual (círculo verde con tilde
+// negro, como los botones principales, para que tenga contraste sobre blanco);
+// lo que falta, en el rojo de estado crítico.
+function MarcaBase({ ok }: { ok: boolean }) {
+  return ok ? (
+    <span className="w-4 h-4 rounded-full bg-brand-green flex items-center justify-center shrink-0" aria-label="Cargado">
+      <Check className="w-3 h-3 text-ink" strokeWidth={3} />
+    </span>
+  ) : (
+    <span className="w-4 h-4 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: STATUS.critical }} aria-label="Falta">
+      <X className="w-3 h-3 text-white" strokeWidth={3} />
+    </span>
   );
 }
