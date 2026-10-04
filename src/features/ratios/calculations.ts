@@ -163,7 +163,7 @@ const RATIO_KEYS: RatioKey[] = [
 // Ratio cuyo valor se usa para el semáforo de otro, según el perfil:
 // agro mide el margen EBITDA con el promedio de 2 ejercicios; construcción, la
 // liquidez corriente sin anticipos de clientes.
-const valorParaSemaforo = (key: RatioKey, perfil: PerfilEfectivo): RatioKey => {
+export const valorParaSemaforo = (key: RatioKey, perfil: PerfilEfectivo): RatioKey => {
   if (key === 'margen_ebitda' && perfil.ajustes.margenEbitdaPromedio) return 'margen_ebitda_promedio';
   if (key === 'liquidez_corriente' && perfil.ajustes.excluirAnticiposClientes) return 'liquidez_corriente_sin_anticipos';
   return key;
