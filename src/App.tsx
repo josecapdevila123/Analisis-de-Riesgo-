@@ -83,6 +83,8 @@ import { DocumentoSectorial, ExtraccionDocumento, fechaDeExtraccion, MAX_DOCUMEN
 import { runFinancialBlockExtraction, runSectorDocExtraction } from './features/extraction/geminiClient';
 import { SectorBanner } from './components/SectorBanner';
 import { PerfilAviso } from './components/PerfilAviso';
+import { PanelCalculo, ProveedorCalculo } from './components/CalculoRatio';
+import { explicarRatio } from './features/ratios/explicacion';
 import { HistorialEmpresas } from './components/HistorialEmpresas';
 import { stripRiskConclusion } from './features/risk/summary';
 import { CATEGORY_LABEL } from './features/risk/score';
@@ -290,6 +292,16 @@ export default function App() {
       return { ...storedResult, extraction };
     }
   }, [storedResult, isEditing, draft, perfilVista, sectorActivo, documentosActivos]);
+
+  // Panel de cálculo de un ratio (se abre al hacer clic en su nombre).
+  const [calculoAbierto, setCalculoAbierto] = useState<RatioKey | null>(null);
+  useEffect(() => setCalculoAbierto(null), [activeResultId]);
+  const explicacionAbierta = useMemo(
+    () => (calculoAbierto && activeResult?.extraction && activeResult.ratios
+      ? explicarRatio(calculoAbierto, { extraction: activeResult.extraction, ratios: activeResult.ratios, perfil: perfilVista, documentos: documentosActivos.filter(d => d.estado === 'ok') })
+      : null),
+    [calculoAbierto, activeResult, perfilVista, documentosActivos],
+  );
 
   // Pre-chequeo antes de la opinión (todos los rubros), con el rubro confirmado.
   const prechequeo = useMemo(
@@ -883,6 +895,7 @@ export default function App() {
       </div>
 
       {/* Main Content */}
+      <ProveedorCalculo value={setCalculoAbierto}>
       <main className="relative flex-1 flex flex-col overflow-hidden bg-canvas print:hidden">
         {/* Página de política de riesgos, por encima del contenido */}
         {showPolicy && (
@@ -1362,6 +1375,8 @@ export default function App() {
         </div>
 
       </main>
+      </ProveedorCalculo>
+      <PanelCalculo explicacion={explicacionAbierta} onCerrar={() => setCalculoAbierto(null)} editadoEl={activeResult?.editedAt} />
       {/* Print Layout */}
       {activeResult && activeResult.extraction && (
         <div className="hidden print:block bg-white text-black w-full font-sans">

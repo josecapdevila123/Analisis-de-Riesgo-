@@ -8,6 +8,7 @@ import { DOCUMENTOS_SECTORIALES, TipoDocumento } from '../features/risk/policy';
 import { RatioStatus } from '../features/ratios/calculations';
 import { RatioKind } from '../features/ratios/blocks';
 import { StatusBadge, Status } from './riskColors';
+import { RatioLink } from './CalculoRatio';
 
 // Pre-chequeo antes de generar la opinión (todos los rubros). No bloquea nada:
 // muestra qué hay, qué falta y qué no cierra. Desde acá se cargan los
@@ -149,7 +150,7 @@ export function PreChequeo(p: Props) {
             <ul className="space-y-1 text-sm">
               {pc.kpis.map(k => (
                 <li key={k.key} className="flex items-center justify-between gap-3">
-                  <span className="text-ink/75">{k.label}</span>
+                  <RatioLink ratioKey={k.key} className="text-ink/75">{k.label}</RatioLink>
                   <span className="inline-flex items-center gap-2 tabular-nums">
                     {fmtKpi(k.actual, k.kind)}
                     {k.noAplica ? <span className="text-[10px] uppercase text-ink/45">No aplica</span>
