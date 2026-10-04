@@ -108,9 +108,10 @@ interface RiskOpinionViewProps {
   sector?: SectorCaso | null;
   mora?: FuenteMora | null;
   documentos?: DocumentoSectorial[] | null;
+  onVerPolitica?: () => void;
 }
 
-export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGenerate, editedAt, porton, sector, mora, documentos }: RiskOpinionViewProps) {
+export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGenerate, editedAt, porton, sector, mora, documentos, onVerPolitica }: RiskOpinionViewProps) {
   const generateButton = (label: string) => (
     <button
       onClick={onGenerate}
@@ -179,6 +180,7 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
         sector={assessment.sector ?? sector}
         mora={mora}
         documentos={documentos}
+        onVerPolitica={onVerPolitica}
       />
       {porton.opinion === 'desactualizada' && (
         <div className="border-l-4 border-brand-blue bg-brand-blue/5 p-3 text-sm text-ink flex items-center justify-between gap-4">

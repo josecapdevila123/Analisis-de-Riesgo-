@@ -1256,7 +1256,6 @@ export default function App() {
                             documentos={documentosActivos.filter(d => d.estado === 'ok')}
                             cabecera={porton.rubroConfirmado ? (
                               <PerfilAviso
-                                compacto
                                 onVerPolitica={() => setShowPolicy(true)}
                                 perfil={perfilVista}
                                 sector={porton.opinion === 'vigente' && activeResult.riskAssessment?.sector ? activeResult.riskAssessment.sector : sectorActivo}
@@ -1394,6 +1393,7 @@ export default function App() {
                           ? indicadoresFinancieros(activeResult.extraction, documentosActivos.filter(d => d.estado === 'ok'), { disponibilidades: disponibilidadesActuales(activeResult.extraction) }).mora
                           : null}
                         documentos={documentosActivos}
+                        onVerPolitica={() => setShowPolicy(true)}
                       />
                     </div>
                   )}
