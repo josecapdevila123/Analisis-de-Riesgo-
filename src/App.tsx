@@ -24,9 +24,7 @@ import {
   AlertTriangle,
   X,
   ChevronRight,
-  LogOut,
-  ChevronsLeft,
-  ChevronsRight,
+  Menu,
   CornerDownRight,
   Pencil,
   Save
@@ -84,6 +82,7 @@ import { runFinancialBlockExtraction, runSectorDocExtraction } from './features/
 import { SectorBanner } from './components/SectorBanner';
 import { PerfilAviso } from './components/PerfilAviso';
 import { EditorBloques, PROSA } from './components/EditorBloques';
+import { MenuUsuario } from './components/MenuUsuario';
 import { BloqueTexto, bloquesAMarkdown, historiaABloques, markdownABloques } from './features/textos/bloques';
 import { PanelCalculo, ProveedorCalculo } from './components/CalculoRatio';
 import { explicarRatio } from './features/ratios/explicacion';
@@ -786,25 +785,92 @@ export default function App() {
 
   return (
     <EditProvider value={editContext}>
-    <div className="flex h-screen bg-white text-ink font-sans selection:bg-ink selection:text-white">
+    <div className="flex flex-col h-screen bg-white text-ink font-sans selection:bg-ink selection:text-white">
+      {/* Header de todo el ancho (como Gmail): el logo no se mueve al contraer el sidebar. */}
+      <header className="h-16 shrink-0 border-b border-ink/10 flex items-center justify-between gap-6 pl-3 pr-6 bg-white print:hidden">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            onClick={() => setIsHistorySidebarOpen(!isHistorySidebarOpen)}
+            className="w-10 h-10 rounded-full flex items-center justify-center text-ink/70 hover:text-ink hover:bg-ink/5 transition"
+            title={isHistorySidebarOpen ? 'Contraer barra lateral' : 'Expandir barra lateral'}
+            aria-label={isHistorySidebarOpen ? 'Contraer barra lateral' : 'Expandir barra lateral'}
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <button onClick={() => setActiveResultId(null)} className="shrink-0 hover:opacity-80 transition-opacity" title="Ir al inicio">
+            <BiBankLogo variant="dark" className="h-8 w-auto" />
+          </button>
+          {/* Dentro de un caso dice qué empresa estás mirando (con aire para la zona de seguridad del logo). */}
+          {activeResult && (
+            <div className="flex items-center gap-4 min-w-0 ml-5">
+              <span className="h-8 w-px bg-ink/15 shrink-0" />
+              <div className="flex flex-col min-w-0">
+                <span className="text-sm font-semibold truncate">
+                  {activeResult.extraction?.company_profile?.name || (activeResult.status === 'error' ? 'Caso con error' : 'Caso en proceso')}
+                </span>
+                {activeResult.extraction?.company_profile?.cuit && (
+                  <span className="text-[11px] text-ink/50 tabular-nums">CUIT {activeResult.extraction.company_profile.cuit}</span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={() => setShowPolicy(v => !v)}
+              aria-label="Política de riesgos"
+              aria-pressed={showPolicy}
+              title="Política de riesgos"
+              className={cn(
+                "w-9 h-9 rounded-full border flex items-center justify-center transition-all",
+                showPolicy ? "bg-ink border-ink text-white" : "border-ink/20 text-ink hover:border-ink"
+              )}
+            >
+              <Scale className="w-4 h-4" />
+            </button>
+            {activeResult?.extraction && (activeResult.status === 'completed' || activeResult.status === 'completed_partial') && (
+              isEditing ? (
+                <>
+                  <button onClick={cancelEditing} disabled={isSavingEdits} className="flex items-center gap-2 px-4 py-2 rounded-full border border-ink/20 text-xs font-semibold text-ink hover:border-ink transition-all disabled:opacity-50">
+                    <X className="w-4 h-4" />
+                    Cancelar
+                  </button>
+                  <button onClick={saveEdits} disabled={isSavingEdits} className="flex items-center gap-2 px-4 py-2 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition disabled:opacity-50">
+                    {isSavingEdits ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Guardar cambios
+                  </button>
+                </>
+              ) : (
+                <button onClick={startEditing} className="flex items-center gap-2 px-4 py-2 rounded-full border border-ink/20 text-xs font-semibold text-ink hover:border-ink transition-all disabled:opacity-50">
+                  <Pencil className="w-4 h-4" />
+                  Editar valores
+                </button>
+              )
+            )}
+            {/* Dentro de un caso la acción principal (verde) es el informe; "Nuevo caso" vive en el sidebar. */}
+            {activeResult?.extraction && (activeResult.status === 'completed' || activeResult.status === 'completed_partial') && !isEditing && (
+              <button
+                onClick={() => porton.puedeExportarPdf && generatePDF(activeResult)}
+                disabled={!porton.puedeExportarPdf}
+                title={porton.motivo ?? 'Portada con el dictamen, el resumen y el detalle de cada sección'}
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Informe para comité
+              </button>
+            )}
+            {user && <MenuUsuario user={user} onLogout={handleLogout} />}
+          </div>
+      </header>
+
+      <div className="flex flex-1 min-h-0">
       {/* Sidebar */}
       <div className="relative flex shrink-0 print:hidden">
-      {/* Manija en el borde para contraer / expandir la barra */}
-      <button
-        onClick={() => setIsHistorySidebarOpen(!isHistorySidebarOpen)}
-        className="absolute -right-3.5 top-[26px] z-40 w-7 h-7 rounded-full bg-white border border-ink/15 shadow-sm flex items-center justify-center text-ink/70 hover:text-ink hover:border-ink/40 hover:shadow transition"
-        title={isHistorySidebarOpen ? 'Contraer barra lateral' : 'Expandir barra lateral'}
-        aria-label={isHistorySidebarOpen ? 'Contraer barra lateral' : 'Expandir barra lateral'}
-      >
-        {isHistorySidebarOpen ? <ChevronsLeft className="w-4 h-4" /> : <ChevronsRight className="w-4 h-4" />}
-      </button>
       <aside className={cn("flex flex-col bg-ink text-white transition-[width] duration-300 relative overflow-hidden", isHistorySidebarOpen ? "w-72" : "w-16")}>
-        {/* Contraída: franja con el isologo y accesos con ícono */}
+        {/* Contraída: accesos con ícono (el logo está en el header) */}
         {!isHistorySidebarOpen && (
           <div className="w-16 flex flex-col items-center h-full py-5 gap-2">
-            <button onClick={() => setActiveResultId(null)} className="mb-4 hover:opacity-80 transition-opacity" title="Ir al inicio">
-              <BiBankLogo variant="light" layout="icon" className="h-9 w-9" />
-            </button>
             {user && (
               <button
                 onClick={nuevoCaso}
@@ -826,44 +892,16 @@ export default function App() {
           </div>
         )}
         <div className={cn("w-72 flex flex-col h-full transition-opacity duration-300 overflow-hidden", isHistorySidebarOpen ? "opacity-100" : "hidden")}>
-          <div className="px-6 pt-6 pb-5 border-b border-white/15">
-            <div className="flex items-center justify-between mb-6">
-              <button onClick={() => setActiveResultId(null)} className="hover:opacity-80 transition-opacity" title="Ir al inicio">
-                <BiBankLogo variant="light" className="h-9 w-auto" />
+          {isAuthReady && !user && (
+            <div className="px-6 pt-5">
+              <button
+                onClick={handleLogin}
+                className="w-full py-2.5 px-4 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition flex items-center justify-center gap-2"
+              >
+                Iniciar sesión con Google
               </button>
             </div>
-            <p className="font-display text-lg font-semibold leading-tight">Análisis de riesgo</p>
-            <p className="text-[11px] text-white/50 mt-0.5">Banca Empresas · Legajo técnico</p>
-
-            {isAuthReady && (
-              <div className="mt-5 pt-4 border-t border-white/15">
-                {user ? (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      {user.photoURL ? (
-                        <img src={user.photoURL} alt="Profile" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
-                      ) : (
-                        <div className="w-6 h-6 rounded-full bg-brand-green text-ink flex items-center justify-center text-[10px] font-bold">
-                          {user.email?.[0].toUpperCase()}
-                        </div>
-                      )}
-                      <span className="text-xs truncate text-white/70">{user.email}</span>
-                    </div>
-                    <button onClick={handleLogout} className="p-1 text-white/50 hover:text-white hover:bg-white/10 rounded transition-colors" title="Cerrar sesión">
-                      <LogOut className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleLogin}
-                    className="w-full py-2.5 px-4 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition flex items-center justify-center gap-2"
-                  >
-                    Iniciar sesión con Google
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          )}
 
           {/* Fijo arriba del historial: la lista se desplaza, el botón no. */}
           {user && (
@@ -909,72 +947,10 @@ export default function App() {
       <main className="relative flex-1 flex flex-col overflow-hidden bg-canvas print:hidden">
         {/* Página de política de riesgos, por encima del contenido */}
         {showPolicy && (
-          <div className="absolute inset-x-0 top-16 bottom-0 z-30 overflow-y-auto bg-canvas p-8">
+          <div className="absolute inset-0 z-30 overflow-y-auto bg-canvas p-8">
             <RiskPolicyView onClose={() => setShowPolicy(false)} />
           </div>
         )}
-        {/* Header */}
-        <header className="h-16 border-b border-ink/10 flex items-center justify-between px-8 bg-white">
-          {/* En la home no repite el título; dentro de un caso dice qué empresa estás mirando. */}
-          <div className="flex items-center gap-4 min-w-0">
-            {activeResult && (
-              <div className="flex flex-col min-w-0">
-                <span className="text-sm font-semibold truncate">
-                  {activeResult.extraction?.company_profile?.name || (activeResult.status === 'error' ? 'Caso con error' : 'Caso en proceso')}
-                </span>
-                {activeResult.extraction?.company_profile?.cuit && (
-                  <span className="text-[11px] text-ink/50 tabular-nums">CUIT {activeResult.extraction.company_profile.cuit}</span>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowPolicy(v => !v)}
-              aria-label="Política de riesgos"
-              aria-pressed={showPolicy}
-              title="Política de riesgos"
-              className={cn(
-                "w-9 h-9 rounded-full border flex items-center justify-center transition-all",
-                showPolicy ? "bg-ink border-ink text-white" : "border-ink/20 text-ink hover:border-ink"
-              )}
-            >
-              <Scale className="w-4 h-4" />
-            </button>
-            {activeResult?.extraction && (activeResult.status === 'completed' || activeResult.status === 'completed_partial') && (
-              isEditing ? (
-                <>
-                  <button onClick={cancelEditing} disabled={isSavingEdits} className="flex items-center gap-2 px-4 py-2 rounded-full border border-ink/20 text-xs font-semibold text-ink hover:border-ink transition-all disabled:opacity-50">
-                    <X className="w-4 h-4" />
-                    Cancelar
-                  </button>
-                  <button onClick={saveEdits} disabled={isSavingEdits} className="flex items-center gap-2 px-4 py-2 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition disabled:opacity-50">
-                    {isSavingEdits ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Guardar cambios
-                  </button>
-                </>
-              ) : (
-                <button onClick={startEditing} className="flex items-center gap-2 px-4 py-2 rounded-full border border-ink/20 text-xs font-semibold text-ink hover:border-ink transition-all disabled:opacity-50">
-                  <Pencil className="w-4 h-4" />
-                  Editar valores
-                </button>
-              )
-            )}
-            {/* Dentro de un caso la acción principal (verde) es el informe; "Nuevo caso" vive en el sidebar. */}
-            {activeResult?.extraction && (activeResult.status === 'completed' || activeResult.status === 'completed_partial') && !isEditing && (
-              <button
-                onClick={() => porton.puedeExportarPdf && generatePDF(activeResult)}
-                disabled={!porton.puedeExportarPdf}
-                title={porton.motivo ?? 'Portada con el dictamen, el resumen y el detalle de cada sección'}
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <FileSpreadsheet className="w-4 h-4" />
-                Informe para comité
-              </button>
-            )}
-          </div>
-        </header>
 
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-8">
@@ -1429,6 +1405,7 @@ export default function App() {
 
       </main>
       </ProveedorCalculo>
+      </div>
       <PanelCalculo explicacion={explicacionAbierta} onCerrar={() => setCalculoAbierto(null)} editadoEl={activeResult?.editedAt} />
       {/* Print Layout */}
       {activeResult && activeResult.extraction && (
