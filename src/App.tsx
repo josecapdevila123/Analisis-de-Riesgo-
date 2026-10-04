@@ -896,10 +896,8 @@ export default function App() {
         )}
         {/* Header */}
         <header className="h-16 border-b border-ink/10 flex items-center justify-between px-8 bg-white">
-          {/* En la home no repite el título; dentro de un caso dice qué empresa estás mirando.
-              Con las pestañas al costado (md+), arranca donde arranca el texto del dashboard:
-              pestañas 16rem + separación 2rem + padding de las tarjetas 25px. */}
-          <div className="flex items-center gap-4 min-w-0 md:pl-[calc(18rem+25px)]">
+          {/* En la home no repite el título; dentro de un caso dice qué empresa estás mirando. */}
+          <div className="flex items-center gap-4 min-w-0">
             {activeResult && (
               <div className="flex flex-col min-w-0">
                 <span className="text-sm font-semibold truncate">
