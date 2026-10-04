@@ -40,7 +40,7 @@ export const fmtResultado = (v: number | null, kind: RatioKind) =>
   v === null ? 'sin dato'
     : kind === 'pct' ? `${(v * 100).toLocaleString('es-AR', { maximumFractionDigits: 1 })}%`
     : kind === 'dias' ? `${Math.round(v)} días`
-    : kind === 'monto' ? `$ ${Math.round(v).toLocaleString('es-AR')}`
+    : kind === 'monto' ? `${v < 0 ? '−' : ''}$ ${Math.abs(Math.round(v)).toLocaleString('es-AR')}`
     : `${v.toLocaleString('es-AR', { maximumFractionDigits: 2 })}x`;
 
 const fmtUmbral = (u: RatioThreshold) => {

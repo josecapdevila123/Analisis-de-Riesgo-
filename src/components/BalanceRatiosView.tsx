@@ -56,7 +56,6 @@ const ER: Section[] = [
   { lines: [
     { concepto: 'Ventas netas', get: y => y.estado_resultados.ventas_netas, path: ['estado_resultados', 'ventas_netas'], total: true },
     { concepto: 'Resultado bruto', get: y => y.estado_resultados.resultado_bruto, path: ['estado_resultados', 'resultado_bruto'] },
-    { concepto: 'EBITDA', get: () => null, calculado: 'ebitda' },
     { concepto: 'Resultado ordinario', get: y => y.estado_resultados.resultado_ordinario, path: ['estado_resultados', 'resultado_ordinario'] },
     { concepto: 'Resultados financieros y por tenencia', get: y => y.estado_resultados.resultado_financiero_y_tenencia, path: ['estado_resultados', 'resultado_financiero_y_tenencia'], nullable: true },
     { concepto: 'Resultado del ejercicio', get: y => y.estado_resultados.resultado_neto, path: ['estado_resultados', 'resultado_neto'], total: true },
