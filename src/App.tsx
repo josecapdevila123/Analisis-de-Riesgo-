@@ -237,6 +237,12 @@ export default function App() {
     removeCase,
   } = useCases(user, isAuthReady);
 
+  // Primer nombre de la cuenta de Google; si no tiene, la parte del mail antes de la @.
+  const nombreUsuario = (() => {
+    const crudo = user?.displayName?.trim().split(/\s+/)[0] || user?.email?.split('@')[0];
+    return crudo ? crudo.charAt(0).toUpperCase() + crudo.slice(1).toLowerCase() : null;
+  })();
+
   const storedResult = results.find(r => r.id === activeResultId);
 
   // Modo edición: el borrador reemplaza la extracción y todo lo derivado
@@ -962,10 +968,10 @@ export default function App() {
           {!activeResultId && currentFiles.length === 0 ? (
             <div className="max-w-2xl mx-auto mt-12">
               <div className="mb-12 text-center">
-                <h2 className="text-5xl font-display font-semibold mb-4 tracking-tight">Análisis de riesgo</h2>
-                <p className="text-sm opacity-60 max-w-md mx-auto">
-                  Análisis de estados contables, ventas post balance, estructura societaria, informes de deuda
-                </p>
+                {user && nombreUsuario && (
+                  <p className="text-sm text-ink/55 mb-2">Bienvenido, <span className="font-semibold text-ink">{nombreUsuario}</span></p>
+                )}
+                <h2 className="text-5xl font-display font-semibold tracking-tight">Análisis de riesgo</h2>
               </div>
 
               {/* Zona de carga: tarjeta sólida (sin punteado); al arrastrar se marca en verde */}
@@ -999,7 +1005,7 @@ export default function App() {
                     ) : (
                       <>
                         <p className="font-display text-lg font-semibold">Cargá la documentación del cliente</p>
-                        <p className="text-sm text-ink/55 mt-0.5">Arrastrá los archivos a esta tarjeta o elegilos desde tu computadora. PDF, imágenes, Excel o CSV.</p>
+                        <p className="text-sm text-ink/55 mt-0.5">Arrastralos acá o elegilos. PDF, imágenes, Excel o CSV.</p>
                       </>
                     )}
                   </div>
@@ -1035,15 +1041,14 @@ export default function App() {
 
               <div className="mt-12 grid grid-cols-3 gap-8">
                 {[
-                  { label: "Análisis", value: "Ratios y capacidad de pago", detail: "27 indicadores calculados en código" },
-                  { label: "Cruce", value: "Balance vs. Nosis", detail: "Situación BCRA, cheques y deuda en el sistema" },
-                  { label: "Opinión", value: "Riesgo de 1 a 100", detail: "Lectura integral con política de riesgos" }
+                  { label: "Análisis", value: "Ratios y capacidad de pago" },
+                  { label: "Cruce", value: "Balance vs. Nosis" },
+                  { label: "Opinión", value: "Riesgo de 1 a 100" }
                 ].map((stat, i) => (
                   <div key={i} className="relative pt-4 border-t border-ink/15">
                     <span className="absolute -top-px left-0 w-8 h-0.5 bg-brand-green" />
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-ink/50 mb-1">{stat.label}</p>
                     <p className="text-sm font-semibold text-ink">{stat.value}</p>
-                    <p className="text-xs text-ink/50 mt-0.5">{stat.detail}</p>
                   </div>
                 ))}
               </div>
