@@ -7,9 +7,7 @@ import { CATEGORY_LABEL, SEVERIDAD_LABEL } from '../features/risk/score';
 import { stripRiskConclusion } from '../features/risk/summary';
 import { formatCurrencyThousands } from '../lib/utils';
 import { CATEGORY_STATUS, SEVERIDAD_STATUS, STATUS, Status, StatusBadge } from './riskColors';
-import { PerfilAviso } from './PerfilAviso';
-import { indicadoresFinancieros } from '../features/ratios/financieras';
-import { disponibilidadesActuales } from '../features/ratios/calculations';
+import { RatioLink } from './CalculoRatio';
 import { PerfilEfectivo, RATIO_LABEL_CORTO } from '../features/risk/policy';
 import { EstadoPorton } from '../features/risk/porton';
 import { RATIO_BLOCKS, RatioKind, SECTOR_KPI_SPECS } from '../features/ratios/blocks';
@@ -130,14 +128,6 @@ export function ExecutiveSummaryView({ result, riskBusy, onOpenTab, onGeneratePd
 
   return (
     <div className="@container space-y-5 font-sans">
-      {porton.rubroConfirmado && (
-        <PerfilAviso
-          perfil={perfil}
-          sector={porton.opinion === 'vigente' && result.riskAssessment?.sector ? result.riskAssessment.sector : result.sector}
-          mora={perfil.modelo === 'financiera' ? indicadoresFinancieros(extraction, (result.documentosSectoriales ?? []).filter(d => d.estado === 'ok'), { disponibilidades: disponibilidadesActuales(extraction) }).mora : null}
-          documentos={result.documentosSectoriales}
-        />
-      )}
       {porton.opinion === 'desactualizada' && (
         <p className="text-xs font-medium text-ink bg-brand-blue/10 px-3 py-2">{porton.motivo}</p>
       )}
@@ -226,7 +216,7 @@ export function ExecutiveSummaryView({ result, riskBusy, onOpenTab, onGeneratePd
             const st = porton.puedeVerSemaforos && !noAplica && r?.status ? RATIO_STATUS[r.status] : null;
             return (
               <div key={key} className="p-3 border border-ink/10" style={st ? { borderLeft: `3px solid ${STATUS[st.status]}` } : undefined}>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-ink/50 mb-1">{label}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-ink/50 mb-1"><RatioLink ratioKey={key}>{label}</RatioLink></p>
                 <p className="text-lg font-semibold tabular-nums text-ink leading-tight">{fmtRatio(r?.actual, kind)}</p>
                 <div className="mt-1 flex items-center justify-between gap-2">
                   <span className="text-[11px] text-ink/45 tabular-nums">Ant. {fmtRatio(r?.anterior, kind)}</span>

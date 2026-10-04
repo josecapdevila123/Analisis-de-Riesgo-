@@ -6,6 +6,8 @@ import { bloquesDelPerfil, RatioKind } from '../features/ratios/blocks';
 import { PerfilEfectivo, perfilEfectivo } from '../features/risk/policy';
 import { DocumentoSectorial } from '../features/sectorDocs/tipos';
 import { FinancieraDatos } from './FinancieraDatos';
+import { RatioLink } from './CalculoRatio';
+import { fmtNumero, Insumos, insumosDelEjercicio, Termino } from '../features/ratios/definiciones';
 import { EditableNumber, EditableText, Path, useEdit } from '../features/editing/editing';
 import { STATUS, Status, StatusBadge } from './riskColors';
 
@@ -54,7 +56,6 @@ const ER: Section[] = [
   { lines: [
     { concepto: 'Ventas netas', get: y => y.estado_resultados.ventas_netas, path: ['estado_resultados', 'ventas_netas'], total: true },
     { concepto: 'Resultado bruto', get: y => y.estado_resultados.resultado_bruto, path: ['estado_resultados', 'resultado_bruto'] },
-    { concepto: 'EBITDA', get: () => null, calculado: 'ebitda' },
     { concepto: 'Resultado ordinario', get: y => y.estado_resultados.resultado_ordinario, path: ['estado_resultados', 'resultado_ordinario'] },
     { concepto: 'Resultados financieros y por tenencia', get: y => y.estado_resultados.resultado_financiero_y_tenencia, path: ['estado_resultados', 'resultado_financiero_y_tenencia'], nullable: true },
     { concepto: 'Resultado del ejercicio', get: y => y.estado_resultados.resultado_neto, path: ['estado_resultados', 'resultado_neto'], total: true },
@@ -215,17 +216,85 @@ function Statement({ title, sections, extraction, ratios, base, baseLabel, verti
 
 // ---------- Vista ----------
 
-export function BalanceRatiosView({ extraction, ratios, perfil = perfilEfectivo('generico'), pendienteRubro = false, documentos = [] }: {
+// ---------- Datos de entrada: las cifras del balance que usan los ratios ----------
+
+const ENTRADAS: Array<{ k: keyof Insumos; grupo: string }> = [
+  { k: 'ac', grupo: 'Balance' }, { k: 'pc', grupo: 'Balance' }, { k: 'anc', grupo: 'Balance' }, { k: 'activo', grupo: 'Balance' },
+  { k: 'pasivo', grupo: 'Balance' }, { k: 'pn', grupo: 'Balance' }, { k: 'bc', grupo: 'Balance' },
+  { k: 'disponibilidades', grupo: 'Renglones del balance' }, { k: 'creditos', grupo: 'Renglones del balance' },
+  { k: 'deudasComerciales', grupo: 'Renglones del balance' }, { k: 'anticiposTotal', grupo: 'Renglones del balance' },
+  { k: 'deudaCorriente', grupo: 'Deuda bancaria' }, { k: 'deudaNoCorriente', grupo: 'Deuda bancaria' },
+  { k: 'ventas', grupo: 'Resultados' }, { k: 'costo', grupo: 'Resultados' }, { k: 'rb', grupo: 'Resultados' },
+  { k: 'gfin', grupo: 'Resultados' }, { k: 'impuestos', grupo: 'Resultados' }, { k: 'rn', grupo: 'Resultados' },
+  { k: 'depreciacion', grupo: 'Flujo de efectivo' }, { k: 'pagosBdU', grupo: 'Flujo de efectivo' }, { k: 'flujoOperativo', grupo: 'Flujo de efectivo' },
+];
+
+function DatosEntrada({ extraction }: { extraction: RawExtraction }) {
+  const act = insumosDelEjercicio(extraction.ejercicio_actual, extraction.deuda_bancaria_actual.corriente.total, extraction.deuda_bancaria_actual.no_corriente.total);
+  const ant = extraction.ejercicio_anterior && extraction.deuda_bancaria_anterior
+    ? insumosDelEjercicio(extraction.ejercicio_anterior, extraction.deuda_bancaria_anterior.corriente.total, extraction.deuda_bancaria_anterior.no_corriente.total)
+    : null;
+  const grupos = [...new Set(ENTRADAS.map(e => e.grupo))];
+  const anioAct = extraction.company_profile.anio_actual || 'Actual';
+  const anioAnt = extraction.company_profile.anio_anterior || 'Anterior';
+  return (
+    <section className="bg-white border border-ink/15">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[11px] uppercase tracking-wider text-ink/50">
+              <th className="text-left font-semibold px-5 py-2.5">Dato</th>
+              <th className="text-right font-semibold px-3 py-2.5">{anioAnt}</th>
+              <th className="text-right font-semibold px-3 py-2.5">{anioAct}</th>
+              <th className="text-left font-semibold px-5 py-2.5">De dónde sale</th>
+            </tr>
+          </thead>
+          {grupos.map(g => (
+            <tbody key={g}>
+              <tr><td colSpan={4} className="!text-left px-5 pt-3 pb-1 text-[10px] font-bold uppercase tracking-[0.15em] text-ink/40">{g}</td></tr>
+              {ENTRADAS.filter(e => e.grupo === g).map(({ k }) => {
+                const a = act[k] as Termino;
+                const p = ant ? (ant[k] as Termino) : null;
+                const rg = a.renglones;
+                return (
+                  <tr key={String(k)} className="align-top hover:bg-ink/[0.02]">
+                    <td className="!text-left px-5 py-2 text-body">{a.label}</td>
+                    <td className="px-3 py-2 tabular-nums text-ink/60">{p ? fmtNumero(p.valor) : '—'}</td>
+                    <td className="px-3 py-2 tabular-nums font-medium">{fmtNumero(a.valor)}</td>
+                    <td className="!text-left px-5 py-2 text-[11px] text-ink/50 max-w-[360px]">
+                      {a.origen}{a.nota ? ` · ${a.nota}` : ''}
+                      {rg && (rg.incluidos.length > 0 || rg.excluidos.length > 0) && (
+                        <span className="block mt-0.5">
+                          {rg.incluidos.map(r => `+ ${r.rubro} (${fmtNumero(r.monto)})`).join(' · ')}
+                          {rg.excluidos.length > 0 && <span className="text-ink/35"> · excluidos: {rg.excluidos.map(r => `${r.rubro} (${fmtNumero(r.monto)})`).join(', ')}</span>}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          ))}
+        </table>
+      </div>
+    </section>
+  );
+}
+
+export function BalanceRatiosView({ extraction, ratios, perfil = perfilEfectivo('generico'), pendienteRubro = false, documentos = [], cabecera = null }: {
   extraction: RawExtraction;
   ratios: ComputedRatios;
   // Perfil del rubro (umbrales, "no aplica" y KPIs prioritarios) y portón.
   perfil?: PerfilEfectivo;
   pendienteRubro?: boolean;
   documentos?: DocumentoSectorial[];
+  // Recuadro "Perfil de evaluación" (con qué criterios se miden estos ratios).
+  cabecera?: React.ReactNode;
 }) {
   const { editing } = useEdit();
-  const [verticalSelected, setVertical] = useState(false);
-  const vertical = verticalSelected && !editing; // en edición se editan valores absolutos
+  const [modo, setModo] = useState<'absolutos' | 'vertical' | 'entrada'>('absolutos');
+  const vertical = modo === 'vertical' && !editing; // en edición se editan valores absolutos
+  const entrada = modo === 'entrada' && !editing;
   const anioAct = extraction.company_profile.anio_actual || 'Actual';
   const anioAnt = extraction.company_profile.anio_anterior || 'Anterior';
 
@@ -241,6 +310,7 @@ export function BalanceRatiosView({ extraction, ratios, perfil = perfilEfectivo(
 
   return (
     <div className="@container space-y-6 font-sans">
+      {cabecera}
       {/* Estados contables */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -248,16 +318,18 @@ export function BalanceRatiosView({ extraction, ratios, perfil = perfilEfectivo(
           <p className="text-xs text-ink/50">
             {vertical
               ? 'Análisis vertical: cada rubro como % del activo total (que es igual a pasivo + patrimonio) y cada resultado como % de las ventas. La variación muestra cuánto cambió el peso, en puntos porcentuales.'
-              : 'Valores en miles de pesos.'}
+              : entrada
+                ? 'Las cifras del balance que alimentan todos los ratios. Son las únicas que hace falta verificar contra el documento; los ratios salen de acá.'
+                : 'Valores en miles de pesos.'}
           </p>
         </div>
         <div className="inline-flex rounded-full border border-ink/15 bg-white p-1">
-          {([['Valores absolutos', false], ['Análisis vertical', true]] as const).map(([label, v]) => (
+          {([['Valores absolutos', 'absolutos'], ['Análisis vertical', 'vertical'], ['Datos de entrada', 'entrada']] as const).map(([label, m]) => (
             <button
               key={label}
-              onClick={() => setVertical(v)}
-              disabled={editing && v}
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition ${vertical === v ? 'bg-ink text-white' : 'text-ink/60 hover:text-ink disabled:opacity-40'}`}
+              onClick={() => setModo(m)}
+              disabled={editing && m !== 'absolutos'}
+              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition ${(editing ? 'absolutos' : modo) === m ? 'bg-ink text-white' : 'text-ink/60 hover:text-ink disabled:opacity-40'}`}
             >
               {label}
             </button>
@@ -265,8 +337,10 @@ export function BalanceRatiosView({ extraction, ratios, perfil = perfilEfectivo(
         </div>
       </div>
 
+      {entrada && <DatosEntrada extraction={extraction} />}
+
       {/* Dos columnas solo con espacio suficiente; misma altura para que los bordes inferiores coincidan */}
-      <div className="grid grid-cols-1 @5xl:grid-cols-2 gap-6 items-stretch">
+      <div className={`grid grid-cols-1 @5xl:grid-cols-2 gap-6 items-stretch ${entrada ? 'hidden' : ''}`}>
         <Statement
           title="Situación patrimonial"
           sections={ESP}
@@ -384,7 +458,7 @@ export function BalanceRatiosView({ extraction, ratios, perfil = perfilEfectivo(
                     return (
                       <tr key={spec.key} className="hover:bg-ink/[0.02]" title={spec.formula}>
                         <td className="!text-left px-5 py-2.5" style={st ? { boxShadow: `inset 3px 0 0 ${STATUS[st.status]}` } : undefined}>
-                          <span className="text-ink">{spec.name}</span>
+                          <RatioLink ratioKey={spec.key} className="text-ink">{spec.name}</RatioLink>
                           <span className="block text-[11px] text-ink/40 leading-snug">{spec.formula}</span>
                         </td>
                         <td className="px-2 py-2.5 tabular-nums text-ink/60 whitespace-nowrap">{fmtRatio(r.anterior, spec.kind)}</td>

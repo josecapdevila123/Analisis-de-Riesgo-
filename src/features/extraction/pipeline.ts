@@ -4,6 +4,7 @@ import {
   runVerification,
   runMarketAnalysis,
   runCompanyHistory,
+  runFinancialBlockExtraction,
 } from './geminiClient';
 import { CompanyHistory, RawExtraction, VerificationResult } from './schemas';
 import { ComputedRatios, computeRatios } from '../ratios/calculations';
@@ -88,15 +89,23 @@ export async function runPipeline(
     .then(history => { callbacks?.onCompanyHistory?.(history); return history; })
     .catch(err => { callbacks?.onCompanyHistory?.(null, toError(err)); return null; });
 
+  // Etapa 4c — si el rubro sugerido es Financiera, el bloque financiero de los
+  // EECC se extrae ahora, con los mismos archivos (en paralelo a la verificación),
+  // así el analista no tiene que volver a subir el balance. Si falla, el caso
+  // sigue: el bloque se puede extraer después desde el pre-chequeo.
+  const sugeridoRubro = sugerirRubro(extraction).rubro;
+  const bloquePromise = sugeridoRubro === 'financiera'
+    ? runFinancialBlockExtraction(files).catch(err => { console.error('Bloque financiero:', err); return null; })
+    : Promise.resolve(null);
+
   // Etapa 3 — verificación + síntesis cualitativa (Gemini)
   callbacks?.onStateChange?.('verifying');
   let verification: VerificationResult | null = null;
   let finalState: CaseState = 'completed';
   try {
     // Todavía no hay rubro confirmado: se pasa el sugerido, marcado como tal.
-    const sugerido = sugerirRubro(extraction).rubro;
     verification = await runVerification(files, extraction, ratios, inconsistencias, crossCheck,
-      sugerido ? { rubro: SECTOR_PROFILES[sugerido].label, confirmado: false } : null);
+      sugeridoRubro ? { rubro: SECTOR_PROFILES[sugeridoRubro].label, confirmado: false } : null);
   } catch {
     finalState = 'completed_partial';
   }
@@ -106,10 +115,13 @@ export async function runPipeline(
   // con el rubro confirmado y a pedido del analista (botón en el caso).
   void Promise.all([marketPromise, historyPromise]);
 
+  const bloque = await bloquePromise;
+  if (bloque) extraction = { ...extraction, extraccion_financiera: bloque };
+
   return {
     state: finalState,
     extraction,
-    ratios,
+    ratios: bloque ? computeRatios(extraction) : ratios,
     inconsistencias,
     crossCheck,
     verification,

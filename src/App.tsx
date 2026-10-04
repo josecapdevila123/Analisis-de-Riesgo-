@@ -75,13 +75,17 @@ import { AnalysisFlow } from './components/AnalysisFlow';
 import { RiskPolicyView } from './components/RiskPolicyView';
 import { runRiskAssessment } from './features/risk/assessment';
 import { confirmarRubro, estadoPorton, perfilDelCaso, sectorInicial } from './features/risk/porton';
-import { RubroDisponible, SubSegmento, TipoDocumento } from './features/risk/policy';
+import { RubroDisponible, SECTOR_PROFILES, SubSegmento, TipoDocumento } from './features/risk/policy';
 import { PreChequeo } from './components/PreChequeo';
 import { armarPrechequeo } from './features/risk/prechequeo';
 import { indicadoresFinancieros } from './features/ratios/financieras';
 import { DocumentoSectorial, ExtraccionDocumento, fechaDeExtraccion, MAX_DOCUMENTOS_POR_CASO } from './features/sectorDocs/tipos';
 import { runFinancialBlockExtraction, runSectorDocExtraction } from './features/extraction/geminiClient';
 import { SectorBanner } from './components/SectorBanner';
+import { PerfilAviso } from './components/PerfilAviso';
+import { PanelCalculo, ProveedorCalculo } from './components/CalculoRatio';
+import { explicarRatio } from './features/ratios/explicacion';
+import { HistorialEmpresas } from './components/HistorialEmpresas';
 import { stripRiskConclusion } from './features/risk/summary';
 import { CATEGORY_LABEL } from './features/risk/score';
 
@@ -236,6 +240,12 @@ export default function App() {
     removeCase,
   } = useCases(user, isAuthReady);
 
+  // Primer nombre de la cuenta de Google; si no tiene, la parte del mail antes de la @.
+  const nombreUsuario = (() => {
+    const crudo = user?.displayName?.trim().split(/\s+/)[0] || user?.email?.split('@')[0];
+    return crudo ? crudo.charAt(0).toUpperCase() + crudo.slice(1).toLowerCase() : null;
+  })();
+
   const storedResult = results.find(r => r.id === activeResultId);
 
   // Modo edición: el borrador reemplaza la extracción y todo lo derivado
@@ -282,6 +292,27 @@ export default function App() {
       return { ...storedResult, extraction };
     }
   }, [storedResult, isEditing, draft, perfilVista, sectorActivo, documentosActivos]);
+
+  // Panel de cálculo de un ratio (se abre al hacer clic en su nombre).
+  const [calculoAbierto, setCalculoAbierto] = useState<RatioKey | null>(null);
+  useEffect(() => setCalculoAbierto(null), [activeResultId]);
+  const explicacionAbierta = useMemo(
+    () => (calculoAbierto && activeResult?.extraction && activeResult.ratios
+      ? explicarRatio(calculoAbierto, { extraction: activeResult.extraction, ratios: activeResult.ratios, perfil: perfilVista, documentos: documentosActivos.filter(d => d.estado === 'ok') })
+      : null),
+    [calculoAbierto, activeResult, perfilVista, documentosActivos],
+  );
+
+  // Pre-chequeo antes de la opinión (todos los rubros), con el rubro confirmado.
+  const prechequeo = useMemo(
+    () => (porton.rubroConfirmado && activeResult?.extraction
+      ? armarPrechequeo({
+          extraction: activeResult.extraction, ratios: activeResult.ratios, crossCheck: activeResult.crossCheck,
+          inconsistencias: activeResult.inconsistencias, documentos: documentosActivos, fechaCaso: activeResult.timestamp, perfil: perfilVista,
+        })
+      : null),
+    [porton.rubroConfirmado, activeResult, documentosActivos, perfilVista],
+  );
 
   const startEditing = () => {
     if (!storedResult?.extraction) return;
@@ -396,6 +427,7 @@ export default function App() {
     setIsProcessing(true);
     setProcessingStage('processing');
     const newId = crypto.randomUUID();
+    archivosSesion.current.set(newId, currentFiles);
     const newResult: ExtractionResult = {
       id: newId,
       timestamp: new Date().toISOString(),
@@ -522,6 +554,9 @@ export default function App() {
       const sector = confirmarRubro(base, rubro, motivo, nota, user?.email ?? null, new Date(), subsegmento);
       setResults(prev => prev.map(r => (r.id === result.id ? { ...r, sector } : r)));
       saveCaseSector(result.id, sector);
+      if (SECTOR_PROFILES[rubro].modelo === 'financiera' && !result.extraction?.extraccion_financiera && archivosSesion.current.has(result.id)) {
+        extraerBloqueFinanciero(result, null);
+      }
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
     }
@@ -529,6 +564,9 @@ export default function App() {
 
   // ---------- Documentos sectoriales (declarados por el cliente) ----------
   const [extrayendoBloqueId, setExtrayendoBloqueId] = useState<string | null>(null);
+  // Archivos subidos en esta sesión, por caso (solo en memoria: se pierden al
+  // recargar). Permiten extraer el bloque financiero sin volver a subir el balance.
+  const archivosSesion = useRef(new Map<string, UploadedFile[]>());
 
   // Lista vigente de documentos por caso, fuera del ciclo de render: así la
   // lista que se guarda es siempre la misma que se muestra (nunca una vacía).
@@ -577,11 +615,14 @@ export default function App() {
 
   // Bloque financiero de los EECC a demanda: la app no guarda los archivos, así
   // que se vuelve a subir el balance y se lee solo ese bloque.
-  const extraerBloqueFinanciero = async (result: ExtractionResult, files: File[]) => {
+  // files = null: usa el balance que se subió en esta sesión.
+  const extraerBloqueFinanciero = async (result: ExtractionResult, files: File[] | null) => {
     if (!result.extraction) return;
+    const enSesion = archivosSesion.current.get(result.id);
+    if (!files && !enSesion) return;
     setExtrayendoBloqueId(result.id);
     try {
-      const bloque = await runFinancialBlockExtraction(await Promise.all(files.map(leerArchivo)));
+      const bloque = await runFinancialBlockExtraction(files ? await Promise.all(files.map(leerArchivo)) : enSesion!);
       const extraction = { ...result.extraction, extraccion_financiera: bloque };
       const editedAt = new Date().toISOString();
       const edits = { extraction, ratios: computeRatios(extraction), inconsistencias: runSanityChecks(extraction), crossCheck: runCrossCheck(extraction) };
@@ -767,7 +808,7 @@ export default function App() {
             <button
               onClick={() => setIsHistorySidebarOpen(true)}
               className="w-10 h-10 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition"
-              title={`Historial de casos (${results.length})`}
+              title="Historial de casos"
             >
               <History className="w-4 h-4" />
             </button>
@@ -834,41 +875,12 @@ export default function App() {
                 Historial de casos
               </h2>
 
-              <div className="space-y-1.5">
-                {results.length === 0 ? (
-                  <p className="text-xs text-white/40 italic py-4">No hay casos recientes.</p>
-                ) : (
-                  results.map((result) => (
-                    <div
-                      key={result.id}
-                      onClick={() => setActiveResultId(result.id)}
-                      className={cn(
-                        "w-full text-left pl-3 pr-3 py-2.5 border-l-2 transition-all group relative overflow-hidden cursor-pointer",
-                        activeResultId === result.id
-                          ? "border-brand-green bg-white/10 text-white"
-                          : "border-transparent text-white/75 hover:bg-white/5 hover:text-white"
-                      )}
-                    >
-                      <div className="flex justify-between items-start mb-0.5">
-                        <span className="text-[10px] font-mono text-white/45">{new Date(result.timestamp).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
-                        {result.status === 'completed' && <CheckCircle2 className="w-3 h-3 text-brand-green" />}
-                        {result.status === 'processing' && <Loader2 className="w-3 h-3 animate-spin" />}
-                        {result.status === 'error' && <AlertCircle className="w-3 h-3 text-red-400" />}
-                      </div>
-                      <p className="text-xs font-medium truncate pr-6">
-                        {result.extraction?.company_profile?.name || `${result.fileNames.length} archivo(s)`}
-                      </p>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); removeResult(result.id); }}
-                        className="absolute right-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-white/60 hover:text-red-400"
-                        title="Eliminar caso"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
+              <HistorialEmpresas
+                results={results}
+                activeId={activeResultId}
+                onAbrir={setActiveResultId}
+                onEliminar={removeResult}
+              />
             </div>
           </div>
 
@@ -883,6 +895,7 @@ export default function App() {
       </div>
 
       {/* Main Content */}
+      <ProveedorCalculo value={setCalculoAbierto}>
       <main className="relative flex-1 flex flex-col overflow-hidden bg-canvas print:hidden">
         {/* Página de política de riesgos, por encima del contenido */}
         {showPolicy && (
@@ -940,10 +953,10 @@ export default function App() {
           {!activeResultId && currentFiles.length === 0 ? (
             <div className="max-w-2xl mx-auto mt-12">
               <div className="mb-12 text-center">
-                <h2 className="text-5xl font-display font-semibold mb-4 tracking-tight">Análisis de riesgo</h2>
-                <p className="text-sm opacity-60 max-w-md mx-auto">
-                  Análisis de estados contables, ventas post balance, estructura societaria, informes de deuda
-                </p>
+                {user && nombreUsuario && (
+                  <p className="text-sm text-ink/55 mb-2">Bienvenido, <span className="font-semibold text-ink">{nombreUsuario}</span></p>
+                )}
+                <h2 className="text-5xl font-display font-semibold tracking-tight">Análisis de riesgo</h2>
               </div>
 
               {/* Zona de carga: tarjeta sólida (sin punteado); al arrastrar se marca en verde */}
@@ -977,7 +990,7 @@ export default function App() {
                     ) : (
                       <>
                         <p className="font-display text-lg font-semibold">Cargá la documentación del cliente</p>
-                        <p className="text-sm text-ink/55 mt-0.5">Arrastrá los archivos a esta tarjeta o elegilos desde tu computadora. PDF, imágenes, Excel o CSV.</p>
+                        <p className="text-sm text-ink/55 mt-0.5">Arrastralos acá o elegilos. PDF, imágenes, Excel o CSV.</p>
                       </>
                     )}
                   </div>
@@ -1013,15 +1026,14 @@ export default function App() {
 
               <div className="mt-12 grid grid-cols-3 gap-8">
                 {[
-                  { label: "Análisis", value: "Ratios y capacidad de pago", detail: "27 indicadores calculados en código" },
-                  { label: "Cruce", value: "Balance vs. Nosis", detail: "Situación BCRA, cheques y deuda en el sistema" },
-                  { label: "Opinión", value: "Riesgo de 1 a 100", detail: "Lectura integral con política de riesgos" }
+                  { label: "Análisis", value: "Ratios y capacidad de pago" },
+                  { label: "Cruce", value: "Balance vs. Nosis" },
+                  { label: "Opinión", value: "Riesgo de 1 a 100" }
                 ].map((stat, i) => (
                   <div key={i} className="relative pt-4 border-t border-ink/15">
                     <span className="absolute -top-px left-0 w-8 h-0.5 bg-brand-green" />
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-ink/50 mb-1">{stat.label}</p>
                     <p className="text-sm font-semibold text-ink">{stat.value}</p>
-                    <p className="text-xs text-ink/50 mt-0.5">{stat.detail}</p>
                   </div>
                 ))}
               </div>
@@ -1156,24 +1168,12 @@ export default function App() {
                       bloqueadoPorEdicion={isEditing}
                       onConfirmar={(rubro, motivo, nota, sub) => storedResult && confirmSector(storedResult, rubro, motivo, nota, sub)}
                       onGenerarOpinion={() => storedResult && generateRiskAssessment(storedResult)}
+                      prechequeo={prechequeo ? {
+                        faltantes: prechequeo.base.filter(i => !i.ok).length + prechequeo.documentosRubro.filter(d => d.recomendado && d.cargados.length === 0).length + (prechequeo.bloqueFinanciero.requerido && !prechequeo.bloqueFinanciero.cargado ? 1 : 0),
+                        alertas: prechequeo.alertas.length,
+                      } : null}
+                      onVerPrechequeo={() => setActiveTab('Opinión de riesgos')}
                     />
-                  )}
-                  {porton.rubroConfirmado && storedResult?.extraction && activeResult.ratios && (
-                    <div className="@container">
-                      <PreChequeo
-                        prechequeo={armarPrechequeo({
-                          extraction: activeResult.extraction, ratios: activeResult.ratios, crossCheck: activeResult.crossCheck,
-                          inconsistencias: activeResult.inconsistencias, documentos: documentosActivos, fechaCaso: activeResult.timestamp, perfil: perfilVista,
-                        })}
-                        documentos={documentosActivos}
-                        fechaCaso={activeResult.timestamp}
-                        extrayendoBloque={extrayendoBloqueId === activeResult.id}
-                        onCargarDocumento={(tipo, file) => storedResult && cargarDocumento(storedResult, tipo, file)}
-                        onEditarDocumento={(id, ext) => storedResult && editarDocumento(storedResult, id, ext)}
-                        onBorrarDocumento={id => storedResult && borrarDocumento(storedResult, id)}
-                        onExtraerBloque={files => storedResult && extraerBloqueFinanciero(storedResult, files)}
-                      />
-                    </div>
                   )}
                 <div className="flex flex-col md:flex-row gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                   {/* Sidebar */}
@@ -1241,7 +1241,27 @@ export default function App() {
 
                     {activeTab === 'Balance y Ratios' && (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        {activeResult.ratios && <BalanceRatiosView extraction={activeResult.extraction} ratios={activeResult.ratios} perfil={perfilVista} pendienteRubro={!porton.rubroConfirmado} documentos={documentosActivos.filter(d => d.estado === 'ok')} />}
+                        {activeResult.ratios && (
+                          <BalanceRatiosView
+                            extraction={activeResult.extraction}
+                            ratios={activeResult.ratios}
+                            perfil={perfilVista}
+                            pendienteRubro={!porton.rubroConfirmado}
+                            documentos={documentosActivos.filter(d => d.estado === 'ok')}
+                            cabecera={porton.rubroConfirmado ? (
+                              <PerfilAviso
+                                compacto
+                                onVerPolitica={() => setShowPolicy(true)}
+                                perfil={perfilVista}
+                                sector={porton.opinion === 'vigente' && activeResult.riskAssessment?.sector ? activeResult.riskAssessment.sector : sectorActivo}
+                                mora={perfilVista.modelo === 'financiera' && activeResult.extraction
+                                  ? indicadoresFinancieros(activeResult.extraction, documentosActivos.filter(d => d.estado === 'ok'), { disponibilidades: disponibilidadesActuales(activeResult.extraction) }).mora
+                                  : null}
+                                documentos={documentosActivos}
+                              />
+                            ) : null}
+                          />
+                        )}
                         {isEditing && activeResult.extraction && <SourceDataEditor extraction={activeResult.extraction} />}
                       </div>
                     )}
@@ -1314,7 +1334,22 @@ export default function App() {
                   )}
 
                   {activeTab === 'Opinión de riesgos' && (
-                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+                      {prechequeo && storedResult && (
+                        <div className="@container">
+                          <PreChequeo
+                            prechequeo={prechequeo}
+                            documentos={documentosActivos}
+                            fechaCaso={activeResult.timestamp}
+                            extrayendoBloque={extrayendoBloqueId === activeResult.id}
+                            balanceEnSesion={archivosSesion.current.has(activeResult.id)}
+                            onCargarDocumento={(tipo, file) => cargarDocumento(storedResult, tipo, file)}
+                            onEditarDocumento={(id, ext) => editarDocumento(storedResult, id, ext)}
+                            onBorrarDocumento={id => borrarDocumento(storedResult, id)}
+                            onExtraerBloque={files => extraerBloqueFinanciero(storedResult, files)}
+                          />
+                        </div>
+                      )}
                       <RiskOpinionView
                         assessment={activeResult.riskAssessment ?? null}
                         isGenerating={riskBusyId === activeResult.id}
@@ -1340,6 +1375,8 @@ export default function App() {
         </div>
 
       </main>
+      </ProveedorCalculo>
+      <PanelCalculo explicacion={explicacionAbierta} onCerrar={() => setCalculoAbierto(null)} editadoEl={activeResult?.editedAt} />
       {/* Print Layout */}
       {activeResult && activeResult.extraction && (
         <div className="hidden print:block bg-white text-black w-full font-sans">

@@ -8,6 +8,7 @@ import { DOCUMENTOS_SECTORIALES, TipoDocumento } from '../features/risk/policy';
 import { RatioStatus } from '../features/ratios/calculations';
 import { RatioKind } from '../features/ratios/blocks';
 import { StatusBadge, Status } from './riskColors';
+import { RatioLink } from './CalculoRatio';
 
 // Pre-chequeo antes de generar la opinión (todos los rubros). No bloquea nada:
 // muestra qué hay, qué falta y qué no cierra. Desde acá se cargan los
@@ -31,10 +32,12 @@ type Props = {
   documentos: DocumentoSectorial[];
   fechaCaso: string;
   extrayendoBloque: boolean;
+  // El balance de este caso se subió en esta sesión: se puede extraer sin volver a subirlo.
+  balanceEnSesion?: boolean;
   onCargarDocumento: (tipo: TipoDocumento, file: File) => void;
   onEditarDocumento: (id: string, extraccion: ExtraccionDocumento) => void;
   onBorrarDocumento: (id: string) => void;
-  onExtraerBloque: (files: File[]) => void;
+  onExtraerBloque: (files: File[] | null) => void;
 };
 
 export function PreChequeo(p: Props) {
@@ -84,9 +87,9 @@ export function PreChequeo(p: Props) {
                   <span>Bloque financiero del balance</span>
                   <input ref={balanceInput} type="file" accept=".pdf,.png,.jpg,.jpeg" multiple className="hidden"
                     onChange={e => { const fs = Array.from(e.target.files ?? []); if (fs.length) p.onExtraerBloque(fs); e.target.value = ''; }} />
-                  <button disabled={p.extrayendoBloque} onClick={() => balanceInput.current?.click()}
+                  <button disabled={p.extrayendoBloque} onClick={() => (p.balanceEnSesion ? p.onExtraerBloque(null) : balanceInput.current?.click())}
                     className="ml-auto inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-ink/20 text-xs font-semibold hover:border-ink disabled:opacity-50"
-                    title="La app no guarda los archivos: subí de nuevo el balance para leer el bloque financiero.">
+                    title={p.balanceEnSesion ? 'Usa el balance que subiste en esta sesión.' : 'La app no guarda los archivos: subí de nuevo el balance para leer el bloque financiero.'}>
                     {p.extrayendoBloque ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />}
                     {pc.bloqueFinanciero.cargado ? 'Volver a extraer' : 'Extraer datos financieros del balance'}
                   </button>
@@ -147,7 +150,7 @@ export function PreChequeo(p: Props) {
             <ul className="space-y-1 text-sm">
               {pc.kpis.map(k => (
                 <li key={k.key} className="flex items-center justify-between gap-3">
-                  <span className="text-ink/75">{k.label}</span>
+                  <RatioLink ratioKey={k.key} className="text-ink/75">{k.label}</RatioLink>
                   <span className="inline-flex items-center gap-2 tabular-nums">
                     {fmtKpi(k.actual, k.kind)}
                     {k.noAplica ? <span className="text-[10px] uppercase text-ink/45">No aplica</span>

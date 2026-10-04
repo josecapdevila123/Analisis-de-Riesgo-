@@ -34,6 +34,8 @@ export const RATIO_BLOCKS: Array<{ bloque: string; descripcion: string; ratios: 
     bloque: 'Rentabilidad',
     descripcion: 'Márgenes y retorno sobre patrimonio y activos.',
     ratios: [
+      // Indicador calculado (no es un renglón del estado de resultados).
+      { key: 'ebitda', name: 'EBITDA', kind: 'monto', formula: 'Resultado bruto + valuación de BdC + depreciación + inversiones permanentes − gastos de comercialización y administración' },
       { key: 'margen_bruto', name: 'Margen bruto', kind: 'pct', formula: 'Resultado bruto / ventas' },
       { key: 'margen_ebitda', name: 'Margen EBITDA', kind: 'pct', formula: 'EBITDA / ventas' },
       { key: 'margen_neto', name: 'Margen neto (rentabilidad s/ventas)', kind: 'pct', formula: 'Resultado neto / ventas' },

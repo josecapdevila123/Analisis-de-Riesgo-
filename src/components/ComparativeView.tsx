@@ -174,11 +174,6 @@ export function getComparativeTablesData(
       path_actual: ['ejercicio_actual', 'estado_resultados', 'resultado_bruto'],
     },
     {
-      concepto: 'EBITDA (Calculado)',
-      anio_anterior: ratios?.ebitda.anterior ?? null,
-      anio_actual: ratios?.ebitda.actual ?? null,
-    },
-    {
       concepto: 'Resultado Ordinario',
       anio_anterior: anteriorEr?.resultado_ordinario ?? null,
       anio_actual: actualEr?.resultado_ordinario ?? null,
