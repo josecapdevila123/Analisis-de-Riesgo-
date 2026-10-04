@@ -24,7 +24,6 @@ import {
   AlertTriangle,
   X,
   ChevronRight,
-  LogOut,
   ChevronsLeft,
   ChevronsRight,
   CornerDownRight,
@@ -84,6 +83,7 @@ import { runFinancialBlockExtraction, runSectorDocExtraction } from './features/
 import { SectorBanner } from './components/SectorBanner';
 import { PerfilAviso } from './components/PerfilAviso';
 import { EditorBloques, PROSA } from './components/EditorBloques';
+import { MenuUsuario } from './components/MenuUsuario';
 import { BloqueTexto, bloquesAMarkdown, historiaABloques, markdownABloques } from './features/textos/bloques';
 import { PanelCalculo, ProveedorCalculo } from './components/CalculoRatio';
 import { explicarRatio } from './features/ratios/explicacion';
@@ -835,33 +835,14 @@ export default function App() {
             <p className="font-display text-lg font-semibold leading-tight">Análisis de riesgo</p>
             <p className="text-[11px] text-white/50 mt-0.5">Banca Empresas · Legajo técnico</p>
 
-            {isAuthReady && (
-              <div className="mt-5 pt-4 border-t border-white/15">
-                {user ? (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      {user.photoURL ? (
-                        <img src={user.photoURL} alt="Profile" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
-                      ) : (
-                        <div className="w-6 h-6 rounded-full bg-brand-green text-ink flex items-center justify-center text-[10px] font-bold">
-                          {user.email?.[0].toUpperCase()}
-                        </div>
-                      )}
-                      <span className="text-xs truncate text-white/70">{user.email}</span>
-                    </div>
-                    <button onClick={handleLogout} className="p-1 text-white/50 hover:text-white hover:bg-white/10 rounded transition-colors" title="Cerrar sesión">
-                      <LogOut className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleLogin}
-                    className="w-full py-2.5 px-4 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition flex items-center justify-center gap-2"
-                  >
-                    Iniciar sesión con Google
-                  </button>
-                )}
-              </div>
+            {/* El usuario está a la derecha del header (como Gmail); acá solo el ingreso. */}
+            {isAuthReady && !user && (
+              <button
+                onClick={handleLogin}
+                className="mt-5 w-full py-2.5 px-4 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition flex items-center justify-center gap-2"
+              >
+                Iniciar sesión con Google
+              </button>
             )}
           </div>
 
@@ -973,6 +954,7 @@ export default function App() {
                 Informe para comité
               </button>
             )}
+            {user && <MenuUsuario user={user} onLogout={handleLogout} />}
           </div>
         </header>
 
