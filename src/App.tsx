@@ -898,6 +898,18 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowPolicy(v => !v)}
+              aria-label="Política de riesgos"
+              aria-pressed={showPolicy}
+              title="Política de riesgos"
+              className={cn(
+                "w-9 h-9 rounded-full border flex items-center justify-center transition-all",
+                showPolicy ? "bg-ink border-ink text-white" : "border-ink/20 text-ink hover:border-ink"
+              )}
+            >
+              <Scale className="w-4 h-4" />
+            </button>
             {activeResult?.extraction && (activeResult.status === 'completed' || activeResult.status === 'completed_partial') && (
               isEditing ? (
                 <>
@@ -917,18 +929,6 @@ export default function App() {
                 </button>
               )
             )}
-            <button
-              onClick={() => setShowPolicy(v => !v)}
-              aria-label="Política de riesgos"
-              aria-pressed={showPolicy}
-              title="Política de riesgos"
-              className={cn(
-                "w-9 h-9 rounded-full border flex items-center justify-center transition-all",
-                showPolicy ? "bg-ink border-ink text-white" : "border-ink/20 text-ink hover:border-ink"
-              )}
-            >
-              <Scale className="w-4 h-4" />
-            </button>
             <button
               onClick={() => { setCurrentFiles([]); setActiveResultId(null); setShowPolicy(false); }}
               className="flex items-center gap-2 px-4 py-2 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition disabled:opacity-50"
