@@ -915,11 +915,18 @@ export default function App() {
         )}
         {/* Header */}
         <header className="h-16 border-b border-ink/10 flex items-center justify-between px-8 bg-white">
-          <div className="flex items-center gap-4">
-            <div className="flex flex-col">
-              <span className="text-[10px] uppercase tracking-wider text-ink/45">Módulo</span>
-              <span className="text-sm font-semibold">Dashboard de riesgo</span>
-            </div>
+          {/* En la home no repite el título; dentro de un caso dice qué empresa estás mirando. */}
+          <div className="flex items-center gap-4 min-w-0">
+            {activeResult && (
+              <div className="flex flex-col min-w-0">
+                <span className="text-sm font-semibold truncate">
+                  {activeResult.extraction?.company_profile?.name || (activeResult.status === 'error' ? 'Caso con error' : 'Caso en proceso')}
+                </span>
+                {activeResult.extraction?.company_profile?.cuit && (
+                  <span className="text-[11px] text-ink/50 tabular-nums">CUIT {activeResult.extraction.company_profile.cuit}</span>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -972,10 +979,10 @@ export default function App() {
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-8">
           {!activeResultId && currentFiles.length === 0 ? (
-            <div className="max-w-2xl mx-auto mt-12">
-              <div className="mb-12 text-center">
+            <div className="max-w-2xl mx-auto mt-4">
+              <div className="mb-8 text-center">
                 {user && nombreUsuario && (
-                  <p className="text-sm text-ink/55 mb-2">Bienvenido, <span className="font-semibold text-ink">{nombreUsuario}</span></p>
+                  <p className="text-sm text-ink/55 mb-1">Bienvenido, <span className="font-semibold text-ink">{nombreUsuario}</span></p>
                 )}
                 <h2 className="text-5xl font-display font-semibold tracking-tight">Análisis de riesgo</h2>
               </div>
