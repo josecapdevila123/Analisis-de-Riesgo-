@@ -1237,6 +1237,8 @@ export default function App() {
                             documentos={documentosActivos.filter(d => d.estado === 'ok')}
                             cabecera={porton.rubroConfirmado ? (
                               <PerfilAviso
+                                compacto
+                                onVerPolitica={() => setShowPolicy(true)}
                                 perfil={perfilVista}
                                 sector={porton.opinion === 'vigente' && activeResult.riskAssessment?.sector ? activeResult.riskAssessment.sector : sectorActivo}
                                 mora={perfilVista.modelo === 'financiera' && activeResult.extraction

@@ -5,15 +5,35 @@ import { SectorCaso } from '../features/risk/porton';
 import type { FuenteMora } from '../features/ratios/financieras';
 import type { DocumentoSectorial } from '../features/sectorDocs/tipos';
 
-// Recuadro "Perfil de evaluación" (Resumen ejecutivo y Opinión de riesgos).
+// Recuadro "Perfil de evaluación": completo en la Opinión de riesgos; compacto en Balance y Ratios.
 // Generado por código desde la foto del perfil: no hay texto escrito a mano.
-export function PerfilAviso({ perfil, sector, mora, documentos }: {
+export function PerfilAviso({ perfil, sector, mora, documentos, compacto = false, onVerPolitica }: {
   perfil: PerfilEfectivo;
   sector: SectorCaso | null | undefined;
   mora?: FuenteMora | null;
   documentos?: DocumentoSectorial[] | null;
+  // Compacto (Balance y Ratios): solo el perfil y quién lo confirmó; el detalle está en la política.
+  compacto?: boolean;
+  onVerPolitica?: () => void;
 }) {
   const a = avisoPerfil(perfil, sector, { mora, documentos });
+  if (compacto) {
+    return (
+      <section className="bg-white border border-ink/15 border-l-4 border-l-brand-blue px-5 py-3 text-sm">
+        <p className="flex flex-wrap items-baseline gap-x-2">
+          <Scale className="w-4 h-4 self-center text-brand-blue" />
+          <strong className="font-semibold">{a.titulo}</strong>
+          {a.subsegmento && <span className="text-ink/60">{a.subsegmento}</span>}
+          {a.confirmacion && <span className="text-ink/60">{a.confirmacion}</span>}
+        </p>
+        <p className="text-xs text-ink/55 mt-1">
+          {onVerPolitica ? (
+            <>Revisá la <button onClick={onVerPolitica} className="underline underline-offset-2 hover:text-ink">política de riesgos</button> para más información.</>
+          ) : 'Revisá la política de riesgos para más información.'}
+        </p>
+      </section>
+    );
+  }
   return (
     <section className="bg-white border border-ink/15 border-l-4 border-l-brand-blue px-5 py-4 text-sm space-y-2">
       <p className="flex flex-wrap items-baseline gap-x-2">
