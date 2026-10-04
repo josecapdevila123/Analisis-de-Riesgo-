@@ -83,6 +83,7 @@ import { DocumentoSectorial, ExtraccionDocumento, fechaDeExtraccion, MAX_DOCUMEN
 import { runFinancialBlockExtraction, runSectorDocExtraction } from './features/extraction/geminiClient';
 import { SectorBanner } from './components/SectorBanner';
 import { PerfilAviso } from './components/PerfilAviso';
+import { HistorialEmpresas } from './components/HistorialEmpresas';
 import { stripRiskConclusion } from './features/risk/summary';
 import { CATEGORY_LABEL } from './features/risk/score';
 
@@ -795,7 +796,7 @@ export default function App() {
             <button
               onClick={() => setIsHistorySidebarOpen(true)}
               className="w-10 h-10 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition"
-              title={`Historial de casos (${results.length})`}
+              title="Historial de casos"
             >
               <History className="w-4 h-4" />
             </button>
@@ -862,41 +863,12 @@ export default function App() {
                 Historial de casos
               </h2>
 
-              <div className="space-y-1.5">
-                {results.length === 0 ? (
-                  <p className="text-xs text-white/40 italic py-4">No hay casos recientes.</p>
-                ) : (
-                  results.map((result) => (
-                    <div
-                      key={result.id}
-                      onClick={() => setActiveResultId(result.id)}
-                      className={cn(
-                        "w-full text-left pl-3 pr-3 py-2.5 border-l-2 transition-all group relative overflow-hidden cursor-pointer",
-                        activeResultId === result.id
-                          ? "border-brand-green bg-white/10 text-white"
-                          : "border-transparent text-white/75 hover:bg-white/5 hover:text-white"
-                      )}
-                    >
-                      <div className="flex justify-between items-start mb-0.5">
-                        <span className="text-[10px] font-mono text-white/45">{new Date(result.timestamp).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
-                        {result.status === 'completed' && <CheckCircle2 className="w-3 h-3 text-brand-green" />}
-                        {result.status === 'processing' && <Loader2 className="w-3 h-3 animate-spin" />}
-                        {result.status === 'error' && <AlertCircle className="w-3 h-3 text-red-400" />}
-                      </div>
-                      <p className="text-xs font-medium truncate pr-6">
-                        {result.extraction?.company_profile?.name || `${result.fileNames.length} archivo(s)`}
-                      </p>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); removeResult(result.id); }}
-                        className="absolute right-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-white/60 hover:text-red-400"
-                        title="Eliminar caso"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
+              <HistorialEmpresas
+                results={results}
+                activeId={activeResultId}
+                onAbrir={setActiveResultId}
+                onEliminar={removeResult}
+              />
             </div>
           </div>
 
