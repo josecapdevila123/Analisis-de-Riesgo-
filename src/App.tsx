@@ -15,7 +15,7 @@ import {
   Loader2, 
   Download,
   Trash2,
-  RefreshCw,
+  Plus,
   Sparkles,
   FileSpreadsheet,
   TrendingUp,
@@ -782,6 +782,8 @@ export default function App() {
     );
   };
 
+  const nuevoCaso = () => { setCurrentFiles([]); setActiveResultId(null); setShowPolicy(false); };
+
   return (
     <EditProvider value={editContext}>
     <div className="flex h-screen bg-white text-ink font-sans selection:bg-ink selection:text-white">
@@ -803,6 +805,16 @@ export default function App() {
             <button onClick={() => setActiveResultId(null)} className="mb-4 hover:opacity-80 transition-opacity" title="Ir al inicio">
               <BiBankLogo variant="light" layout="icon" className="h-9 w-9" />
             </button>
+            {user && (
+              <button
+                onClick={nuevoCaso}
+                className="w-10 h-10 rounded-full bg-brand-green text-ink flex items-center justify-center hover:brightness-95 transition"
+                title="Nuevo caso"
+                aria-label="Nuevo caso"
+              >
+                <Plus className="w-5 h-5" strokeWidth={2.5} />
+              </button>
+            )}
             <button
               onClick={() => setIsHistorySidebarOpen(true)}
               className="w-10 h-10 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition"
@@ -852,6 +864,19 @@ export default function App() {
               </div>
             )}
           </div>
+
+          {/* Fijo arriba del historial: la lista se desplaza, el botón no. */}
+          {user && (
+            <div className="px-6 pt-5">
+              <button
+                onClick={nuevoCaso}
+                className="w-full py-2.5 px-4 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition flex items-center justify-center gap-2"
+              >
+                <Plus className="w-4 h-4" strokeWidth={2.5} />
+                Nuevo caso
+              </button>
+            </div>
+          )}
 
           <div className="flex-1 overflow-y-auto">
             <div className="px-6 py-5">
@@ -929,7 +954,7 @@ export default function App() {
                 </button>
               )
             )}
-            {/* Dentro de un caso la acción principal (verde) es el informe; "Nuevo caso" pasa a secundario. */}
+            {/* Dentro de un caso la acción principal (verde) es el informe; "Nuevo caso" vive en el sidebar. */}
             {activeResult?.extraction && (activeResult.status === 'completed' || activeResult.status === 'completed_partial') && !isEditing && (
               <button
                 onClick={() => porton.puedeExportarPdf && generatePDF(activeResult)}
@@ -941,16 +966,6 @@ export default function App() {
                 Informe para comité
               </button>
             )}
-            <button
-              onClick={() => { setCurrentFiles([]); setActiveResultId(null); setShowPolicy(false); }}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition disabled:opacity-50",
-                activeResultId ? "border border-ink/20 text-ink hover:border-ink" : "bg-brand-green text-ink hover:brightness-95"
-              )}
-            >
-              <RefreshCw className="w-4 h-4" />
-              Nuevo caso
-            </button>
           </div>
         </header>
 
