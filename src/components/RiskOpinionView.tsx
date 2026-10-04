@@ -103,7 +103,6 @@ interface RiskOpinionViewProps {
   isGenerating: boolean;
   canGenerate: boolean;
   onGenerate: () => void;
-  editedAt?: string;
   porton: EstadoPorton;
   sector?: SectorCaso | null;
   mora?: FuenteMora | null;
@@ -111,7 +110,7 @@ interface RiskOpinionViewProps {
   onVerPolitica?: () => void;
 }
 
-export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGenerate, editedAt, porton, sector, mora, documentos, onVerPolitica }: RiskOpinionViewProps) {
+export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGenerate, porton, sector, mora, documentos, onVerPolitica }: RiskOpinionViewProps) {
   const generateButton = (label: string) => (
     <button
       onClick={onGenerate}
@@ -158,7 +157,6 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
   const status = CATEGORY_STATUS[puntaje.categoria];
   const formacion = formacionPuntaje(puntaje);
   const postura = opinion.postura ? POSTURA[opinion.postura] : null;
-  const desactualizada = !!editedAt && editedAt > assessment.generado;
 
   const conteo = (['critica', 'alta', 'media', 'baja'] as SeveridadRiesgo[])
     .map(sev => ({ sev, n: opinion.riesgos.filter(r => r.severidad === sev).length }))
@@ -185,12 +183,6 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
       {porton.opinion === 'desactualizada' && (
         <div className="border-l-4 border-brand-blue bg-brand-blue/5 p-3 text-sm text-ink flex items-center justify-between gap-4">
           <span>{porton.motivo}</span>
-          {generateButton('Regenerar')}
-        </div>
-      )}
-      {desactualizada && (
-        <div className="border-l-4 border-amber-500 bg-amber-50 p-3 text-sm text-amber-900 flex items-center justify-between gap-4">
-          <span>Los valores se editaron después de generar esta opinión. Regenerala para que tome los datos nuevos.</span>
           {generateButton('Regenerar')}
         </div>
       )}

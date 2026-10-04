@@ -1386,7 +1386,6 @@ export default function App() {
                         isGenerating={riskBusyId === activeResult.id}
                         canGenerate={!!storedResult?.extraction && !isEditing}
                         onGenerate={() => storedResult && generateRiskAssessment(storedResult)}
-                        editedAt={activeResult.editedAt}
                         porton={porton}
                         sector={sectorActivo}
                         mora={perfilVista.modelo === 'financiera' && activeResult.extraction
