@@ -929,9 +929,24 @@ export default function App() {
                 </button>
               )
             )}
+            {/* Dentro de un caso la acción principal (verde) es el informe; "Nuevo caso" pasa a secundario. */}
+            {activeResult?.extraction && (activeResult.status === 'completed' || activeResult.status === 'completed_partial') && !isEditing && (
+              <button
+                onClick={() => porton.puedeExportarPdf && generatePDF(activeResult)}
+                disabled={!porton.puedeExportarPdf}
+                title={porton.motivo ?? 'Portada con el dictamen, el resumen y el detalle de cada sección'}
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Informe para comité
+              </button>
+            )}
             <button
               onClick={() => { setCurrentFiles([]); setActiveResultId(null); setShowPolicy(false); }}
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition disabled:opacity-50"
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition disabled:opacity-50",
+                activeResultId ? "border border-ink/20 text-ink hover:border-ink" : "bg-brand-green text-ink hover:brightness-95"
+              )}
             >
               <RefreshCw className="w-4 h-4" />
               Nuevo caso
