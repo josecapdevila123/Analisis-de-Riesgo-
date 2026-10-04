@@ -785,31 +785,32 @@ export default function App() {
 
   return (
     <EditProvider value={editContext}>
-    <div className="flex flex-col h-screen bg-white text-ink font-sans selection:bg-ink selection:text-white">
-      {/* Header de todo el ancho (como Gmail): el logo no se mueve al contraer el sidebar. */}
-      <header className="h-16 shrink-0 border-b border-ink/10 flex items-center justify-between gap-6 pl-3 pr-6 bg-white print:hidden">
+    <div className="flex flex-col h-screen bg-ink text-ink font-sans selection:bg-ink selection:text-white print:bg-white">
+      {/* Header de todo el ancho (como Gmail): el logo no se mueve al contraer el sidebar.
+          Negro, para formar con el sidebar una sola "L" que enmarca el contenido. */}
+      <header className="h-16 shrink-0 flex items-center justify-between gap-6 pl-3 pr-6 bg-ink text-white print:hidden">
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => setIsHistorySidebarOpen(!isHistorySidebarOpen)}
-            className="w-10 h-10 rounded-full flex items-center justify-center text-ink/70 hover:text-ink hover:bg-ink/5 transition"
+            className="w-10 h-10 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition"
             title={isHistorySidebarOpen ? 'Contraer barra lateral' : 'Expandir barra lateral'}
             aria-label={isHistorySidebarOpen ? 'Contraer barra lateral' : 'Expandir barra lateral'}
           >
             <Menu className="w-5 h-5" />
           </button>
           <button onClick={() => setActiveResultId(null)} className="shrink-0 hover:opacity-80 transition-opacity" title="Ir al inicio">
-            <BiBankLogo variant="dark" className="h-8 w-auto" />
+            <BiBankLogo variant="light" className="h-8 w-auto" />
           </button>
           {/* Dentro de un caso dice qué empresa estás mirando (con aire para la zona de seguridad del logo). */}
           {activeResult && (
             <div className="flex items-center gap-4 min-w-0 ml-5">
-              <span className="h-8 w-px bg-ink/15 shrink-0" />
+              <span className="h-8 w-px bg-white/20 shrink-0" />
               <div className="flex flex-col min-w-0">
                 <span className="text-sm font-semibold truncate">
                   {activeResult.extraction?.company_profile?.name || (activeResult.status === 'error' ? 'Caso con error' : 'Caso en proceso')}
                 </span>
                 {activeResult.extraction?.company_profile?.cuit && (
-                  <span className="text-[11px] text-ink/50 tabular-nums">CUIT {activeResult.extraction.company_profile.cuit}</span>
+                  <span className="text-[11px] text-white/55 tabular-nums">CUIT {activeResult.extraction.company_profile.cuit}</span>
                 )}
               </div>
             </div>
@@ -824,7 +825,7 @@ export default function App() {
               title="Política de riesgos"
               className={cn(
                 "w-9 h-9 rounded-full border flex items-center justify-center transition-all",
-                showPolicy ? "bg-ink border-ink text-white" : "border-ink/20 text-ink hover:border-ink"
+                showPolicy ? "bg-white border-white text-ink" : "border-white/25 text-white hover:border-white"
               )}
             >
               <Scale className="w-4 h-4" />
@@ -832,7 +833,7 @@ export default function App() {
             {activeResult?.extraction && (activeResult.status === 'completed' || activeResult.status === 'completed_partial') && (
               isEditing ? (
                 <>
-                  <button onClick={cancelEditing} disabled={isSavingEdits} className="flex items-center gap-2 px-4 py-2 rounded-full border border-ink/20 text-xs font-semibold text-ink hover:border-ink transition-all disabled:opacity-50">
+                  <button onClick={cancelEditing} disabled={isSavingEdits} className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/25 text-xs font-semibold text-white hover:border-white transition-all disabled:opacity-50">
                     <X className="w-4 h-4" />
                     Cancelar
                   </button>
@@ -842,7 +843,7 @@ export default function App() {
                   </button>
                 </>
               ) : (
-                <button onClick={startEditing} className="flex items-center gap-2 px-4 py-2 rounded-full border border-ink/20 text-xs font-semibold text-ink hover:border-ink transition-all disabled:opacity-50">
+                <button onClick={startEditing} className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/25 text-xs font-semibold text-white hover:border-white transition-all disabled:opacity-50">
                   <Pencil className="w-4 h-4" />
                   Editar valores
                 </button>
@@ -944,7 +945,7 @@ export default function App() {
 
       {/* Main Content */}
       <ProveedorCalculo value={setCalculoAbierto}>
-      <main className="relative flex-1 flex flex-col overflow-hidden bg-canvas print:hidden">
+      <main className="relative flex-1 flex flex-col overflow-hidden bg-canvas rounded-tl-2xl print:hidden">
         {/* Página de política de riesgos, por encima del contenido */}
         {showPolicy && (
           <div className="absolute inset-0 z-30 overflow-y-auto bg-canvas p-8">

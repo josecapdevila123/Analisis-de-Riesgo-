@@ -19,7 +19,7 @@ export function MenuUsuario({ user, onLogout }: { user: User; onLogout: () => vo
   const avatar = (tam: string) => user.photoURL ? (
     <img src={user.photoURL} alt="" className={`${tam} rounded-full`} referrerPolicy="no-referrer" />
   ) : (
-    <span className={`${tam} rounded-full bg-ink text-white flex items-center justify-center text-xs font-semibold`}>
+    <span className={`${tam} rounded-full bg-brand-green text-ink flex items-center justify-center text-xs font-semibold`}>
       {user.email?.[0].toUpperCase()}
     </span>
   );
@@ -28,7 +28,7 @@ export function MenuUsuario({ user, onLogout }: { user: User; onLogout: () => vo
     <div ref={ref} className="relative ml-1">
       <button
         onClick={() => setAbierto(a => !a)}
-        className="rounded-full ring-2 ring-transparent hover:ring-ink/15 transition"
+        className="rounded-full ring-2 ring-transparent hover:ring-white/30 transition"
         title={user.email ?? 'Cuenta'}
         aria-label="Cuenta"
         aria-expanded={abierto}
