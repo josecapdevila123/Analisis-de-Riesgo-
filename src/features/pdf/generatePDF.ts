@@ -498,24 +498,14 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
   sectionTitle('Resumen ejecutivo');
   {
     // Recuadro del perfil de evaluación (generado por código desde la foto).
-    const docsPdf = (activeResult.documentosSectoriales ?? []).filter(d => d.estado === 'ok');
-    const finPdf = perfil.modelo === 'financiera' ? indicadoresFinancieros(extraction, docsPdf, { disponibilidades: disponibilidadesActuales(extraction) }) : null;
-    const a = avisoPerfil(perfil, sectorEvaluado, { mora: finPdf?.mora ?? null, documentos: docsPdf });
+    const a = avisoPerfil(perfil, sectorEvaluado);
+    // Igual que en pantalla: solo el perfil y quién lo confirmó; el detalle de los
+    // criterios está en la política (se deja la versión para trazabilidad).
     const lineas = [
-      [a.confirmacion, a.subsegmento, a.cambio, sectorEvaluado?.nota ? `Nota del analista: ${sectorEvaluado.nota}` : null].filter(Boolean).join(' '),
-      a.esGenerico
-        ? 'Se aplican los criterios generales de la política, sin ajustes por rubro.'
-        : [
-            'Este análisis se realiza con criterios específicos del rubro.',
-            a.diferencias.length ? `Difiere del perfil genérico en: ${a.diferencias.join('; ')}.` : '',
-            a.propios.length ? `Indicadores propios del rubro: ${a.propios.join('; ')}.` : '',
-            a.ajustes.length ? `${a.ajustes.join('. ')}.` : '',
-            a.noAplican.length ? `No aplican: ${a.noAplican.join('; ')}.` : '',
-          ].filter(Boolean).join(' '),
-      `KPIs prioritarios del rubro: ${a.kpis.join(', ')}.`,
-      [a.fuenteMora, a.documentacion].filter(Boolean).join(' '),
-      [a.politica, a.versionDesactualizada].filter(Boolean).join(' '),
-    ].filter(Boolean);
+      [a.confirmacion, a.subsegmento].filter(Boolean).join(' '),
+      `Criterios según la política de riesgos v${perfil.version}.`,
+      a.versionDesactualizada,
+    ].filter(Boolean) as string[];
     setText(8.5, 'normal');
     const cuerpo = lineas.flatMap(l => doc.splitTextToSize(pdfSafe(l), CW - 10) as string[]);
     const alto = 9 + cuerpo.length * 3.8 + 3;
