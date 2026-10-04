@@ -70,3 +70,22 @@ export function aggregateScore(dimensiones: DimensionScore[], pisos: Floor[], pe
     categoria: categoryOf(final),
   };
 }
+
+// Cómo se formó el puntaje, para dibujarlo en la escala continua 0–100 (pantalla y PDF).
+// `promedio` es el ponderado de las dimensiones; `subePorPiso` solo si el piso lo movió de verdad.
+export type FormacionPuntaje = {
+  final: number;
+  promedio: number | null;
+  subePorPiso: boolean;
+  motivoPiso: string | null;
+};
+
+export function formacionPuntaje(p: Pick<AggregatedScore, 'ponderado' | 'piso' | 'final'>): FormacionPuntaje {
+  const subePorPiso = !!p.piso && p.ponderado !== null && p.final > p.ponderado;
+  return {
+    final: p.final,
+    promedio: p.ponderado,
+    subePorPiso,
+    motivoPiso: subePorPiso ? p.piso!.motivo : null,
+  };
+}

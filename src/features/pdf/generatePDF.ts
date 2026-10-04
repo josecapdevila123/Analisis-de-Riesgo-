@@ -4,7 +4,7 @@ import { getComparativeTablesData, getVariationText } from '../../components/Com
 import { ExtractionResult, Shareholder } from '../../types';
 import { formatCurrencyThousands } from '../../lib/utils';
 import { RatioKey, RatioStatus } from '../ratios/calculations';
-import { CATEGORY_LABEL, DIMENSIONS, RiskCategory, SEVERIDAD_LABEL, categoryOf } from '../risk/score';
+import { CATEGORY_LABEL, DIMENSIONS, FormacionPuntaje, RiskCategory, SEVERIDAD_LABEL, categoryOf, formacionPuntaje } from '../risk/score';
 import { RiskDimension, SeveridadRiesgo } from '../extraction/schemas';
 import { stripRiskConclusion } from '../risk/summary';
 import { RATIO_ASSUMPTIONS } from '../risk/policy';
@@ -359,20 +359,34 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
     }
   };
 
-  // Barra de escala 1–100 con las 4 bandas y marcador.
-  const scaleBar = (score: number, x: number, yy: number, w: number) => {
-    const h = 4.5;
-    ([[0, 25, 'bajo'], [25, 50, 'moderado'], [50, 75, 'alto'], [75, 100, 'critico']] as Array<[number, number, RiskCategory]>)
-      .forEach(([from, to, cat]) => {
-        const active = categoryOf(score) === cat;
-        doc.setFillColor(...(active ? CATEGORY_RGB[cat] : tint(CATEGORY_RGB[cat], 0.35)));
-        doc.rect(x + (from / 100) * w + (from ? 0.4 : 0), yy, ((to - from) / 100) * w - (to < 100 ? 0.8 : 0.4), h, 'F');
-      });
-    const mx = x + (score / 100) * w;
+  // Escala continua 0–100 sin cortes de bandas (la categoría va en el chip): el
+  // promedio de las dimensiones y, si un piso lo subió, el tramo hasta el final.
+  const escalaPuntaje = (f: FormacionPuntaje, x: number, yy: number, w: number) => {
+    const px = (v: number) => x + (Math.min(100, Math.max(0, v)) / 100) * w;
+    const lineaY = yy + 3;
+    const promedioLejos = f.promedio !== null && Math.abs(f.final - f.promedio) >= 12;
+    if (f.subePorPiso && f.promedio !== null) {
+      setText(6.5, 'normal', MUTED);
+      text(`Promedio ${f.promedio}`, promedioLejos ? px(f.promedio) : px(f.promedio) - 1, yy, { align: promedioLejos ? 'center' : 'right' });
+    }
+    setText(6.5, 'bold');
+    const alinFinal = f.final > 85 ? 'right' : f.subePorPiso && !promedioLejos ? 'left' : 'center';
+    text(`Final ${f.final}`, alinFinal === 'left' ? px(f.final) + 1 : px(f.final), yy, { align: alinFinal });
+    doc.setFillColor(...tint(INK, 0.15));
+    doc.rect(x, lineaY - 0.25, w, 0.5, 'F');
+    if (f.subePorPiso && f.promedio !== null) {
+      doc.setFillColor(...tint(INK, 0.45));
+      doc.rect(px(f.promedio), lineaY - 0.5, px(f.final) - px(f.promedio), 1, 'F');
+      doc.rect(px(f.promedio) - 0.25, lineaY - 1.6, 0.5, 3.2, 'F');
+    }
+    doc.setFillColor(...WHITE);
+    doc.circle(px(f.final), lineaY, 1.9, 'F');
     doc.setFillColor(...INK);
-    doc.triangle(mx - 2, yy - 2.8, mx + 2, yy - 2.8, mx, yy + 0.2, 'F');
+    doc.circle(px(f.final), lineaY, 1.4, 'F');
     setText(6.5, 'normal', MUTED);
-    [0, 25, 50, 75, 100].forEach(v => text(String(v), x + (v / 100) * w, yy + h + 3.5, { align: 'center' }));
+    text('0', x, lineaY + 4.5);
+    text('50', x + w / 2, lineaY + 4.5, { align: 'center' });
+    text('100', x + w, lineaY + 4.5, { align: 'right' });
   };
 
   // ======================================================================
@@ -427,7 +441,8 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
     setText(10, 'normal', MUTED);
     text('/ 100', M + 9 + sw, y + 25);
     chip(CATEGORY_LABEL[puntaje.categoria], color, M + 7, y + 33, 8);
-    scaleBar(puntaje.final, M + 7, y + 41, 62);
+    const formacion = formacionPuntaje(puntaje);
+    escalaPuntaje(formacion, M + 7, y + 41, 62);
 
     // Columna derecha: postura, pérdida esperada y conteo de riesgos.
     const rx = M + 82;
@@ -446,9 +461,9 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
       const n = opinion.riesgos.filter(r => r.severidad === sev).length;
       if (n > 0) cx += chip(`${n} ${SEVERIDAD_LABEL[sev]}${n > 1 ? 's' : ''}`, SEVERIDAD_RGB[sev], cx, y + 44) + 2;
     });
-    if (puntaje.piso && puntaje.ponderado !== null && puntaje.piso.piso > puntaje.ponderado) {
+    if (formacion.subePorPiso) {
       setText(6.8, 'italic', MUTED);
-      doc.splitTextToSize(pdfSafe(`Promedio de dimensiones ${puntaje.ponderado}; elevado a ${puntaje.final} por regla: ${puntaje.piso.motivo}.`), CW - 82 - 6)
+      doc.splitTextToSize(pdfSafe(`Sube de ${formacion.promedio} a ${formacion.final} por regla automática: ${formacion.motivoPiso}.`), CW - 82 - 6)
         .slice(0, 2).forEach((line: string, i: number) => text(line, rx, y + 51 + i * 3.3));
     }
     y += boxH + 8;
@@ -633,7 +648,6 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
         doc.setFillColor(...CATEGORY_RGB[categoryOf(p)]);
         doc.rect(bx, y - 2.8, (p / 100) * bw, 3.4, 'F');
       }
-      [25, 50, 75].forEach(t => { doc.setFillColor(...WHITE); doc.rect(bx + (t / 100) * bw - 0.2, y - 2.8, 0.4, 3.4, 'F'); });
       setText(9, 'bold');
       text(p === null ? 'S/D' : String(p), M + CW, y, { align: 'right' });
       y += 4;

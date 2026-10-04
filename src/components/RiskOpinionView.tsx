@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   AlertTriangle,
+  ArrowUpToLine,
   CheckCircle2,
   Info,
   Loader2,
@@ -18,7 +19,7 @@ import { perfilEfectivo } from '../features/risk/policy';
 import { PerfilAviso } from './PerfilAviso';
 import type { FuenteMora } from '../features/ratios/financieras';
 import type { DocumentoSectorial } from '../features/sectorDocs/tipos';
-import { CATEGORY_LABEL, DIMENSIONS, RiskCategory, SEVERIDAD_LABEL, categoryOf } from '../features/risk/score';
+import { CATEGORY_LABEL, DIMENSIONS, FormacionPuntaje, SEVERIDAD_LABEL, categoryOf, formacionPuntaje } from '../features/risk/score';
 import { RiskDimension, SeveridadRiesgo } from '../features/extraction/schemas';
 import { cn } from '../lib/utils';
 import { CATEGORY_STATUS, SEVERIDAD_STATUS, STATUS, Status, StatusBadge, tint } from './riskColors';
@@ -29,59 +30,40 @@ const POSTURA = {
   desfavorable: { label: 'Desfavorable', icon: ShieldAlert, status: 'critical' as Status },
 };
 
-// ---------- Velocímetro 1–100 ----------
+// ---------- Escala continua 0–100 ----------
+// Sin cortes de bandas dibujados: si la política cambia las bandas, el dibujo no
+// cambia; la categoría llega como etiqueta. Muestra cómo se formó el puntaje:
+// el promedio de las dimensiones y, si un piso lo subió, el tramo hasta el final.
 
-const BANDS: Array<{ from: number; to: number; status: Status }> = [
-  { from: 0, to: 25, status: 'good' },
-  { from: 25, to: 50, status: 'warning' },
-  { from: 50, to: 75, status: 'serious' },
-  { from: 75, to: 100, status: 'critical' },
-];
-
-const CX = 120, CY = 118, R = 92, STROKE = 20;
-const point = (value: number, radius = R) => {
-  const a = Math.PI - (value / 100) * Math.PI;
-  return { x: CX + radius * Math.cos(a), y: CY - radius * Math.sin(a) };
-};
-const arc = (from: number, to: number) => {
-  const p1 = point(from);
-  const p2 = point(to);
-  return `M ${p1.x} ${p1.y} A ${R} ${R} 0 0 1 ${p2.x} ${p2.y}`;
-};
-
-const RiskGauge = ({ score }: { score: number }) => {
-  const needle = point(score, R - STROKE / 2 - 10);
-  const tip = point(score, R + STROKE / 2 + 2);
-  const status = CATEGORY_STATUS[categoryOf(score)];
+const EscalaPuntaje = ({ f }: { f: FormacionPuntaje }) => {
+  const pct = (v: number) => `${Math.min(100, Math.max(0, v))}%`;
+  const promedioLejos = f.promedio !== null && Math.abs(f.final - f.promedio) >= 12;
   return (
-    <svg viewBox="0 0 240 172" className="w-full max-w-[300px]" role="img" aria-label={`Puntaje de riesgo ${score} de 100`}>
-      {BANDS.map(b => (
-        // 0,8 de separación entre bandas = espacio de superficie entre segmentos
-        <path
-          key={b.from}
-          d={arc(b.from + (b.from === 0 ? 0 : 0.8), b.to - (b.to === 100 ? 0 : 0.8))}
-          fill="none"
-          stroke={STATUS[b.status]}
-          strokeWidth={STROKE}
-          opacity={b.status === status ? 1 : 0.28}
-        />
-      ))}
-      {[0, 25, 50, 75, 100].map(v => {
-        const p = point(v, R + STROKE / 2 + 9);
-        return (
-          <text key={v} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" fontSize="8" fill="#00000099" fontFamily="Inter, sans-serif">
-            {v}
-          </text>
-        );
-      })}
-      <line x1={CX} y1={CY} x2={needle.x} y2={needle.y} stroke="#000000" strokeWidth="3" strokeLinecap="round" />
-      <circle cx={tip.x} cy={tip.y} r="4" fill="#000000" stroke="#fff" strokeWidth="2" />
-      <circle cx={CX} cy={CY} r="6" fill="#000000" />
-      {/* Número debajo del eje para que la aguja nunca lo tape */}
-      <text x={CX} y={CY + 44} textAnchor="middle" fontSize="40" fontWeight="700" fill="#000000" fontFamily="Poppins, sans-serif">
-        {score}
-      </text>
-    </svg>
+    <div className="w-full" role="img" aria-label={f.subePorPiso ? `Promedio ${f.promedio}, puntaje final ${f.final} de 100 por piso` : `Puntaje ${f.final} de 100`}>
+      <div className="relative h-7">
+        {f.subePorPiso && f.promedio !== null && (
+          <span className={cn('absolute bottom-0 text-[11px] text-ink/55 whitespace-nowrap', promedioLejos ? '-translate-x-1/2' : '-translate-x-full -ml-2')} style={{ left: pct(f.promedio) }}>
+            Promedio {f.promedio}
+          </span>
+        )}
+        <span className={cn('absolute bottom-0 text-[11px] font-semibold text-ink whitespace-nowrap', f.final > 85 ? '-translate-x-full' : f.subePorPiso && !promedioLejos ? 'ml-2' : '-translate-x-1/2')} style={{ left: pct(f.final) }}>
+          Final {f.final}
+        </span>
+      </div>
+      <div className="relative h-3 mt-1.5">
+        <div className="absolute inset-x-0 top-1/2 h-0.5 -translate-y-1/2 bg-ink/15" />
+        {f.subePorPiso && f.promedio !== null && (
+          <>
+            <div className="absolute top-1/2 h-1 -translate-y-1/2 bg-ink/45" style={{ left: pct(f.promedio), width: `${f.final - f.promedio}%` }} />
+            <div className="absolute top-0 bottom-0 w-0.5 -translate-x-1/2 bg-ink/45" style={{ left: pct(f.promedio) }} />
+          </>
+        )}
+        <div className="absolute top-1/2 w-3 h-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink ring-2 ring-white" style={{ left: pct(f.final) }} />
+      </div>
+      <div className="flex justify-between text-[11px] text-ink/40 tabular-nums mt-2">
+        <span>0</span><span>50</span><span>100</span>
+      </div>
+    </div>
   );
 };
 
@@ -91,10 +73,6 @@ const ScoreBar = ({ value }: { value: number }) => {
   const status = CATEGORY_STATUS[categoryOf(value)];
   return (
     <div className="relative h-3 w-full rounded-sm bg-ink/[0.06] overflow-hidden">
-      {/* marcas de banda en 25/50/75 */}
-      {[25, 50, 75].map(t => (
-        <div key={t} className="absolute top-0 bottom-0 w-px bg-white" style={{ left: `${t}%` }} />
-      ))}
       <div
         className="absolute left-0 top-0 bottom-0 rounded-r"
         style={{ width: `${value}%`, backgroundColor: STATUS[status] }}
@@ -177,6 +155,7 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
 
   const { opinion, senales, puntaje, pce_proxy } = assessment;
   const status = CATEGORY_STATUS[puntaje.categoria];
+  const formacion = formacionPuntaje(puntaje);
   const postura = opinion.postura ? POSTURA[opinion.postura] : null;
   const desactualizada = !!editedAt && editedAt > assessment.generado;
 
@@ -217,15 +196,24 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
       {/* Encabezado: puntaje + dictamen */}
       <div className="bg-white border border-ink/15 relative overflow-hidden">
         <div className="absolute left-0 top-0 bottom-0 w-2" style={{ backgroundColor: STATUS[status] }} />
-        <div className="grid grid-cols-1 @2xl:grid-cols-[minmax(220px,280px)_1fr] gap-6 p-6 pl-8 items-center">
-          <div className="flex flex-col items-center">
-            <RiskGauge score={puntaje.final} />
-            <div className="-mt-1 flex flex-col items-center gap-2">
-              <StatusBadge status={status} label={CATEGORY_LABEL[puntaje.categoria]} />
-              <span className="text-[10px] font-mono uppercase tracking-wider text-ink/50">
-                Escala 1 (mínimo) – 100 (máximo)
-              </span>
+        <div className="grid grid-cols-1 @2xl:grid-cols-[minmax(240px,300px)_1fr] gap-8 p-6 pl-8 items-start">
+          <div className="space-y-4">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-ink/50">Puntaje de riesgo</p>
+              <div className="flex items-baseline gap-1.5 mt-1">
+                <span className="font-display text-6xl font-semibold leading-none tabular-nums">{puntaje.final}</span>
+                <span className="text-sm text-ink/50">/ 100</span>
+              </div>
+              <div className="mt-3"><StatusBadge status={status} label={CATEGORY_LABEL[puntaje.categoria]} /></div>
             </div>
+            <EscalaPuntaje f={formacion} />
+            {formacion.subePorPiso && (
+              <p className="text-xs text-ink/70 flex items-start gap-1.5 text-left">
+                <ArrowUpToLine className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span>Sube de {formacion.promedio} a {formacion.final} por regla automática: <strong>{formacion.motivoPiso}</strong>.</span>
+              </p>
+            )}
+            <p className="text-[11px] text-ink/45">1 = riesgo mínimo · 100 = riesgo máximo</p>
           </div>
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-3">
@@ -241,12 +229,6 @@ export function RiskOpinionView({ assessment, isGenerating, canGenerate, onGener
               )}
             </div>
             <p className="text-base leading-relaxed font-medium text-ink">{opinion.dictamen}</p>
-            {puntaje.piso && puntaje.ponderado !== null && puntaje.piso.piso > puntaje.ponderado && (
-              <p className="text-xs text-ink/70 flex items-start gap-1.5">
-                <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                El promedio de las dimensiones da {puntaje.ponderado}; el puntaje sube a {puntaje.final} por regla automática: <strong>{puntaje.piso.motivo}</strong>.
-              </p>
-            )}
             {conteo.length > 0 && (
               <div className="flex flex-wrap gap-2 pt-1">
                 {conteo.map(({ sev, n }) => (
