@@ -1122,11 +1122,6 @@ export default function App() {
                       No se pudieron guardar los cambios: {editError}
                     </div>
                   )}
-                  {!isEditing && activeResult.editedAt && (
-                    <div className="border-l-4 border-ink/40 bg-white p-3 text-xs text-ink/80 print:hidden">
-                      Valores editados manualmente el {new Date(activeResult.editedAt).toLocaleString('es-AR')}. El resumen ejecutivo y el análisis de mercado se generaron con los valores originales.
-                    </div>
-                  )}
                   {activeResult.inconsistencias.length > 0 && (
                     <div className="border-l-4 border-yellow-500 bg-yellow-50 p-4 print:hidden">
                       <div className="flex items-start gap-3">
