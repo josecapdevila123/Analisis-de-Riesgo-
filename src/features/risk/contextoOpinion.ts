@@ -9,6 +9,7 @@ import { indicadoresFinancieros } from '../ratios/financieras';
 import { disponibilidadesActuales } from '../ratios/calculations';
 import { RiskDimension } from '../extraction/schemas';
 import { faltantesBase } from './prechequeo';
+import { BloqueTexto, bloquesAMarkdown } from '../textos/bloques';
 import { analizarDocumentos } from '../sectorDocs/analisis';
 import { RiskSignal } from './signals';
 import { SectorCaso } from './porton';
@@ -30,6 +31,8 @@ export type ContextoOpinionInput = {
   perfil: PerfilEfectivo;
   sector: SectorCaso | null;
   documentos?: DocumentoSectorial[] | null;
+  historiaEditada?: BloqueTexto[] | null;
+  mercadoEditado?: BloqueTexto[] | null;
 };
 
 // El análisis de mercado puede ser largo; alcanza con el inicio para el contexto sectorial.
@@ -124,8 +127,14 @@ export function armarContextoOpinion(i: ContextoOpinionInput) {
     verificacion: i.verification
       ? { alertas_coherencia: i.verification.alertas_coherencia, resumen_ejecutivo: stripRiskConclusion(i.verification.executive_summary) }
       : null,
-    historia_y_actividad: i.companyHistory,
-    analisis_mercado: i.marketAnalysis ? i.marketAnalysis.slice(0, MAX_MARKET_CHARS) : null,
+    // Si el analista editó Historia o Mercado, la opinión lee esa versión.
+    historia_y_actividad: i.historiaEditada
+      ? { editado_por_el_analista: true, texto: bloquesAMarkdown(i.historiaEditada) }
+      : i.companyHistory,
+    analisis_mercado: (() => {
+      const md = i.mercadoEditado ? bloquesAMarkdown(i.mercadoEditado) : i.marketAnalysis;
+      return md ? md.slice(0, MAX_MARKET_CHARS) : null;
+    })(),
     pce_proxy: {
       valor: i.pce,
       supuesto: 'Pérdida esperada aproximada por tramos de score Nosis: relación inversa y no lineal (más score, menos pérdida). Índice relativo 0–100, no es un porcentaje.',

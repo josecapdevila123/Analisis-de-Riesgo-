@@ -8,6 +8,7 @@ import { stripRiskConclusion } from '../features/risk/summary';
 import { formatCurrencyThousands } from '../lib/utils';
 import { CATEGORY_STATUS, SEVERIDAD_STATUS, STATUS, Status, StatusBadge } from './riskColors';
 import { RatioLink } from './CalculoRatio';
+import { coreBusinessDe } from '../features/textos/bloques';
 import { PerfilEfectivo, RATIO_LABEL_CORTO } from '../features/risk/policy';
 import { EstadoPorton } from '../features/risk/porton';
 import { RATIO_BLOCKS, RatioKind, SECTOR_KPI_SPECS } from '../features/ratios/blocks';
@@ -175,7 +176,7 @@ export function ExecutiveSummaryView({ result, riskBusy, onOpenTab, onGeneratePd
       {/* 2. Qué hace la empresa */}
       <Block title="Qué hace la empresa" icon={Building2} tab="Historia y actividad de la empresa" onOpenTab={onOpenTab}>
         <p className="text-sm leading-relaxed text-body line-clamp-4">
-          {history?.core_business || extraction.company_profile.activity || 'Sin descripción de la actividad.'}
+          {coreBusinessDe(result) || extraction.company_profile.activity || 'Sin descripción de la actividad.'}
         </p>
       </Block>
 
