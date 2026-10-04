@@ -808,11 +808,11 @@ export default function App() {
             {user && (
               <button
                 onClick={nuevoCaso}
-                className="w-10 h-10 rounded-full bg-brand-green text-ink flex items-center justify-center hover:brightness-95 transition"
+                className="w-7 h-7 my-1.5 rounded-full bg-brand-green text-ink flex items-center justify-center hover:brightness-95 transition"
                 title="Nuevo caso"
                 aria-label="Nuevo caso"
               >
-                <Plus className="w-5 h-5" strokeWidth={2.5} />
+                <Plus className="w-3.5 h-3.5" strokeWidth={2.75} />
               </button>
             )}
             <button
