@@ -82,7 +82,7 @@ export function HistorialEmpresas({ results, activeId, onAbrir, onEliminar }: {
                   <p className="text-xs font-medium truncate" title={g.nombre}>{g.nombre}</p>
                   <div className="mt-1 flex items-center justify-between gap-2">
                     <span className="text-[10px] font-mono text-white/45 whitespace-nowrap">
-                      {fecha(g.ultima.timestamp)} · {g.corridas.length} {g.corridas.length === 1 ? 'corrida' : 'corridas'}
+                      {fecha(g.ultima.timestamp)}
                     </span>
                     <span className="inline-flex items-center gap-1.5 min-w-0">
                       <Estado e={estadoCorrida(g.ultima)} />
