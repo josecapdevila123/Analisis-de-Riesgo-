@@ -1,6 +1,7 @@
 import { RawExtraction } from '../extraction/schemas';
 import { PerfilEfectivo, perfilEfectivo, RatioThreshold } from '../risk/policy';
 import { FIN_KEYS, FinKey, indicadoresFinancieros } from './financieras';
+import { CLAVES_ANUALES, ClaveAnual, DEFINICIONES, disponibilidadesDe, insumosDelEjercicio } from './definiciones';
 import type { DocumentoSectorial } from '../sectorDocs/tipos';
 
 export type RatioStatus = 'healthy' | 'alert' | 'critical';
@@ -59,7 +60,6 @@ export type RatioKey =
 export type ComputedRatios = Record<RatioKey, Ratio>;
 
 type Year = RawExtraction['ejercicio_actual'];
-type Detalles = Year['estado_situacion_patrimonial']['activo_corriente']['detalles'];
 
 const isFiniteNumber = (v: unknown): v is number =>
   typeof v === 'number' && Number.isFinite(v);
@@ -69,98 +69,10 @@ const safeDivide = (n: number | null, d: number | null): number | null => {
   return n / d;
 };
 
-const multiplyOrNull = (v: number | null, factor: number): number | null =>
-  v === null ? null : v * factor;
 
 const computeVariation = (actual: number | null, anterior: number | null): number | null => {
   if (!isFiniteNumber(actual) || !isFiniteNumber(anterior) || anterior === 0) return null;
   return ((actual - anterior) / Math.abs(anterior)) * 100;
-};
-
-const normalize = (s: string) =>
-  s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-
-const sumDetallesByKeywords = (
-  detalles: Detalles,
-  keywords: string[],
-  exclude: string[] = []
-): number | null => {
-  let total = 0;
-  let found = false;
-  for (const item of detalles) {
-    const rubro = normalize(item.rubro);
-    if (keywords.some(kw => rubro.includes(kw)) && !exclude.some(ex => rubro.includes(ex))) {
-      total += item.monto;
-      found = true;
-    }
-  }
-  return found ? total : null;
-};
-
-const KW_DISPONIBILIDADES = ['caja', 'banco', 'efectivo', 'disponibilidad'];
-const KW_CREDITOS = ['credito', 'cobrar', 'deudores por venta', 'cliente'];
-// "Otros créditos" y "Créditos fiscales" no son créditos por ventas.
-const EXCL_CREDITOS = ['otro', 'otra', 'fiscal', 'impositiv'];
-const KW_DEUDAS_COMERCIALES = ['comercial', 'pagar', 'proveedor', 'acreedor'];
-// "a pagar" también aparece en deudas fiscales, laborales y financieras.
-const EXCL_DEUDAS_COMERCIALES = [
-  'fiscal', 'impositiv', 'remuneracion', 'social', 'dividendo',
-  'prestamo', 'bancari', 'financier', 'otro', 'otra',
-];
-
-// Anticipos de clientes en el pasivo (construcción se financia con ellos).
-// "Anticipos" en el pasivo casi siempre son de clientes; se excluyen los que
-// claramente no lo son. Los anticipos a proveedores son activo: no aparecen acá.
-const KW_ANTICIPOS_CLIENTES = ['anticipo', 'adelanto'];
-const EXCL_ANTICIPOS_CLIENTES = ['proveedor', 'impuest', 'fiscal', 'ganancia', 'remuneraci', 'sueldo', 'personal', 'honorario'];
-
-const getAnticiposClientes = (year: Year) => {
-  const esp = year.estado_situacion_patrimonial;
-  const corriente = sumDetallesByKeywords(esp.pasivo_corriente.detalles, KW_ANTICIPOS_CLIENTES, EXCL_ANTICIPOS_CLIENTES);
-  const noCorriente = sumDetallesByKeywords(esp.pasivo_no_corriente.detalles, KW_ANTICIPOS_CLIENTES, EXCL_ANTICIPOS_CLIENTES);
-  return { corriente: corriente ?? 0, total: (corriente ?? 0) + (noCorriente ?? 0), encontrado: corriente !== null || noCorriente !== null };
-};
-
-const getDisponibilidades = (year: Year) =>
-  sumDetallesByKeywords(
-    year.estado_situacion_patrimonial.activo_corriente.detalles,
-    KW_DISPONIBILIDADES
-  );
-
-const getCreditosPorVentas = (year: Year) =>
-  sumDetallesByKeywords(
-    year.estado_situacion_patrimonial.activo_corriente.detalles,
-    KW_CREDITOS,
-    EXCL_CREDITOS
-  );
-
-const getDeudasComerciales = (year: Year) =>
-  sumDetallesByKeywords(
-    year.estado_situacion_patrimonial.pasivo_corriente.detalles,
-    KW_DEUDAS_COMERCIALES,
-    EXCL_DEUDAS_COMERCIALES
-  );
-
-// Convención de signos: Gemini puede devolver costos, gastos y depreciación
-// en negativo (como en los EECC) o en positivo. Se normalizan con valor
-// absoluto para que los ratios no dependan de eso. Valuación de BdC e
-// inversiones permanentes son resultados (ganancia o pérdida) y conservan su signo.
-const computeEBITDA = (year: Year): number => {
-  const er = year.estado_resultados;
-  const ef = year.flujo_efectivo;
-  const valuacion = er.resultado_valuacion_bienes_de_cambio ?? 0;
-  const depreciacion = Math.abs(ef.depreciacion_bienes_de_uso ?? 0);
-  // amortizacion_intangibles no está en el schema; el spec dice tratarlo como 0
-  const amortizacionIntangibles = 0;
-  const resInversiones = er.resultado_inversiones_permanentes ?? 0;
-  return (
-    er.resultado_bruto +
-    valuacion +
-    depreciacion +
-    amortizacionIntangibles +
-    resInversiones -
-    (Math.abs(er.gastos_comercializacion) + Math.abs(er.gastos_administracion))
-  );
 };
 
 // Semáforo según la política de riesgos (src/features/risk/policy.ts), con los
@@ -192,104 +104,15 @@ const evaluateRatioStatus = (key: RatioKey, value: number | null, perfil: Perfil
 
 type YearValues = Record<RatioKey, number | null>;
 
+// Valores de un ejercicio: salen de las definiciones únicas (definiciones.ts),
+// que también producen la cuenta que muestra la pestaña de cálculos.
 const computeYearValues = (year: Year, deudaCorriente: number, deudaNoCorriente: number): YearValues => {
-  const esp = year.estado_situacion_patrimonial;
-  const er = year.estado_resultados;
-  const ef = year.flujo_efectivo;
-
-  const ac = esp.activo_corriente.total;
-  const anc = esp.activo_no_corriente.total;
-  const totalActivo = esp.total_activo;
-  const pc = esp.pasivo_corriente.total;
-  const totalPasivo = esp.total_pasivo;
-  const pn = esp.patrimonio_neto;
-  const bc = esp.bienes_de_cambio;
-
-  const ventas = er.ventas_netas;
-  const costo = Math.abs(er.costo_ventas);
-  const rb = er.resultado_bruto;
-  const rn = er.resultado_neto;
-  const gfin = er.gastos_financieros === null ? null : Math.abs(er.gastos_financieros);
-  // Con PN ≤ 0 (quiebra técnica) endeudamiento y ROE no tienen sentido
-  // económico: darían negativo o positivo con pérdida y se verían sanos.
-  const pnPositivo = pn > 0 ? pn : null;
-
-  const disponibilidades = getDisponibilidades(year);
-  const creditos = getCreditosPorVentas(year);
-  const deudasComerciales = getDeudasComerciales(year);
-
-  const ebitda = computeEBITDA(year);
-  const deudaBancariaTotal = deudaCorriente + deudaNoCorriente;
-  const anticipos = getAnticiposClientes(year);
-
-  // Capacidad de pago (supuestos documentados en RATIO_ASSUMPTIONS de la política):
-  // deuda neta = deuda − caja (sin rubros de caja, se usa la deuda total);
-  // capex de mantenimiento ≈ depreciación; amortización de capital ≈ deuda corriente.
-  const ebitdaPositivo = ebitda > 0 ? ebitda : null;
-  const deudaNeta = deudaBancariaTotal - (disponibilidades ?? 0);
-  const capexMantenimiento = Math.abs(ef.depreciacion_bienes_de_uso ?? 0);
-  const impuestos = Math.abs(er.impuesto_ganancias ?? 0);
-  const servicioDeuda = (gfin ?? 0) + deudaCorriente;
-  const dscr = safeDivide(ebitda - capexMantenimiento - impuestos, servicioDeuda);
-
-  const liquidezAcida = bc === null ? null : safeDivide(ac - bc, pc);
-  const ktno =
-    creditos === null || bc === null || deudasComerciales === null
-      ? null
-      : creditos + bc - deudasComerciales;
-
-  const diasCobro = multiplyOrNull(safeDivide(creditos, ventas), 365);
-  const diasPago = multiplyOrNull(safeDivide(deudasComerciales, costo), 365);
-  const diasStock = multiplyOrNull(safeDivide(bc, costo), 365);
-  const ciclo =
-    diasCobro === null || diasStock === null || diasPago === null
-      ? null
-      : diasCobro + diasStock - diasPago;
-
+  const insumos = insumosDelEjercicio(year, deudaCorriente, deudaNoCorriente);
+  const anuales = Object.fromEntries(CLAVES_ANUALES.map(k => [k, DEFINICIONES[k](insumos).valor])) as Record<ClaveAnual, number | null>;
   return {
-    ebitda,
-    liquidez_corriente: safeDivide(ac, pc),
-    liquidez_acida: liquidezAcida,
-    liquidez_inmediata: safeDivide(disponibilidades, pc),
-    solvencia: safeDivide(pn, totalPasivo),
-    endeudamiento: safeDivide(totalPasivo, pnPositivo),
-    capital_de_trabajo: ac - pc,
-    ktno,
-    margen_bruto: safeDivide(rb, ventas),
-    margen_ebitda: safeDivide(ebitda, ventas),
-    margen_neto: safeDivide(rn, ventas),
-    cobertura_intereses: safeDivide(ebitda, gfin),
-    deuda_bancaria_total: deudaBancariaTotal,
-    deuda_ebitda: safeDivide(deudaBancariaTotal, ebitda),
-    deuda_dias_ventas: multiplyOrNull(safeDivide(deudaBancariaTotal, ventas), 365),
-    dias_de_cobro: diasCobro,
-    dias_de_pago: diasPago,
-    dias_de_stock: diasStock,
-    ciclo_conversion_caja: ciclo,
-    indice_inmovilizacion: safeDivide(anc, totalActivo),
-    autofinanciamiento: safeDivide(ef.flujo_neto_operativo, deudaBancariaTotal),
-    roe: safeDivide(rn, pnPositivo),
-    roa: safeDivide(rn, totalActivo),
-    deuda_neta_ebitda: safeDivide(deudaNeta, ebitdaPositivo),
-    dscr,
-    calidad_ganancia: safeDivide(ef.flujo_neto_operativo, ebitdaPositivo),
-    deuda_financiera_pn: safeDivide(deudaBancariaTotal, pnPositivo),
-    // KPIs sectoriales
-    bienes_cambio_deuda_cp: safeDivide(bc, deudaCorriente),
-    deuda_bancaria_ventas: safeDivide(deudaBancariaTotal, ventas),
-    deuda_cp_share: safeDivide(deudaCorriente, deudaBancariaTotal),
+    ...anuales,
     margen_ebitda_promedio: null, // se calcula con los dos ejercicios en computeRatios
-    deuda_comercial_bancaria: safeDivide(deudasComerciales, deudaBancariaTotal),
-    capex_depreciacion: safeDivide(
-      ef.pagos_bienes_de_uso === null || ef.pagos_bienes_de_uso === undefined ? null : Math.abs(ef.pagos_bienes_de_uso),
-      ef.depreciacion_bienes_de_uso === null ? null : Math.abs(ef.depreciacion_bienes_de_uso),
-    ),
     deuda_me_share: null, // solo el ejercicio actual, desde la información complementaria
-    anticipos_clientes: anticipos.encontrado ? anticipos.total : null,
-    anticipos_ventas: anticipos.encontrado ? safeDivide(anticipos.total, ventas) : null,
-    liquidez_corriente_sin_anticipos: safeDivide(ac, pc - anticipos.corriente),
-    endeudamiento_sin_anticipos: safeDivide(totalPasivo - anticipos.total, pnPositivo),
-    pn_activo: safeDivide(pn, totalActivo),
     ...(Object.fromEntries(FIN_KEYS.map(k => [k, null])) as Record<FinKey, null>),
   };
 };
@@ -347,7 +170,7 @@ const valorParaSemaforo = (key: RatioKey, perfil: PerfilEfectivo): RatioKey => {
 };
 
 // Caja y bancos del ejercicio actual (lo usan también las señales de financieras).
-export const disponibilidadesActuales = (extraction: RawExtraction) => getDisponibilidades(extraction.ejercicio_actual);
+export const disponibilidadesActuales = (extraction: RawExtraction) => disponibilidadesDe(extraction.ejercicio_actual);
 
 export function computeRatios(
   extraction: RawExtraction,
@@ -381,7 +204,7 @@ export function computeRatios(
   // Financieras: solo con bloque financiero del balance o reporte de mora.
   // Sin esos datos quedan en null (las empresas productivas no los tienen).
   if (extraction.extraccion_financiera || (documentos ?? []).some(d => d.tipo === 'reporte_mora')) {
-    const f = indicadoresFinancieros(extraction, documentos, { disponibilidades: getDisponibilidades(extraction.ejercicio_actual) });
+    const f = indicadoresFinancieros(extraction, documentos, { disponibilidades: disponibilidadesDe(extraction.ejercicio_actual) });
     for (const k of FIN_KEYS) actualValues[k] = f.valores[k].actual;
   }
 
