@@ -799,13 +799,6 @@ export default function App() {
               <BiBankLogo variant="light" layout="icon" className="h-9 w-9" />
             </button>
             <button
-              onClick={() => setShowPolicy(v => !v)}
-              className={cn("w-10 h-10 rounded-full flex items-center justify-center transition", showPolicy ? "bg-brand-green text-ink" : "text-white/70 hover:text-white hover:bg-white/10")}
-              title="Política de riesgos"
-            >
-              <Scale className="w-4 h-4" />
-            </button>
-            <button
               onClick={() => setIsHistorySidebarOpen(true)}
               className="w-10 h-10 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition"
               title="Historial de casos"
@@ -853,19 +846,6 @@ export default function App() {
                 )}
               </div>
             )}
-          </div>
-
-          <div className="px-6 pt-5">
-            <button
-              onClick={() => setShowPolicy(v => !v)}
-              className={cn(
-                "w-full flex items-center gap-2 px-3 py-2 rounded-full border text-xs font-semibold transition-all",
-                showPolicy ? "bg-brand-green border-brand-green text-ink" : "border-white/25 text-white hover:border-brand-green hover:text-brand-green"
-              )}
-            >
-              <Scale className="w-4 h-4" />
-              Política de riesgos
-            </button>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -938,6 +918,18 @@ export default function App() {
                 Exportar datos
               </button>
             )}
+            <button
+              onClick={() => setShowPolicy(v => !v)}
+              aria-label="Política de riesgos"
+              aria-pressed={showPolicy}
+              title="Política de riesgos"
+              className={cn(
+                "w-9 h-9 rounded-full border flex items-center justify-center transition-all",
+                showPolicy ? "bg-ink border-ink text-white" : "border-ink/20 text-ink hover:border-ink"
+              )}
+            >
+              <Scale className="w-4 h-4" />
+            </button>
             <button
               onClick={() => { setCurrentFiles([]); setActiveResultId(null); setShowPolicy(false); }}
               className="flex items-center gap-2 px-4 py-2 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition disabled:opacity-50"
