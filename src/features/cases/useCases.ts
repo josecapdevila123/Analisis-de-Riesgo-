@@ -1,3 +1,4 @@
+import type { BloqueTexto } from '../textos/bloques';
 import type { DocumentoSectorial } from '../sectorDocs/tipos';
 import { SectorCaso, sectorInicial } from '../risk/porton';
 import { useEffect, useState } from 'react';
@@ -120,6 +121,8 @@ export function useCases(user: User | null, isAuthReady: boolean) {
               proyecciones: parseJSON<ProyeccionesGuardadas | null>(data.proyecciones, null),
               sector: parseJSON<SectorCaso | null>(data.sector, null) ?? (extraction ? sectorInicial(extraction) : null),
               documentosSectoriales: parseJSON<DocumentoSectorial[]>(data.documentosSectoriales, []),
+              historiaEditada: parseJSON<BloqueTexto[] | null>(data.historiaEditada, null),
+              mercadoEditado: parseJSON<BloqueTexto[] | null>(data.mercadoEditado, null),
               editedAt: typeof data.editedAt === 'string' ? data.editedAt : undefined,
               error: data.error,
             });
@@ -251,6 +254,15 @@ export function useCases(user: User | null, isAuthReady: boolean) {
     }
   };
 
+  const saveCaseTextoEditado = async (id: string, campo: 'historiaEditada' | 'mercadoEditado', bloques: BloqueTexto[] | null) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, `users/${user.uid}/cases`, id), { [campo]: JSON.stringify(bloques) }, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}/cases/${id}`);
+    }
+  };
+
   const saveCaseDocumentos = async (id: string, documentos: DocumentoSectorial[]) => {
     if (!user) return;
     try {
@@ -322,6 +334,7 @@ export function useCases(user: User | null, isAuthReady: boolean) {
     saveCaseProyecciones,
     saveCaseSector,
     saveCaseDocumentos,
+    saveCaseTextoEditado,
     saveCaseEdits,
     saveCaseError,
     removeCase,

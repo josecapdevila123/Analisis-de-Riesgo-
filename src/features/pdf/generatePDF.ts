@@ -10,6 +10,7 @@ import { stripRiskConclusion } from '../risk/summary';
 import { RATIO_ASSUMPTIONS } from '../risk/policy';
 import { RATIO_BLOCKS as SHARED_RATIO_BLOCKS, RatioKind as SharedRatioKind, bloquesDelPerfil, SECTOR_KPI_SPECS } from '../ratios/blocks';
 import { avisoPerfil } from '../risk/avisoPerfil';
+import { bloquesAMarkdown, coreBusinessDe } from '../textos/bloques';
 import { indicadoresFinancieros } from '../ratios/financieras';
 import { analizarDocumentos } from '../sectorDocs/analisis';
 import { disponibilidadesActuales } from '../ratios/calculations';
@@ -516,7 +517,7 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
 
     const history = activeResult.companyHistory;
     subheading('Qué hace la empresa');
-    const core = history?.core_business || company.activity || 'Sin descripción de la actividad.';
+    const core = coreBusinessDe(activeResult) || company.activity || 'Sin descripción de la actividad.';
     setText(9);
     const coreLines = doc.splitTextToSize(pdfSafe(stripMarkdown(core)), CW) as string[];
     paragraph(coreLines.length > 4 ? `${coreLines.slice(0, 4).join(' ').replace(/\s+\S*$/, '')}…` : core, 9);
@@ -725,9 +726,29 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
   // 3. HISTORIA Y ACTIVIDAD
   // ======================================================================
 
+  // Markdown simple → párrafos, subtítulos y viñetas del PDF.
+  const renderMarkdown = (md: string) => {
+    let buffer: string[] = [];
+    const flush = () => { if (buffer.length) { paragraph(buffer.join(' ')); buffer = []; } };
+    md.split('\n').forEach(raw => {
+      const line = raw.trim();
+      if (!line) { flush(); return; }
+      const heading = line.match(/^#{1,4}\s+(.*)$/);
+      if (heading) { flush(); y += 1; subheading(stripMarkdown(heading[1])); return; }
+      if (/^[-*]\s+/.test(line)) { flush(); bullets([line.replace(/^[-*]\s+/, '')]); return; }
+      buffer.push(line);
+    });
+    flush();
+  };
+
   const history = activeResult.companyHistory;
+  const historiaEditada = activeResult.historiaEditada ?? null;
   sectionTitle('Historia y actividad de la empresa');
-  if (history) {
+  if (historiaEditada) {
+    // Versión editada por el analista: lo que sacó no sale.
+    if (historiaEditada.length === 0) paragraph('El analista no dejó contenido en esta sección.', 9, 'italic');
+    renderMarkdown(bloquesAMarkdown(historiaEditada));
+  } else if (history) {
     if (!history.memoria_disponible) {
       paragraph('No se encontró la Memoria del Directorio: la descripción surge de las Notas a los estados contables.', 8.5, 'italic');
     }
@@ -1257,19 +1278,9 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
   // ======================================================================
 
   sectionTitle('Anexo: análisis de mercado');
-  const market = activeResult.marketAnalysis;
+  const market = activeResult.mercadoEditado ? bloquesAMarkdown(activeResult.mercadoEditado) : activeResult.marketAnalysis;
   if (market) {
-    let buffer: string[] = [];
-    const flush = () => { if (buffer.length) { paragraph(buffer.join(' ')); buffer = []; } };
-    market.split('\n').forEach(raw => {
-      const line = raw.trim();
-      if (!line) { flush(); return; }
-      const heading = line.match(/^#{1,4}\s+(.*)$/);
-      if (heading) { flush(); y += 1; subheading(stripMarkdown(heading[1])); return; }
-      if (/^[-*]\s+/.test(line)) { flush(); bullets([line.replace(/^[-*]\s+/, '')]); return; }
-      buffer.push(line);
-    });
-    flush();
+    renderMarkdown(market);
   } else {
     paragraph('No se generó análisis de mercado para este caso.', 9.5, 'italic');
   }

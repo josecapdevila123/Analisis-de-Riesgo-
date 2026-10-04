@@ -83,6 +83,8 @@ import { DocumentoSectorial, ExtraccionDocumento, fechaDeExtraccion, MAX_DOCUMEN
 import { runFinancialBlockExtraction, runSectorDocExtraction } from './features/extraction/geminiClient';
 import { SectorBanner } from './components/SectorBanner';
 import { PerfilAviso } from './components/PerfilAviso';
+import { EditorBloques, PROSA } from './components/EditorBloques';
+import { BloqueTexto, historiaABloques, markdownABloques } from './features/textos/bloques';
 import { PanelCalculo, ProveedorCalculo } from './components/CalculoRatio';
 import { explicarRatio } from './features/ratios/explicacion';
 import { HistorialEmpresas } from './components/HistorialEmpresas';
@@ -235,6 +237,7 @@ export default function App() {
     saveCaseProyecciones,
     saveCaseSector,
     saveCaseDocumentos,
+    saveCaseTextoEditado,
     saveCaseEdits,
     saveCaseError,
     removeCase,
@@ -250,7 +253,8 @@ export default function App() {
 
   // Modo edición: el borrador reemplaza la extracción y todo lo derivado
   // (ratios, sanity checks, cruce Nosis) se recalcula en vivo.
-  const [draft, setDraft] = useState<{ id: string; extraction: RawExtraction } | null>(null);
+  // historia/mercado: undefined = sin tocar; null = restaurar el texto original de la IA.
+  const [draft, setDraft] = useState<{ id: string; extraction: RawExtraction; historia?: BloqueTexto[] | null; mercado?: BloqueTexto[] | null } | null>(null);
   const [isSavingEdits, setIsSavingEdits] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const isEditing = !!draft && draft.id === activeResultId;
@@ -374,9 +378,16 @@ export default function App() {
       inconsistencias: activeResult.inconsistencias,
       crossCheck: activeResult.crossCheck,
     };
+    // Solo se marca "valores editados" si cambiaron los números, no por editar textos.
+    const cambiaronValores = JSON.stringify(draft!.extraction) !== JSON.stringify(storedResult?.extraction);
+    const textos: Partial<Pick<ExtractionResult, 'historiaEditada' | 'mercadoEditado'>> = {};
+    if (draft!.historia !== undefined) textos.historiaEditada = draft!.historia;
+    if (draft!.mercado !== undefined) textos.mercadoEditado = draft!.mercado;
     try {
-      await saveCaseEdits(activeResult.id, edits, editedAt);
-      setResults(prev => prev.map(r => r.id === activeResult.id ? { ...r, ...edits, editedAt } : r));
+      if (cambiaronValores) await saveCaseEdits(activeResult.id, edits, editedAt);
+      if (textos.historiaEditada !== undefined) await saveCaseTextoEditado(activeResult.id, 'historiaEditada', textos.historiaEditada);
+      if (textos.mercadoEditado !== undefined) await saveCaseTextoEditado(activeResult.id, 'mercadoEditado', textos.mercadoEditado);
+      setResults(prev => prev.map(r => r.id === activeResult.id ? { ...r, ...(cambiaronValores ? { ...edits, editedAt } : {}), ...textos } : r));
       setDraft(null);
     } catch (err) {
       setEditError(err instanceof Error ? err.message : String(err));
@@ -533,6 +544,8 @@ export default function App() {
         verification: result.verification,
         marketAnalysis: result.marketAnalysis,
         companyHistory: result.companyHistory,
+        mercadoEditado: result.mercadoEditado ?? null,
+        historiaEditada: result.historiaEditada ?? null,
         sector,
         documentos: result.documentosSectoriales ?? [],
       });
@@ -635,6 +648,17 @@ export default function App() {
     }
   };
 
+  // Historia y Mercado editados por bloques: viven en el borrador de "Editar valores"
+  // y se guardan con "Guardar cambios" (null = volver al original).
+  const cambiarTexto = (campo: 'historia' | 'mercado', bloques: BloqueTexto[] | null) =>
+    setDraft(prev => (prev ? { ...prev, [campo]: bloques } : prev));
+  const textoEnEdicion = (campo: 'historia' | 'mercado', guardado: BloqueTexto[] | null | undefined, original: () => BloqueTexto[]) => {
+    const enBorrador = isEditing ? draft![campo] : undefined;
+    if (enBorrador === null) return { bloques: original(), editado: false };
+    const bloques = enBorrador ?? guardado;
+    return bloques ? { bloques, editado: true } : { bloques: original(), editado: false };
+  };
+
   const updateProyecciones = (id: string, next: ProyeccionesGuardadas) => {
     setResults(prev => prev.map(r => (r.id === id ? { ...r, proyecciones: next } : r)));
     if (proyeccionesTimer.current) clearTimeout(proyeccionesTimer.current);
@@ -646,25 +670,6 @@ export default function App() {
     if (activeResultId === id) setActiveResultId(null);
   };
 
-  const downloadJson = (result: ExtractionResult) => {
-    const exportData = {
-      extraction: result.extraction,
-      ratios: result.ratios,
-      inconsistencias: result.inconsistencias,
-      crossCheck: result.crossCheck,
-      verification: result.verification,
-      marketAnalysis: result.marketAnalysis,
-      companyHistory: result.companyHistory,
-      riskAssessment: result.riskAssessment,
-    };
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", `analisis_${result.id}.json`);
-    document.body.appendChild(downloadAnchorNode);
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
-  };
 
 
   const StatusBadge = ({ status }: { status: RatioStatus | null }) => {
@@ -911,12 +916,6 @@ export default function App() {
                   Editar valores
                 </button>
               )
-            )}
-            {activeResult && activeResult.status === 'completed' && !isEditing && (
-              <button onClick={() => downloadJson(activeResult)} className="flex items-center gap-2 px-4 py-2 rounded-full border border-ink/20 text-xs font-semibold text-ink hover:border-ink transition-all disabled:opacity-50">
-                <Download className="w-4 h-4" />
-                Exportar datos
-              </button>
             )}
             <button
               onClick={() => setShowPolicy(v => !v)}
@@ -1302,26 +1301,52 @@ export default function App() {
 
                   {activeTab === 'Mercado' && (
                     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 font-sans">
-                      <div className="w-full bg-white border border-ink/15 p-10 font-sans text-left leading-relaxed">
-                        {activeResult.marketAnalysis ? (
-                          <div className="prose prose-sm md:prose-base max-w-none print:max-w-none print:w-full prose-headings:font-display prose-headings:font-semibold prose-headings:text-gray-800 prose-p:text-left prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline">
-                            <ReactMarkdown>{activeResult.marketAnalysis}</ReactMarkdown>
-                          </div>
-                        ) : (
-                          <div className="text-center text-ink/60 font-mono text-sm py-8">
-                            No se generó análisis de mercado para este reporte.
-                          </div>
-                        )}
-                      </div>
+                      {(() => {
+                        const t = textoEnEdicion('mercado', activeResult.mercadoEditado, () => markdownABloques(activeResult.marketAnalysis));
+                        return (
+                          <EditorBloques
+                            editando={isEditing}
+                            bloques={t.bloques}
+                            editado={t.editado}
+                            onCambiar={b => cambiarTexto('mercado', b)}
+                            onRestaurar={() => cambiarTexto('mercado', null)}
+                            original={
+                              <div className="w-full bg-white border border-ink/15 p-8 md:p-10">
+                                {activeResult.marketAnalysis ? (
+                                  <div className={PROSA}>
+                                    <ReactMarkdown>{activeResult.marketAnalysis}</ReactMarkdown>
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-ink/60">No se generó análisis de mercado para este reporte.</p>
+                                )}
+                              </div>
+                            }
+                          />
+                        );
+                      })()}
                     </div>
                   )}
 
                   {activeTab === 'Historia y actividad de la empresa' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                      <CompanyHistoryView
-                        history={activeResult.companyHistory ?? null}
-                        isGenerating={companyHistoryBusyId === activeResult.id}
-                      />
+                      {(() => {
+                        const t = textoEnEdicion('historia', activeResult.historiaEditada, () => historiaABloques(activeResult.companyHistory));
+                        return (
+                          <EditorBloques
+                            editando={isEditing}
+                            bloques={t.bloques}
+                            editado={t.editado}
+                            onCambiar={b => cambiarTexto('historia', b)}
+                            onRestaurar={() => cambiarTexto('historia', null)}
+                            original={
+                              <CompanyHistoryView
+                                history={activeResult.companyHistory ?? null}
+                                isGenerating={companyHistoryBusyId === activeResult.id}
+                              />
+                            }
+                          />
+                        );
+                      })()}
                     </div>
                   )}
 

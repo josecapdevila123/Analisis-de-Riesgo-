@@ -8,6 +8,7 @@ import { aggregateScore, AggregatedScore, DIMENSIONS, pceProxy } from './score';
 import { armarContextoOpinion } from './contextoOpinion';
 import { PerfilEfectivo, perfilEfectivo, POLICY_VERSION } from './policy';
 import { SectorCaso } from './porton';
+import type { BloqueTexto } from '../textos/bloques';
 import { DocumentoSectorial, firmaDocumentos } from '../sectorDocs/tipos';
 
 // Último paso, a pedido del analista (botón), con el rubro ya confirmado:
@@ -42,6 +43,9 @@ export type RiskAssessmentInput = {
   // Rubro confirmado por el analista (el portón no deja llegar acá sin él).
   sector: SectorCaso;
   documentos?: DocumentoSectorial[] | null;
+  // Versiones editadas por el analista (reemplazan al original en la opinión).
+  historiaEditada?: BloqueTexto[] | null;
+  mercadoEditado?: BloqueTexto[] | null;
 };
 
 export async function runRiskAssessment(input: RiskAssessmentInput): Promise<RiskAssessment> {

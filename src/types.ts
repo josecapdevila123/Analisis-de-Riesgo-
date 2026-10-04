@@ -6,6 +6,7 @@ import type { RiskAssessment } from './features/risk/assessment';
 import type { ProyeccionesGuardadas } from './features/projections/types';
 import type { SectorCaso } from './features/risk/porton';
 import type { DocumentoSectorial } from './features/sectorDocs/tipos';
+import type { BloqueTexto } from './features/textos/bloques';
 
 export interface Shareholder {
   nombre: string;
@@ -44,6 +45,10 @@ export interface ExtractionResult {
   // Documentos propios del rubro (ej. reporte de mora): declarados, no auditados.
   // Se guarda lo extraído y los datos del archivo, no el archivo.
   documentosSectoriales?: DocumentoSectorial[];
+  // Versiones editadas por el analista (por bloques) de Historia y de Mercado.
+  // El original de la IA no se toca; null = se usa el original.
+  historiaEditada?: BloqueTexto[] | null;
+  mercadoEditado?: BloqueTexto[] | null;
   // Fecha ISO de la última edición manual de valores en el dashboard.
   editedAt?: string;
   error?: string;
