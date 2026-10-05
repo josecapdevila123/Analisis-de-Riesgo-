@@ -45,10 +45,10 @@ export function SectorBanner({ sector, porton, generando, bloqueadoPorEdicion, o
     const necesitaOpinion = porton.opinion !== 'vigente';
     return (
       <div className="bg-white border border-ink/15 px-5 py-3.5 flex flex-wrap items-center gap-x-4 gap-y-3 print:hidden">
-        <div className="flex items-center gap-2 text-sm min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm flex-1 min-w-[240px]">
           <CheckCircle2 className="w-4 h-4 text-ink shrink-0" />
           <span>Rubro confirmado: <strong className="font-semibold">{perfil.label}</strong>{sector.subsegmento && <> · {subsegmentoLabel(sector.subsegmento)}</>}</span>
-          <button onClick={() => setEditando(true)} className="text-xs text-ink/50 hover:text-ink inline-flex items-center gap-1 ml-1">
+          <button onClick={() => setEditando(true)} className="text-xs text-ink/50 hover:text-ink inline-flex items-center gap-1 ml-1 shrink-0 whitespace-nowrap">
             <Pencil className="w-3 h-3" /> Cambiar
           </button>
         </div>
@@ -131,7 +131,13 @@ export function SectorBanner({ sector, porton, generando, bloqueadoPorEdicion, o
       {intento && error && <p className="text-xs font-medium text-ink bg-brand-blue/10 inline-block px-2 py-1 rounded-sm">{error}</p>}
       <div className="flex items-center gap-3">
         <button
-          onClick={() => { setIntento(true); if (!error && elegido) onConfirmar(elegido, motivo, nota, pideSubsegmento ? subsegmento : null); }}
+          onClick={() => {
+            setIntento(true);
+            if (error || !elegido) return;
+            onConfirmar(elegido, motivo, nota, pideSubsegmento ? subsegmento : null);
+            // Si se reconfirma sin cambios, el efecto de arriba no corre: se cierra acá.
+            setEditando(false);
+          }}
           className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-brand-green text-ink text-sm font-semibold hover:brightness-95 transition"
         >
           <CheckCircle2 className="w-4 h-4" /> Confirmar rubro
