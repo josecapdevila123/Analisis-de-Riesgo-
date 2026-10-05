@@ -239,8 +239,13 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
     y = lastY() + 6;
   };
 
+  // Las secciones siguen en la misma hoja si hay lugar; solo la primera (después
+  // de la portada) arranca hoja nueva. Para no dejar un título colgado al pie,
+  // pide lugar para el título y el arranque del contenido; si no entra, salta.
+  const ESPACIO_SECCION = 60;
   const sectionTitle = (title: string) => {
-    newPage();
+    if (sections.length === 0) newPage();
+    else if (y > TOP + 2) { y += 10; ensure(ESPACIO_SECCION); }
     sections.push({ title, page: doc.getNumberOfPages() });
     const n = sections.length;
     doc.setFillColor(...INK);
