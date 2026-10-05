@@ -1121,81 +1121,10 @@ export default function App() {
 
               {(activeResult?.status === 'completed' || activeResult?.status === 'completed_partial') && activeResult.extraction && (
                 <>
-                  {isEditing && (
-                    <div className="border-l-4 border-brand-blue bg-brand-blue/5 p-3 text-sm text-ink flex items-center gap-2 print:hidden">
-                      <Pencil className="w-4 h-4 shrink-0" />
-                      <span>
-                        <strong>Modo edición.</strong> Los campos resaltados son editables; ratios, chequeos de consistencia y cruce con Nosis se recalculan al instante. En "Balance y Ratios" están también los datos de origen.
-                      </span>
-                    </div>
-                  )}
-                  {editError && (
-                    <div className="border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-900 print:hidden">
-                      No se pudieron guardar los cambios: {editError}
-                    </div>
-                  )}
-                  {activeResult.inconsistencias.length > 0 && (
-                    <div className="border-l-4 border-yellow-500 bg-yellow-50 p-4 print:hidden">
-                      <div className="flex items-start gap-3">
-                        <AlertTriangle className="w-5 h-5 text-yellow-700 mt-0.5 shrink-0" />
-                        <div className="flex-1">
-                          <h4 className="text-sm font-bold text-yellow-900 mb-2">
-                            Sanity check detectó {activeResult.inconsistencias.length} inconsistencia(s)
-                          </h4>
-                          <ul className="text-xs text-yellow-900/80 space-y-1 list-disc list-inside">
-                            {activeResult.inconsistencias.map((inc, i) => (
-                              <li key={i}>
-                                <span className="font-mono text-[10px] bg-yellow-100 px-1.5 py-0.5 rounded">{inc.campo}</span>{' '}
-                                {inc.mensaje}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {activeResult.status === 'completed_partial' && (
-                    <div className="border-l-4 border-orange-500 bg-orange-50 p-3 text-sm text-orange-900 print:hidden">
-                      Verificación incompleta: el informe ejecutivo no pudo generarse. Los ratios y la extracción están disponibles.
-                    </div>
-                  )}
-                  {marketAnalysisBusyId === activeResult.id && !activeResult.marketAnalysis && (
-                    <div className="border-l-4 border-brand-blue bg-brand-blue/5 p-3 text-xs text-ink flex items-center gap-2 print:hidden">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Generando análisis de mercado en segundo plano...
-                    </div>
-                  )}
-                  {companyHistoryBusyId === activeResult.id && !activeResult.companyHistory && (
-                    <div className="border-l-4 border-brand-blue bg-brand-blue/5 p-3 text-xs text-ink flex items-center gap-2 print:hidden">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Leyendo la Memoria para historia y actividad de la empresa...
-                    </div>
-                  )}
-                  {riskBusyId === activeResult.id && (
-                    <div className="border-l-4 border-brand-blue bg-brand-blue/5 p-3 text-xs text-ink flex items-center gap-2 print:hidden">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Generando la opinión de riesgo integral (último paso)...
-                    </div>
-                  )}
-                  {sectorActivo && storedResult?.extraction && (
-                    <SectorBanner
-                      sector={sectorActivo}
-                      porton={porton}
-                      generando={riskBusyId === activeResult.id}
-                      bloqueadoPorEdicion={isEditing}
-                      onConfirmar={(rubro, motivo, nota, sub) => storedResult && confirmSector(storedResult, rubro, motivo, nota, sub)}
-                      onGenerarOpinion={() => storedResult && generateRiskAssessment(storedResult)}
-                      prechequeo={prechequeo ? {
-                        faltantes: prechequeo.base.filter(i => !i.ok).length + prechequeo.documentosRubro.filter(d => d.recomendado && d.cargados.length === 0).length + (prechequeo.bloqueFinanciero.requerido && !prechequeo.bloqueFinanciero.cargado ? 1 : 0),
-                        alertas: prechequeo.alertas.length,
-                      } : null}
-                      onVerPrechequeo={() => setActiveTab('Opinión de riesgos')}
-                    />
-                  )}
                 <div className="flex flex-col md:flex-row gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                   {/* Sidebar */}
                   <div className="w-full md:w-64 shrink-0">
-                    <div className="md:sticky md:top-8 md:max-h-[calc(100vh-8rem)] flex flex-col gap-2 overflow-y-auto scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                    <div className="md:sticky md:top-0 md:max-h-[calc(100vh-8rem)] flex flex-col gap-2 overflow-y-auto scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                       {TABS.map(tab => (
                         <button
                           key={tab}
@@ -1215,6 +1144,78 @@ export default function App() {
 
                   {/* Main Content */}
                   <div className="flex-1 min-w-0 space-y-8">
+                    {/* Avisos y rubro en la columna del contenido: respetan su margen y las pestañas arrancan arriba. */}
+                    {isEditing && (
+                      <div className="border-l-4 border-brand-blue bg-brand-blue/5 p-3 text-sm text-ink flex items-center gap-2 print:hidden">
+                        <Pencil className="w-4 h-4 shrink-0" />
+                        <span>
+                          <strong>Modo edición.</strong> Los campos resaltados son editables; ratios, chequeos de consistencia y cruce con Nosis se recalculan al instante. En "Balance y Ratios" están también los datos de origen.
+                        </span>
+                      </div>
+                    )}
+                    {editError && (
+                      <div className="border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-900 print:hidden">
+                        No se pudieron guardar los cambios: {editError}
+                      </div>
+                    )}
+                    {activeResult.inconsistencias.length > 0 && (
+                      <div className="border-l-4 border-yellow-500 bg-yellow-50 p-4 print:hidden">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="w-5 h-5 text-yellow-700 mt-0.5 shrink-0" />
+                          <div className="flex-1">
+                            <h4 className="text-sm font-bold text-yellow-900 mb-2">
+                              Sanity check detectó {activeResult.inconsistencias.length} inconsistencia(s)
+                            </h4>
+                            <ul className="text-xs text-yellow-900/80 space-y-1 list-disc list-inside">
+                              {activeResult.inconsistencias.map((inc, i) => (
+                                <li key={i}>
+                                  <span className="font-mono text-[10px] bg-yellow-100 px-1.5 py-0.5 rounded">{inc.campo}</span>{' '}
+                                  {inc.mensaje}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {activeResult.status === 'completed_partial' && (
+                      <div className="border-l-4 border-orange-500 bg-orange-50 p-3 text-sm text-orange-900 print:hidden">
+                        Verificación incompleta: el informe ejecutivo no pudo generarse. Los ratios y la extracción están disponibles.
+                      </div>
+                    )}
+                    {marketAnalysisBusyId === activeResult.id && !activeResult.marketAnalysis && (
+                      <div className="border-l-4 border-brand-blue bg-brand-blue/5 p-3 text-xs text-ink flex items-center gap-2 print:hidden">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Generando análisis de mercado en segundo plano...
+                      </div>
+                    )}
+                    {companyHistoryBusyId === activeResult.id && !activeResult.companyHistory && (
+                      <div className="border-l-4 border-brand-blue bg-brand-blue/5 p-3 text-xs text-ink flex items-center gap-2 print:hidden">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Leyendo la Memoria para historia y actividad de la empresa...
+                      </div>
+                    )}
+                    {riskBusyId === activeResult.id && (
+                      <div className="border-l-4 border-brand-blue bg-brand-blue/5 p-3 text-xs text-ink flex items-center gap-2 print:hidden">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Generando la opinión de riesgo integral (último paso)...
+                      </div>
+                    )}
+                    {sectorActivo && storedResult?.extraction && (
+                      <SectorBanner
+                        sector={sectorActivo}
+                        porton={porton}
+                        generando={riskBusyId === activeResult.id}
+                        bloqueadoPorEdicion={isEditing}
+                        onConfirmar={(rubro, motivo, nota, sub) => storedResult && confirmSector(storedResult, rubro, motivo, nota, sub)}
+                        onGenerarOpinion={() => storedResult && generateRiskAssessment(storedResult)}
+                        prechequeo={prechequeo ? {
+                          faltantes: prechequeo.base.filter(i => !i.ok).length + prechequeo.documentosRubro.filter(d => d.recomendado && d.cargados.length === 0).length + (prechequeo.bloqueFinanciero.requerido && !prechequeo.bloqueFinanciero.cargado ? 1 : 0),
+                          alertas: prechequeo.alertas.length,
+                        } : null}
+                        onVerPrechequeo={() => setActiveTab('Opinión de riesgos')}
+                      />
+                    )}
                     
                     {/* Institutional Header */}
                   <div ref={setTarjetaEmpresa} className="bg-white border border-ink/15 p-6 relative overflow-hidden">
