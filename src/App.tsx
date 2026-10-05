@@ -782,6 +782,18 @@ export default function App() {
     );
   };
 
+  // Nombre de la empresa en el header: visible solo cuando la tarjeta de la empresa no se ve.
+  const [areaScroll, setAreaScroll] = useState<HTMLDivElement | null>(null);
+  const [tarjetaEmpresa, setTarjetaEmpresa] = useState<HTMLDivElement | null>(null);
+  const [tarjetaVisible, setTarjetaVisible] = useState(true);
+  useEffect(() => {
+    if (!areaScroll || !tarjetaEmpresa) { setTarjetaVisible(false); return; }
+    const obs = new IntersectionObserver(([e]) => setTarjetaVisible(e.isIntersecting), { root: areaScroll, threshold: 0 });
+    obs.observe(tarjetaEmpresa);
+    return () => obs.disconnect();
+  }, [areaScroll, tarjetaEmpresa]);
+  const nombreEnHeader = !tarjetaVisible;
+
   const nuevoCaso = () => { setCurrentFiles([]); setActiveResultId(null); setShowPolicy(false); };
 
   return (
@@ -896,10 +908,11 @@ export default function App() {
         )}
         {/* Header */}
         <header className="h-16 border-b border-ink/10 flex items-center justify-between px-8 bg-white">
-          {/* En la home no repite el título; dentro de un caso dice qué empresa estás mirando. */}
+          {/* En la home no repite el título. Dentro de un caso, el nombre aparece solo cuando
+              la tarjeta de la empresa salió de la vista al bajar: arriba de todo no se duplica. */}
           <div className="flex items-center gap-4 min-w-0">
             {activeResult && (
-              <div className="flex flex-col min-w-0">
+              <div className={cn('flex flex-col min-w-0 transition-all duration-300', nombreEnHeader ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1 pointer-events-none')} aria-hidden={!nombreEnHeader}>
                 <span className="text-sm font-semibold truncate">
                   {activeResult.extraction?.company_profile?.name || (activeResult.status === 'error' ? 'Caso con error' : 'Caso en proceso')}
                 </span>
@@ -959,7 +972,7 @@ export default function App() {
         </header>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-8">
+        <div ref={setAreaScroll} className="flex-1 overflow-y-auto p-8">
           {!activeResultId && currentFiles.length === 0 ? (
             <div className="max-w-2xl mx-auto mt-4">
               <div className="mb-8 text-center">
@@ -1205,7 +1218,7 @@ export default function App() {
                   <div className="flex-1 min-w-0 space-y-8">
                     
                     {/* Institutional Header */}
-                  <div className="bg-white border border-ink/15 p-6 relative overflow-hidden">
+                  <div ref={setTarjetaEmpresa} className="bg-white border border-ink/15 p-6 relative overflow-hidden">
                     <h1 className="text-2xl font-display font-semibold mb-2 relative z-10">
                       <EditableText
                         path={['company_profile', 'name']}
