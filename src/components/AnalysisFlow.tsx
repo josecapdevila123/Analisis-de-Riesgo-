@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { FileText, ShieldCheck } from 'lucide-react';
 import { CaseState } from '../features/extraction/pipeline';
 import { cn } from '../lib/utils';
@@ -6,8 +6,9 @@ import { cn } from '../lib/utils';
 // Animación del análisis en curso, pensada para relajar la espera: cada
 // documento se "lee" y de él salen partículas grises (los datos en bruto) que
 // viajan a una gota que respira; al entrar se tiñen de turquesa y salen de la
-// gota hacia el informe ya transformadas. Todo lento y suave. La etapa sale de `processingStage` (no se
-// simula); los mensajes que rotan describen la etapa, no miden el avance.
+// gota hacia el informe ya transformadas. Todo lento y suave. La etapa sale de
+// `processingStage` (no se simula): llena las líneas del informe y se anuncia
+// a lectores de pantalla.
 
 const PASOS = ['Leyendo los documentos', 'Calculando los ratios', 'Verificando y redactando'];
 
@@ -17,26 +18,6 @@ const pasoActual = (stage: CaseState | null): number => {
   return 0; // processing / extracting / desconocido (p. ej. al recargar)
 };
 
-const MENSAJES: string[][] = [
-  [
-    'Estado de situación patrimonial',
-    'Estado de resultados',
-    'Deuda bancaria',
-    'Informe Nosis',
-    'Memoria del Directorio',
-    'Accionistas y directorio',
-  ],
-  [
-    '27 ratios, calculados en código',
-    'Chequeos de consistencia contable',
-    'Deuda del balance contra Nosis',
-  ],
-  [
-    'Interpretando los ratios',
-    'Redactando el resumen ejecutivo',
-    'Mirando el sector y la historia de la empresa',
-  ],
-];
 
 // Partículas que caen de la gota al informe: desvío horizontal (px), tamaño,
 // demora y duración. Fijas para que el dibujo no cambie en cada render.
@@ -75,14 +56,6 @@ const TURQUESA = '#35EEC8';
 
 export function AnalysisFlow({ stage, fileNames }: { stage: CaseState | null; fileNames: string[] }) {
   const paso = pasoActual(stage);
-  const mensajes = MENSAJES[paso];
-
-  const [iMensaje, setIMensaje] = useState(0);
-  useEffect(() => {
-    setIMensaje(0);
-    const id = setInterval(() => setIMensaje(i => (i + 1) % mensajes.length), 4000);
-    return () => clearInterval(id);
-  }, [paso, mensajes.length]);
 
   // Los hilos se dibujan en píxeles con el ancho real de la fila de documentos.
   const zonaRef = useRef<HTMLDivElement>(null);
@@ -209,29 +182,6 @@ export function AnalysisFlow({ stage, fileNames }: { stage: CaseState | null; fi
             </div>
           ))}
         </div>
-      </div>
-
-      {/* Qué está haciendo */}
-      <div className="mt-8 text-center">
-        <p key={paso} className="agua-late font-display text-lg font-medium text-ink">{PASOS[paso]}</p>
-        <p key={`${paso}-${iMensaje}`} className="agua-aparece mt-1.5 h-5 text-sm text-ink/45">
-          {mensajes[iMensaje]}
-        </p>
-      </div>
-
-      {/* Avance: tres puntos, el actual se estira */}
-      <div className="mt-6 flex items-center justify-center gap-1.5" aria-hidden="true">
-        {PASOS.map((p, i) => (
-          <span
-            key={p}
-            className={cn(
-              'h-1.5 rounded-full transition-all duration-700',
-              i < paso && 'w-1.5 bg-ink/40',
-              i === paso && 'w-6 bg-brand-green',
-              i > paso && 'w-1.5 bg-ink/10',
-            )}
-          />
-        ))}
       </div>
     </div>
   );
