@@ -15,7 +15,7 @@ import {
   Loader2, 
   Download,
   Trash2,
-  RefreshCw,
+  Plus,
   Sparkles,
   FileSpreadsheet,
   TrendingUp,
@@ -24,7 +24,6 @@ import {
   AlertTriangle,
   X,
   ChevronRight,
-  LogOut,
   ChevronsLeft,
   ChevronsRight,
   CornerDownRight,
@@ -84,7 +83,8 @@ import { runFinancialBlockExtraction, runSectorDocExtraction } from './features/
 import { SectorBanner } from './components/SectorBanner';
 import { PerfilAviso } from './components/PerfilAviso';
 import { EditorBloques, PROSA } from './components/EditorBloques';
-import { BloqueTexto, historiaABloques, markdownABloques } from './features/textos/bloques';
+import { MenuUsuario } from './components/MenuUsuario';
+import { BloqueTexto, bloquesAMarkdown, historiaABloques, markdownABloques } from './features/textos/bloques';
 import { PanelCalculo, ProveedorCalculo } from './components/CalculoRatio';
 import { explicarRatio } from './features/ratios/explicacion';
 import { HistorialEmpresas } from './components/HistorialEmpresas';
@@ -782,15 +782,29 @@ export default function App() {
     );
   };
 
+  // Nombre de la empresa en el header: visible solo cuando la tarjeta de la empresa no se ve.
+  const [areaScroll, setAreaScroll] = useState<HTMLDivElement | null>(null);
+  const [tarjetaEmpresa, setTarjetaEmpresa] = useState<HTMLDivElement | null>(null);
+  const [tarjetaVisible, setTarjetaVisible] = useState(true);
+  useEffect(() => {
+    if (!areaScroll || !tarjetaEmpresa) { setTarjetaVisible(false); return; }
+    const obs = new IntersectionObserver(([e]) => setTarjetaVisible(e.isIntersecting), { root: areaScroll, threshold: 0 });
+    obs.observe(tarjetaEmpresa);
+    return () => obs.disconnect();
+  }, [areaScroll, tarjetaEmpresa]);
+  const nombreEnHeader = !tarjetaVisible;
+
+  const nuevoCaso = () => { setCurrentFiles([]); setActiveResultId(null); setShowPolicy(false); };
+
   return (
     <EditProvider value={editContext}>
     <div className="flex h-screen bg-white text-ink font-sans selection:bg-ink selection:text-white">
       {/* Sidebar */}
       <div className="relative flex shrink-0 print:hidden">
-      {/* Manija en el borde para contraer / expandir la barra */}
+      {/* Manija en el borde para contraer / expandir la barra: debajo del header, para que no se pierda contra el blanco */}
       <button
         onClick={() => setIsHistorySidebarOpen(!isHistorySidebarOpen)}
-        className="absolute -right-3.5 top-[26px] z-40 w-7 h-7 rounded-full bg-white border border-ink/15 shadow-sm flex items-center justify-center text-ink/70 hover:text-ink hover:border-ink/40 hover:shadow transition"
+        className="absolute -right-3.5 top-[78px] z-40 w-7 h-7 rounded-full bg-white border border-ink/15 shadow-sm flex items-center justify-center text-ink/70 hover:text-ink hover:border-ink/40 hover:shadow transition"
         title={isHistorySidebarOpen ? 'Contraer barra lateral' : 'Expandir barra lateral'}
         aria-label={isHistorySidebarOpen ? 'Contraer barra lateral' : 'Expandir barra lateral'}
       >
@@ -803,6 +817,16 @@ export default function App() {
             <button onClick={() => setActiveResultId(null)} className="mb-4 hover:opacity-80 transition-opacity" title="Ir al inicio">
               <BiBankLogo variant="light" layout="icon" className="h-9 w-9" />
             </button>
+            {user && (
+              <button
+                onClick={nuevoCaso}
+                className="w-7 h-7 my-1.5 rounded-full bg-brand-green text-ink flex items-center justify-center hover:brightness-95 transition"
+                title="Nuevo caso"
+                aria-label="Nuevo caso"
+              >
+                <Plus className="w-3.5 h-3.5" strokeWidth={2.75} />
+              </button>
+            )}
             <button
               onClick={() => setIsHistorySidebarOpen(true)}
               className="w-10 h-10 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition"
@@ -823,35 +847,29 @@ export default function App() {
             <p className="font-display text-lg font-semibold leading-tight">Análisis de riesgo</p>
             <p className="text-[11px] text-white/50 mt-0.5">Banca Empresas · Legajo técnico</p>
 
-            {isAuthReady && (
-              <div className="mt-5 pt-4 border-t border-white/15">
-                {user ? (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      {user.photoURL ? (
-                        <img src={user.photoURL} alt="Profile" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
-                      ) : (
-                        <div className="w-6 h-6 rounded-full bg-brand-green text-ink flex items-center justify-center text-[10px] font-bold">
-                          {user.email?.[0].toUpperCase()}
-                        </div>
-                      )}
-                      <span className="text-xs truncate text-white/70">{user.email}</span>
-                    </div>
-                    <button onClick={handleLogout} className="p-1 text-white/50 hover:text-white hover:bg-white/10 rounded transition-colors" title="Cerrar sesión">
-                      <LogOut className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleLogin}
-                    className="w-full py-2.5 px-4 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition flex items-center justify-center gap-2"
-                  >
-                    Iniciar sesión con Google
-                  </button>
-                )}
-              </div>
+            {/* El usuario está a la derecha del header (como Gmail); acá solo el ingreso. */}
+            {isAuthReady && !user && (
+              <button
+                onClick={handleLogin}
+                className="mt-5 w-full py-2.5 px-4 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition flex items-center justify-center gap-2"
+              >
+                Iniciar sesión con Google
+              </button>
             )}
           </div>
+
+          {/* Fijo arriba del historial: la lista se desplaza, el botón no. */}
+          {user && (
+            <div className="px-6 pt-5">
+              <button
+                onClick={nuevoCaso}
+                className="w-full py-2.5 px-4 rounded-full bg-brand-green text-ink text-xs font-semibold hover:brightness-95 transition flex items-center justify-center gap-2"
+              >
+                <Plus className="w-4 h-4" strokeWidth={2.5} />
+                Nuevo caso
+              </button>
+            </div>
+          )}
 
           <div className="flex-1 overflow-y-auto">
             <div className="px-6 py-5">
@@ -890,11 +908,19 @@ export default function App() {
         )}
         {/* Header */}
         <header className="h-16 border-b border-ink/10 flex items-center justify-between px-8 bg-white">
-          <div className="flex items-center gap-4">
-            <div className="flex flex-col">
-              <span className="text-[10px] uppercase tracking-wider text-ink/45">Módulo</span>
-              <span className="text-sm font-semibold">Dashboard de riesgo</span>
-            </div>
+          {/* En la home no repite el título. Dentro de un caso, el nombre aparece solo cuando
+              la tarjeta de la empresa salió de la vista al bajar: arriba de todo no se duplica. */}
+          <div className="flex items-center gap-4 min-w-0">
+            {activeResult && (
+              <div className={cn('flex flex-col min-w-0 transition-all duration-300', nombreEnHeader ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1 pointer-events-none')} aria-hidden={!nombreEnHeader}>
+                <span className="text-sm font-semibold truncate">
+                  {activeResult.extraction?.company_profile?.name || (activeResult.status === 'error' ? 'Caso con error' : 'Caso en proceso')}
+                </span>
+                {activeResult.extraction?.company_profile?.cuit && (
+                  <span className="text-[11px] text-ink/50 tabular-nums">CUIT {activeResult.extraction.company_profile.cuit}</span>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -929,7 +955,7 @@ export default function App() {
                 </button>
               )
             )}
-            {/* Dentro de un caso la acción principal (verde) es el informe; "Nuevo caso" pasa a secundario. */}
+            {/* Dentro de un caso la acción principal (verde) es el informe; "Nuevo caso" vive en el sidebar. */}
             {activeResult?.extraction && (activeResult.status === 'completed' || activeResult.status === 'completed_partial') && !isEditing && (
               <button
                 onClick={() => porton.puedeExportarPdf && generatePDF(activeResult)}
@@ -941,26 +967,17 @@ export default function App() {
                 Informe para comité
               </button>
             )}
-            <button
-              onClick={() => { setCurrentFiles([]); setActiveResultId(null); setShowPolicy(false); }}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition disabled:opacity-50",
-                activeResultId ? "border border-ink/20 text-ink hover:border-ink" : "bg-brand-green text-ink hover:brightness-95"
-              )}
-            >
-              <RefreshCw className="w-4 h-4" />
-              Nuevo caso
-            </button>
+            {user && <MenuUsuario user={user} onLogout={handleLogout} />}
           </div>
         </header>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-8">
+        <div ref={setAreaScroll} className="flex-1 overflow-y-auto p-8">
           {!activeResultId && currentFiles.length === 0 ? (
-            <div className="max-w-2xl mx-auto mt-12">
-              <div className="mb-12 text-center">
+            <div className="max-w-2xl mx-auto mt-4">
+              <div className="mb-8 text-center">
                 {user && nombreUsuario && (
-                  <p className="text-sm text-ink/55 mb-2">Bienvenido, <span className="font-semibold text-ink">{nombreUsuario}</span></p>
+                  <p className="text-sm text-ink/55 mb-1">Bienvenido, <span className="font-semibold text-ink">{nombreUsuario}</span></p>
                 )}
                 <h2 className="text-5xl font-display font-semibold tracking-tight">Análisis de riesgo</h2>
               </div>
@@ -1118,11 +1135,6 @@ export default function App() {
                       No se pudieron guardar los cambios: {editError}
                     </div>
                   )}
-                  {!isEditing && activeResult.editedAt && (
-                    <div className="border-l-4 border-ink/40 bg-white p-3 text-xs text-ink/80 print:hidden">
-                      Valores editados manualmente el {new Date(activeResult.editedAt).toLocaleString('es-AR')}. El resumen ejecutivo y el análisis de mercado se generaron con los valores originales.
-                    </div>
-                  )}
                   {activeResult.inconsistencias.length > 0 && (
                     <div className="border-l-4 border-yellow-500 bg-yellow-50 p-4 print:hidden">
                       <div className="flex items-start gap-3">
@@ -1206,7 +1218,7 @@ export default function App() {
                   <div className="flex-1 min-w-0 space-y-8">
                     
                     {/* Institutional Header */}
-                  <div className="bg-white border border-ink/15 p-6 relative overflow-hidden">
+                  <div ref={setTarjetaEmpresa} className="bg-white border border-ink/15 p-6 relative overflow-hidden">
                     <h1 className="text-2xl font-display font-semibold mb-2 relative z-10">
                       <EditableText
                         path={['company_profile', 'name']}
@@ -1664,10 +1676,11 @@ export default function App() {
                   <div className="mb-12 print:break-before-page">
                     <h2 className="text-2xl font-bold mb-6 border-b border-gray-300 pb-2 print:break-after-avoid uppercase tracking-tight">Mercado</h2>
 
-                    {activeResult.marketAnalysis ? (
+                    {/* Si el analista editó el mercado, se imprime su versión (igual que el PDF). */}
+                    {(activeResult.mercadoEditado ? bloquesAMarkdown(activeResult.mercadoEditado) : activeResult.marketAnalysis) ? (
                       <div className="w-full bg-white border border-ink/15 p-10 font-sans text-left leading-relaxed">
-                        <div className="prose prose-sm md:prose-base max-w-none print:max-w-none print:w-full prose-headings:font-display prose-headings:font-semibold prose-headings:text-gray-800 prose-p:text-left prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline">
-                          <ReactMarkdown>{activeResult.marketAnalysis}</ReactMarkdown>
+                        <div className={PROSA}>
+                          <ReactMarkdown>{activeResult.mercadoEditado ? bloquesAMarkdown(activeResult.mercadoEditado) : activeResult.marketAnalysis}</ReactMarkdown>
                         </div>
                       </div>
                     ) : (
