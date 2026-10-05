@@ -1013,12 +1013,11 @@ export default function App() {
                     ) : (
                       <>
                         <p className="font-display text-lg font-semibold">Cargá la documentación del cliente</p>
-                        <p className="text-sm text-ink/55 mt-0.5">Arrastralos acá o elegilos. PDF, imágenes, Excel o CSV.</p>
                       </>
                     )}
                   </div>
                   {user ? (
-                    <span className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-brand-green text-ink text-sm font-semibold shrink-0 hover:brightness-95 transition">
+                    <span title="PDF, imágenes, Excel o CSV" className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-brand-green text-ink text-sm font-semibold shrink-0 hover:brightness-95 transition">
                       <Upload className="w-4 h-4" /> Elegir archivos
                     </span>
                   ) : (
