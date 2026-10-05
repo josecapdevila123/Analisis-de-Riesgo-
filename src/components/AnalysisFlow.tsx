@@ -1,12 +1,14 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { FileText, ShieldCheck } from 'lucide-react';
 import { CaseState } from '../features/extraction/pipeline';
 import { cn } from '../lib/utils';
 
 // Animación del análisis en curso, pensada para relajar la espera: cada
-// documento se "lee" y de él baja un hilo de agua que desemboca en una gota que
-// respira. Todo lento y suave. La etapa sale de `processingStage` (no se
-// simula); los mensajes que rotan describen la etapa, no miden el avance.
+// documento se "lee" y de él salen partículas grises (los datos en bruto) que
+// viajan a una gota que respira; al entrar se tiñen de turquesa y salen de la
+// gota hacia el informe ya transformadas. Todo lento y suave. La etapa sale de
+// `processingStage` (no se simula): llena las líneas del informe y se anuncia
+// a lectores de pantalla.
 
 const PASOS = ['Leyendo los documentos', 'Calculando los ratios', 'Verificando y redactando'];
 
@@ -16,26 +18,6 @@ const pasoActual = (stage: CaseState | null): number => {
   return 0; // processing / extracting / desconocido (p. ej. al recargar)
 };
 
-const MENSAJES: string[][] = [
-  [
-    'Estado de situación patrimonial',
-    'Estado de resultados',
-    'Deuda bancaria',
-    'Informe Nosis',
-    'Memoria del Directorio',
-    'Accionistas y directorio',
-  ],
-  [
-    '27 ratios, calculados en código',
-    'Chequeos de consistencia contable',
-    'Deuda del balance contra Nosis',
-  ],
-  [
-    'Interpretando los ratios',
-    'Redactando el resumen ejecutivo',
-    'Mirando el sector y la historia de la empresa',
-  ],
-];
 
 // Partículas que caen de la gota al informe: desvío horizontal (px), tamaño,
 // demora y duración. Fijas para que el dibujo no cambie en cada render.
@@ -47,29 +29,33 @@ const PARTICULAS = [
   { x: -34, tam: 2.5, delay: 2.8, dur: 4.6 },
   { x: 4, tam: 4, delay: 3.4, dur: 4.3 },
   { x: 20, tam: 2.5, delay: 4.0, dur: 5.0 },
+  { x: -14, tam: 3, delay: 1.0, dur: 4.9 },
+  { x: 34, tam: 2, delay: 3.0, dur: 4.5 },
+  { x: -28, tam: 3.5, delay: 4.6, dur: 4.7 },
 ];
 const CAIDA = 92;
 
 const MAX_ARCHIVOS = 4;
 const ALTO = 104;
-// Hilos por documento: desplazamiento, patrón de gotas y velocidad. Los
-// patrones suman 16 o 32 para que el loop de 64 px no salte.
-const HILOS = [
-  { dx: 0, dash: '6 10', dur: 3.2, ancho: 2 },
-  { dx: -4, dash: '2 14', dur: 4.4, ancho: 1.5 },
-  { dx: 4, dash: '12 20', dur: 5.6, ancho: 1 },
+// Partículas por documento hacia la gota: desvío lateral del recorrido (px),
+// radio, duración y desfase. Fijas para que el dibujo no cambie en cada render.
+const DATOS = [
+  { dx: 0, r: 2, dur: 3.6, desfase: 0 },
+  { dx: -5, r: 1.4, dur: 4.4, desfase: 0.6 },
+  { dx: 5, r: 1.6, dur: 4.0, desfase: 1.3 },
+  { dx: -2, r: 2.4, dur: 5.0, desfase: 1.9 },
+  { dx: 3, r: 1.2, dur: 3.8, desfase: 2.6 },
+  { dx: -6, r: 1.8, dur: 4.6, desfase: 3.2 },
+  { dx: 6, r: 1.3, dur: 5.4, desfase: 3.9 },
+  { dx: -3, r: 1.6, dur: 4.2, desfase: 4.5 },
+  { dx: 2, r: 2, dur: 4.8, desfase: 5.1 },
+  { dx: -7, r: 1.1, dur: 5.2, desfase: 2.2 },
 ];
+const GRIS = '#9a9a9a';
+const TURQUESA = '#35EEC8';
 
 export function AnalysisFlow({ stage, fileNames }: { stage: CaseState | null; fileNames: string[] }) {
   const paso = pasoActual(stage);
-  const mensajes = MENSAJES[paso];
-
-  const [iMensaje, setIMensaje] = useState(0);
-  useEffect(() => {
-    setIMensaje(0);
-    const id = setInterval(() => setIMensaje(i => (i + 1) % mensajes.length), 4000);
-    return () => clearInterval(id);
-  }, [paso, mensajes.length]);
 
   // Los hilos se dibujan en píxeles con el ancho real de la fila de documentos.
   const zonaRef = useRef<HTMLDivElement>(null);
@@ -81,6 +67,9 @@ export function AnalysisFlow({ stage, fileNames }: { stage: CaseState | null; fi
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Con "reducir movimiento" no se dibujan partículas (SMIL no respeta la media query de CSS).
+  const [quieto] = useState(() => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
 
   const visibles = fileNames.slice(0, MAX_ARCHIVOS);
   const columnas = visibles.length || 1;
@@ -117,35 +106,29 @@ export function AnalysisFlow({ stage, fileNames }: { stage: CaseState | null; fi
           ))}
         </div>
 
-        {/* Hilos de agua hacia la gota */}
-        <svg width={ancho} height={ALTO} className="block" aria-hidden="true">
-          <defs>
-            <linearGradient id="agua-hilo" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2={ALTO}>
-              <stop offset="0%" stopColor="#35EEC8" stopOpacity="0" />
-              <stop offset="35%" stopColor="#35EEC8" stopOpacity="0.55" />
-              <stop offset="100%" stopColor="#35EEC8" stopOpacity="0.95" />
-            </linearGradient>
-            <linearGradient id="agua-cauce" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2={ALTO}>
-              <stop offset="0%" stopColor="#000" stopOpacity="0.02" />
-              <stop offset="100%" stopColor="#35EEC8" stopOpacity="0.25" />
-            </linearGradient>
-          </defs>
-          {ancho > 0 && Array.from({ length: columnas }, (_, i) => (
+        {/* Datos en bruto (grises) que viajan de cada documento a la gota y se tiñen al entrar */}
+        <svg width={ancho} height={ALTO} className="block overflow-visible" aria-hidden="true">
+          {ancho > 0 && !quieto && Array.from({ length: columnas }, (_, i) => (
             <g key={i}>
-              <path d={camino(i, 0)} fill="none" stroke="url(#agua-cauce)" strokeWidth="5" opacity="0.7" strokeLinecap="round" />
-              {HILOS.map((h, k) => (
-                <path
-                  key={k}
-                  d={camino(i, h.dx)}
-                  fill="none"
-                  stroke="url(#agua-hilo)"
-                  strokeWidth={h.ancho}
-                  strokeLinecap="round"
-                  strokeDasharray={h.dash}
-                  className="agua-corre"
-                  style={{ animationDuration: `${h.dur}s`, animationDelay: `-${(i * 0.7 + k) % h.dur}s` }}
-                />
-              ))}
+              {DATOS.map((d, k) => {
+                const desfase = -((d.desfase + i * 0.45) % d.dur);
+                return (
+                  <circle key={k} r={d.r} fill={GRIS} opacity="0">
+                    <animateMotion
+                      path={camino(i, d.dx)}
+                      dur={`${d.dur}s`}
+                      begin={`${desfase}s`}
+                      repeatCount="indefinite"
+                      calcMode="spline"
+                      keyPoints="0;1"
+                      keyTimes="0;1"
+                      keySplines="0.45 0 0.75 1"
+                    />
+                    <animate attributeName="opacity" values="0;0.75;0.75;0" keyTimes="0;0.15;0.85;1" dur={`${d.dur}s`} begin={`${desfase}s`} repeatCount="indefinite" />
+                    <animate attributeName="fill" values={`${GRIS};${GRIS};${TURQUESA}`} keyTimes="0;0.7;1" dur={`${d.dur}s`} begin={`${desfase}s`} repeatCount="indefinite" />
+                  </circle>
+                );
+              })}
             </g>
           ))}
         </svg>
@@ -199,29 +182,6 @@ export function AnalysisFlow({ stage, fileNames }: { stage: CaseState | null; fi
             </div>
           ))}
         </div>
-      </div>
-
-      {/* Qué está haciendo */}
-      <div className="mt-8 text-center">
-        <p key={paso} className="agua-late font-display text-lg font-medium text-ink">{PASOS[paso]}</p>
-        <p key={`${paso}-${iMensaje}`} className="agua-aparece mt-1.5 h-5 text-sm text-ink/45">
-          {mensajes[iMensaje]}
-        </p>
-      </div>
-
-      {/* Avance: tres puntos, el actual se estira */}
-      <div className="mt-6 flex items-center justify-center gap-1.5" aria-hidden="true">
-        {PASOS.map((p, i) => (
-          <span
-            key={p}
-            className={cn(
-              'h-1.5 rounded-full transition-all duration-700',
-              i < paso && 'w-1.5 bg-ink/40',
-              i === paso && 'w-6 bg-brand-green',
-              i > paso && 'w-1.5 bg-ink/10',
-            )}
-          />
-        ))}
       </div>
     </div>
   );

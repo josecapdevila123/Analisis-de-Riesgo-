@@ -80,7 +80,6 @@
    Animación del análisis en curso (components/AnalysisFlow.tsx)
    Lenta y suave a propósito: tiene que acompañar la espera, no apurarla.
    ========================================================================== */
-@keyframes agua-corre { to { stroke-dashoffset: -64; } }
 @keyframes agua-lee {
   0% { transform: translateY(-100%); opacity: 0; }
   20%, 80% { opacity: 1; }
@@ -114,7 +113,6 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-.agua-corre { animation: agua-corre 3.2s linear infinite; }
 .agua-lee { animation: agua-lee 3.6s ease-in-out infinite; }
 .agua-gota { animation: agua-gota 12s ease-in-out infinite; }
 .agua-onda { animation: agua-onda 6s ease-out infinite; }
@@ -125,6 +123,6 @@
 .agua-late { animation: agua-late 3.6s ease-in-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
-  .agua-corre, .agua-lee, .agua-gota, .agua-onda, .agua-aparece, .agua-late, .agua-nutre { animation: none; }
+  .agua-lee, .agua-gota, .agua-onda, .agua-aparece, .agua-late, .agua-nutre { animation: none; }
   .agua-particula { display: none; }
 }

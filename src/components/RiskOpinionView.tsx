@@ -37,16 +37,12 @@ const POSTURA = {
 
 const EscalaPuntaje = ({ f }: { f: FormacionPuntaje }) => {
   const pct = (v: number) => `${Math.min(100, Math.max(0, v))}%`;
-  const promedioLejos = f.promedio !== null && Math.abs(f.final - f.promedio) >= 12;
+  // Arriba solo va "Final": el promedio queda como marca en la escala y lo explica
+  // la frase de abajo ("Sube de X a Y…"), así las etiquetas nunca se pisan.
   return (
     <div className="w-full" role="img" aria-label={f.subePorPiso ? `Promedio ${f.promedio}, puntaje final ${f.final} de 100 por piso` : `Puntaje ${f.final} de 100`}>
-      <div className="relative h-7">
-        {f.subePorPiso && f.promedio !== null && (
-          <span className={cn('absolute bottom-0 text-[11px] text-ink/55 whitespace-nowrap', promedioLejos ? '-translate-x-1/2' : '-translate-x-full -ml-2')} style={{ left: pct(f.promedio) }}>
-            Promedio {f.promedio}
-          </span>
-        )}
-        <span className={cn('absolute bottom-0 text-[11px] font-semibold text-ink whitespace-nowrap', f.final > 85 ? '-translate-x-full' : f.subePorPiso && !promedioLejos ? 'ml-2' : '-translate-x-1/2')} style={{ left: pct(f.final) }}>
+      <div className="relative h-5">
+        <span className={cn('absolute bottom-0 text-[11px] font-semibold text-ink whitespace-nowrap', f.final > 88 ? '-translate-x-full' : f.final < 8 ? '' : '-translate-x-1/2')} style={{ left: pct(f.final) }}>
           Final {f.final}
         </span>
       </div>
@@ -55,7 +51,7 @@ const EscalaPuntaje = ({ f }: { f: FormacionPuntaje }) => {
         {f.subePorPiso && f.promedio !== null && (
           <>
             <div className="absolute top-1/2 h-1 -translate-y-1/2 bg-ink/45" style={{ left: pct(f.promedio), width: `${f.final - f.promedio}%` }} />
-            <div className="absolute top-0 bottom-0 w-0.5 -translate-x-1/2 bg-ink/45" style={{ left: pct(f.promedio) }} />
+            <div className="absolute top-0 bottom-0 w-0.5 -translate-x-1/2 bg-ink/45" style={{ left: pct(f.promedio) }} title={`Promedio de las dimensiones: ${f.promedio}`} />
           </>
         )}
         <div className="absolute top-1/2 w-3 h-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink ring-2 ring-white" style={{ left: pct(f.final) }} />
