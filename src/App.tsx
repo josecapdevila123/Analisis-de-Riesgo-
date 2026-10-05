@@ -801,10 +801,10 @@ export default function App() {
     <div className="flex h-screen bg-white text-ink font-sans selection:bg-ink selection:text-white">
       {/* Sidebar */}
       <div className="relative flex shrink-0 print:hidden">
-      {/* Manija en el borde para contraer / expandir la barra */}
+      {/* Manija en el borde para contraer / expandir la barra: debajo del header, para que no se pierda contra el blanco */}
       <button
         onClick={() => setIsHistorySidebarOpen(!isHistorySidebarOpen)}
-        className="absolute -right-3.5 top-[26px] z-40 w-7 h-7 rounded-full bg-white border border-ink/15 shadow-sm flex items-center justify-center text-ink/70 hover:text-ink hover:border-ink/40 hover:shadow transition"
+        className="absolute -right-3.5 top-[78px] z-40 w-7 h-7 rounded-full bg-white border border-ink/15 shadow-sm flex items-center justify-center text-ink/70 hover:text-ink hover:border-ink/40 hover:shadow transition"
         title={isHistorySidebarOpen ? 'Contraer barra lateral' : 'Expandir barra lateral'}
         aria-label={isHistorySidebarOpen ? 'Contraer barra lateral' : 'Expandir barra lateral'}
       >
