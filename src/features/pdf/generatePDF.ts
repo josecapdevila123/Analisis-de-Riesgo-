@@ -364,14 +364,10 @@ export const generatePDF = async (activeResult: ExtractionResult | null | undefi
   const escalaPuntaje = (f: FormacionPuntaje, x: number, yy: number, w: number) => {
     const px = (v: number) => x + (Math.min(100, Math.max(0, v)) / 100) * w;
     const lineaY = yy + 3;
-    const promedioLejos = f.promedio !== null && Math.abs(f.final - f.promedio) >= 12;
-    if (f.subePorPiso && f.promedio !== null) {
-      setText(6.5, 'normal', MUTED);
-      text(`Promedio ${f.promedio}`, promedioLejos ? px(f.promedio) : px(f.promedio) - 1, yy, { align: promedioLejos ? 'center' : 'right' });
-    }
+    // Arriba solo "Final": el promedio queda como marca y lo explica la nota del piso.
     setText(6.5, 'bold');
-    const alinFinal = f.final > 85 ? 'right' : f.subePorPiso && !promedioLejos ? 'left' : 'center';
-    text(`Final ${f.final}`, alinFinal === 'left' ? px(f.final) + 1 : px(f.final), yy, { align: alinFinal });
+    const alinFinal = f.final > 88 ? 'right' : f.final < 8 ? 'left' : 'center';
+    text(`Final ${f.final}`, px(f.final), yy, { align: alinFinal });
     doc.setFillColor(...tint(INK, 0.15));
     doc.rect(x, lineaY - 0.25, w, 0.5, 'F');
     if (f.subePorPiso && f.promedio !== null) {
