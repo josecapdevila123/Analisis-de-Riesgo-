@@ -95,12 +95,16 @@ const DeudaBancariaEjercicio = z.object({
   no_corriente: DeudaBancariaGrupo,
 });
 
+// Si el modelo no encuentra un dato de la empresa (null), queda vacío: la vista
+// y el PDF ya muestran "No especificada" / "N/D", y el caso no se corta.
+const textoVacio = z.preprocess(v => (v === null || v === undefined ? '' : v), z.string());
+
 const CompanyProfile = z.object({
-  name: z.string(),
-  cuit: z.string(),
-  activity: z.string(),
-  anio_actual: z.string(),
-  anio_anterior: z.string(),
+  name: textoVacio,
+  cuit: textoVacio,
+  activity: textoVacio,
+  anio_actual: textoVacio,
+  anio_anterior: textoVacio,
 });
 
 const VentaMensual = z.object({

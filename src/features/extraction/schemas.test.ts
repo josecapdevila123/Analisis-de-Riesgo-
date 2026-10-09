@@ -33,3 +33,15 @@ describe('CompanyHistorySchema', () => {
     });
   });
 });
+
+describe('RawExtractionSchema: perfil de la empresa', () => {
+  it('acepta datos de la empresa en null (vacíos) en vez de cortar el caso', async () => {
+    const { RawExtractionSchema } = await import('./schemas');
+    const { buildExtraction } = await import('../ratios/__fixtures__/extraction');
+    const raw = JSON.parse(JSON.stringify(buildExtraction()));
+    raw.company_profile = { name: null, cuit: null, activity: null, anio_actual: null, anio_anterior: undefined };
+    const r = RawExtractionSchema.safeParse(raw);
+    expect(r.success).toBe(true);
+    expect(r.success && r.data.company_profile).toEqual({ name: '', cuit: '', activity: '', anio_actual: '', anio_anterior: '' });
+  });
+});
